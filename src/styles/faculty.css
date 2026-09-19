@@ -1,0 +1,2095 @@
+.fd {
+  min-height: 100vh;
+  background: var(--muted);
+  display: block;
+  position: relative;
+  transition: all 0.3s ease;
+  font-family: 'Inter', sans-serif;
+  color: var(--foreground);
+}
+
+/* Sidebar */
+.fd-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  width: 260px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s ease, transform 0.3s ease;
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: 1000;
+  transform: translateX(0);
+}
+
+/* ── Desktop collapse (icon-only 70px) ── */
+.fd--closed .fd-sidebar {
+  width: 70px;
+}
+
+.fd--closed .fd-brand {
+  padding: 20px 11px;
+  justify-content: center;
+}
+
+.fd--closed .fd-brandInfo {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+}
+
+.fd--closed .fd-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.fd--closed .fd-nav {
+  padding: 16px 8px;
+}
+
+.fd--closed .fd-link {
+  padding: 12px;
+  justify-content: center;
+}
+
+.fd--closed .fd-linkText {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+}
+
+.fd--closed .fd-sideFooter {
+  padding: 16px 8px;
+}
+
+.fd--closed .fd-footerText {
+  opacity: 0;
+  font-size: 0;
+}
+
+.fd--closed .fd-main {
+  margin-left: 70px;
+}
+
+.fd-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 16px;
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  transition: padding 0.3s ease;
+}
+
+.fd-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: width 0.3s ease, height 0.3s ease;
+  color: #fff;
+}
+
+.fd-brandInfo {
+  flex: 1;
+  min-width: 0;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.fd-brandTitle {
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.fd-brandSub {
+  font-size: 12px;
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.fd-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 12px;
+  flex: 1;
+  transition: padding 0.3s ease;
+}
+
+.fd-link {
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: all 0.2s ease;
+  position: relative;
+  white-space: nowrap;
+}
+
+.fd-linkIcon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fd-linkText {
+  flex: 1;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.fd-link:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.fd-link--active {
+  background: var(--accent);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.fd-link--active .fd-linkIcon {
+  color: var(--primary);
+}
+
+/* ── Sidebar User Footer Card ── */
+.fd-userFooterCard {
+  margin-top: auto;
+  margin-left: 12px;
+  margin-right: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all 0.3s ease;
+}
+
+.fd--closed .fd-userFooterCard {
+  margin-left: 6px;
+  margin-right: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  align-items: center;
+}
+
+.fd-userFooterHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: opacity 0.2s ease;
+}
+
+.fd-userFooterHeader:hover {
+  opacity: 0.9;
+}
+
+.fd-userAvatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #0f1f3a;
+  font-size: 13px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.fd--closed .fd-userAvatar {
+  width: 34px;
+  height: 34px;
+  font-size: 12px;
+}
+
+.fd-userFooterInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.fd--closed .fd-userFooterInfo {
+  display: none;
+}
+
+.fd-userFooterName {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.fd-userFooterSub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+.fd-userLogoutBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  background: rgba(15, 31, 58, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.fd--closed .fd-userLogoutBtn {
+  padding: 8px;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.fd--closed .fd-userLogoutText {
+  display: none;
+}
+
+.fd-userLogoutBtn:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+
+/* Main */
+.fd-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100vh;
+  margin-left: 260px;
+  transition: margin-left 0.3s ease;
+}
+
+/* Topbar */
+.fd-topbar {
+  height: 54px;
+  background: var(--background);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  box-shadow: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.fd-topLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fd-burger {
+  width: 42px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #111827;
+  cursor: pointer;
+  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.fd-burger:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.fd-breadcrumb {
+  color: #111827;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.fd-topRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #111827;
+  font-weight: 800;
+}
+
+.fd-userDropdown {
+  position: relative;
+}
+
+.fd-topUser {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: #111827;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.fd-topUser:hover {
+  background: #f3f4f6;
+}
+
+.fd-topAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1e3a5f, #1a4d7d);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(30, 58, 95, 0.25);
+}
+
+.fd-topUserName {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fd-drop {
+  opacity: 0.9;
+  transition: transform 0.2s ease;
+}
+
+.fd-drop--open {
+  transform: rotate(180deg);
+}
+
+.fd-dropdownMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  min-width: 200px;
+  padding: 8px;
+  z-index: 100;
+}
+
+.fd-dropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: #374151;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.fd-dropdownItem:hover {
+  background: #f3f4f6;
+}
+
+.fd-dropdownItem--logout {
+  color: #dc2626;
+}
+
+.fd-dropdownItem--logout:hover {
+  background: #fee2e2;
+}
+
+.fd-dropdownDivider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 8px 0;
+}
+
+/* Layout content wrapper (div in FacultyLayout) */
+.fd-content {
+  padding: 0;
+  flex: 1;
+  overflow-y: auto;
+  background: #f3f4f8;
+}
+
+/* Dashboard section grid (section.fd-content in FacultyDashboard) */
+section.fd-content {
+  padding: 26px 26px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background: #f3f4f8;
+  min-height: 100%;
+  position: relative;
+}
+
+@keyframes fd-fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes fd-countUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── Welcome Header Card (matches sdb-welcomeCard) ── */
+.fd-welcomeHeader {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid #edf2f7;
+  padding: 28px;
+  border-radius: 18px;
+  box-shadow: 0 8px 30px rgba(16, 20, 27, 0.06);
+  transition: 0.25s ease;
+  position: relative;
+  overflow: hidden;
+  animation: fd-fadeUp 0.5s ease;
+  margin-bottom: 0;
+}
+
+.fd-welcomeHeader:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 20px 45px rgba(15, 31, 58, 0.10);
+}
+
+
+
+/* Left text block */
+.fd-welcomeText {
+  z-index: 1;
+  position: relative;
+}
+
+.fd-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.3px;
+}
+
+.fd-subtitle {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* Right actions block */
+.fd-welcomeActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  z-index: 1;
+  position: relative;
+}
+
+/* Period Card — visually floats inside welcome banner on the right */
+.fd-periodCard {
+  position: absolute;
+  top: 48px;
+  right: 54px;
+  background: #f9fafb;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 14px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  z-index: 2;
+}
+
+.fd-periodLabel {
+  font-size: 10px;
+  font-weight: 800;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.fd-periodTitle {
+  font-size: 15px;
+  font-weight: 800;
+  color: #111827;
+  margin-bottom: 0;
+}
+
+/* ── Stats Grid (matches sdb-metrics) ── */
+.fd-statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.fd-statCard {
+  background: #fff;
+  border-radius: 14px;
+  padding: 20px 22px;
+  border: 1.5px solid #e5e7eb;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  animation: fd-fadeUp 0.5s ease;
+}
+
+.fd-statCard::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 14px 14px 0 0;
+}
+
+.fd-statCard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.10);
+}
+
+/* Top row inside stat card (label + icon) */
+.fd-statCard--header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.fd-statContent {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Stat label text (uppercase, colored per variant) */
+.fd-statLabel {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+/* Large number */
+.fd-statNum {
+  font-size: 36px;
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 6px;
+  letter-spacing: -1px;
+  animation: fd-countUp 0.4s ease both;
+}
+
+/* Sub description */
+.fd-statTitle {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* Icon badge (top-right of card) */
+.fd-statIcon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ── Apply colors to fd-statCard based on icon class inside (CSS :has) ── */
+/* Rating card — yellow/gold */
+.fd-statCard:has(.fd-statIcon--rating)::before   { background: #eab308; }
+.fd-statCard:has(.fd-statIcon--rating) .fd-statLabel { color: #ca8a04; }
+.fd-statCard:has(.fd-statIcon--rating) .fd-statNum   { color: #713f12; }
+.fd-statIcon--rating { background: #fefce8; color: #eab308; }
+
+/* Responses card — blue */
+.fd-statCard:has(.fd-statIcon--responses)::before   { background: #3b82f6; }
+.fd-statCard:has(.fd-statIcon--responses) .fd-statLabel { color: #2563eb; }
+.fd-statCard:has(.fd-statIcon--responses) .fd-statNum   { color: #1e3a8a; }
+.fd-statIcon--responses { background: #eff6ff; color: #3b82f6; }
+
+/* Profile Card */
+.fd-profileCard {
+  background: var(--background);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+  padding: 20px;
+  max-width: 640px;
+  margin-bottom: 20px;
+}
+
+.fd-profileHeader {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 16px;
+}
+
+.fd-profileAvatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 999px;
+  background: #1e4976;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.fd-profileInfo {
+  flex: 1;
+}
+
+.fd-profileName {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 900;
+  color: #111827;
+}
+
+.fd-profileRole {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.fd-profileDetails {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.fd-profileField {
+  padding: 12px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.fd-profileLabel {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.fd-profileValue {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+/* Table Card — matches sdb-card style */
+.fd-tableCard {
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1.5px solid #e5e7eb;
+  padding: 22px 24px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  animation: fd-fadeUp 0.5s ease;
+}
+
+.fd-tableCard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.10);
+}
+
+.fd-tableHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.fd-tableTitle {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.2px;
+}
+
+.fd-tableWrap {
+  overflow-x: auto;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.fd-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.fd-table thead th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f3f4f6;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.fd-table tbody td {
+  padding: 12px 0;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 13px;
+  color: #374151;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.fd-table tbody tr {
+  transition: 0.2s;
+}
+
+.fd-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.fd-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.fd-studentName {
+  font-weight: 700;
+  color: #1a3a5c;
+}
+
+/* Badge */
+.fd-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  outline: none;
+}
+
+.fd-badge--submitted {
+  background: #ffc107;
+  color: #0d2137;
+  box-shadow: 0 2px 4px rgba(255, 193, 7, 0.2);
+}
+
+.fd-badge--submitted:hover {
+  background: #ffb300;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(255, 193, 7, 0.3);
+}
+
+/* Summary Grid (for Evaluation Results) */
+.fd-summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.fd-summaryCard {
+  background: var(--background);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.fd-summaryIcon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fd-summaryCard--primary .fd-summaryIcon {
+  background: #fef3c7;
+  color: #f59e0b;
+}
+
+.fd-summaryCard--secondary .fd-summaryIcon {
+  background: #dbeafe;
+  color: #3b82f6;
+}
+
+.fd-summaryContent {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.fd-summaryNum {
+  font-size: 42px;
+  font-weight: 1000;
+  color: #1a3a5c;
+  line-height: 1;
+}
+
+.fd-summaryLabel {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 900;
+  color: #6b7280;
+  letter-spacing: 0.3px;
+}
+
+/* Category Card */
+.fd-categoryCard {
+  background: var(--background);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.fd-categoryHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.fd-categoryTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+  color: #1a3a5c;
+}
+
+.fd-categoryRating {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.fd-ratingNum {
+  font-size: 32px;
+  font-weight: 1000;
+  color: #1a3a5c;
+  line-height: 1;
+}
+
+.fd-ratingText {
+  font-size: 14px;
+  font-weight: 700;
+  color: #9ca3af;
+}
+
+/* Criteria List */
+.fd-criteriaList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fd-criteriaRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.fd-criteriaText {
+  flex: 1;
+  font-size: 13px;
+  color: #374151;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.fd-criteriaRating {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 180px;
+}
+
+.fd-ratingBar {
+  flex: 1;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.fd-ratingFill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #059669);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.fd-ratingValue {
+  font-size: 14px;
+  font-weight: 900;
+  color: #1a3a5c;
+  min-width: 32px;
+  text-align: right;
+}
+
+/* Footer */
+.fd-footer {
+  margin-top: auto;
+  height: 44px;
+  background: #d9dde3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #1e2b3a;
+}
+
+/* Overlay (for mobile only) */
+.fd-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  border: none;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+/* ========================= RESPONSIVE - TABLET & MOBILE ========================= */
+/* ========================= TABLE & RESULTS STYLES ========================= */
+
+
+.fd-tableWrap {
+  overflow-x: auto;
+}
+
+.fd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.fd-table thead {
+  background: #f9fafb;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.fd-table th {
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.fd-thCenter {
+  text-align: center;
+}
+
+.fd-table tbody tr {
+  border-bottom: 1px solid #e5e7eb;
+  transition: background 0.2s ease;
+}
+
+.fd-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.fd-tdCriteria {
+  padding: 14px 16px;
+  color: #1f2937;
+}
+
+.fd-criteriaName {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.fd-criteriaCount {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  background: #f1f5f9;
+  color: #64748b;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+.fd-tdRating {
+  padding: 14px 16px;
+  text-align: center;
+}
+
+.fd-ratingDisplay {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+}
+
+.fd-ratingValue {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.fd-ratingTotal {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.fd-tdStatus {
+  padding: 14px 16px;
+  text-align: center;
+}
+
+.fd-ratingBar {
+  width: 120px;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+.fd-ratingFill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #059669);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* ========================= REMARKS SECTION ========================= */
+.fd-remarksCard {
+  background: #fff;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  animation: fadeIn 0.3s ease;
+}
+
+.fd-remarksHeader {
+  padding: 20px;
+  border-bottom: 1px solid #e5e7eb;
+  border-left: 4px solid #f5c400;
+}
+
+.fd-remarksTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.fd-remarksContent {
+  padding: 16px 20px;
+}
+
+.fd-remarksText {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #4b5563;
+  font-style: italic;
+}
+
+/* ========================= PERFORMANCE SUMMARY SECTION ========================= */
+.fd-perfSummaryCard {
+  background: linear-gradient(135deg, #fff 0%, #f9fafb 100%);
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  animation: fadeIn 0.3s ease;
+  border: 1px solid #e5e7eb;
+}
+
+.fd-perfHeader {
+  padding: 24px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.fd-perfTitleSection {
+  flex: 1;
+}
+
+.fd-perfTitle {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.fd-perfSubtitle {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.fd-perfBadge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 120px;
+  border-radius: 16px;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-weight: 700;
+}
+
+.fd-perfBadgeIcon {
+  font-size: 40px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.fd-perfBadgeLabel {
+  font-size: 14px;
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.fd-perfGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  padding: 0;
+  margin-bottom: 24px;
+}
+
+.fd-perfMetric {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  min-height: 90px;
+}
+
+.fd-perfMetric:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+}
+
+/* Card accent borders */
+.fd-card--green {
+  border-top: 4px solid #22c55e;
+}
+
+.fd-card--blue {
+  border-top: 4px solid #3b82f6;
+}
+
+.fd-card--emerald {
+  border-top: 4px solid #10b981;
+}
+
+.fd-card--purple {
+  border-top: 4px solid #a855f7;
+}
+
+.fd-metricIcon {
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+/* Icon backgrounds (squircle style) */
+.fd-icon--green {
+  background: #f0fdf4;
+  color: #22c55e;
+}
+
+.fd-icon--blue {
+  background: #eff6ff;
+  color: #3b82f6;
+}
+
+.fd-icon--emerald {
+  background: #ecfdf5;
+  color: #10b981;
+}
+
+.fd-icon--purple {
+  background: #faf5ff;
+  color: #a855f7;
+}
+
+.fd-icon--yellow {
+  background: #fffbeb;
+  color: #f59e0b;
+}
+
+.fd-metricIcon--rating {
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+}
+
+.fd-metricIcon--responses {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+}
+
+.fd-metricIcon--highest {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.fd-metricIcon--status {
+  background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+}
+
+.fd-metricContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.fd-metricLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #94a3b8;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.fd-metricMain {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.fd-metricValue {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.fd-metricValue--small {
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.fd-metricSlash {
+  font-size: 14px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.fd-metricSubtext {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+  font-weight: 600;
+}
+
+.fd-perfCategoryBreakdown {
+  padding: 24px 20px;
+}
+
+.fd-perfCategoryTitle {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fd-categoryBars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fd-categoryBar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fd-barLabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fd-barName {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.fd-barScore {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1f2937;
+  min-width: 30px;
+  text-align: right;
+}
+
+.fd-barContainer {
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.fd-barProgress {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+/* ========================= HEADER BADGE ========================= */
+.fd-summaryBadge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100px;
+  height: 100px;
+  border-radius: 12px;
+  background: #16a34a;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.2);
+  position: relative;
+}
+
+.fd-summaryBadge .fd-summaryNum {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff !important;
+}
+
+.fd-summaryBadge .fd-summaryLabel {
+  font-size: 11px;
+  text-align: center;
+  margin-top: 6px;
+  font-weight: 600;
+}
+
+.fd-perfPill {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #fff;
+  letter-spacing: 0.3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.fd-trendIndicator {
+  font-size: 10px;
+  font-weight: 600;
+  margin-top: 4px;
+  letter-spacing: 0.5px;
+}
+
+/* ========================= ACADEMIC PERIOD SELECTOR ========================= */
+.fd-periodSelectorCard {
+  background: linear-gradient(135deg, #0f3b63 0%, #1a4d7d 100%);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: fadeIn 0.3s ease;
+}
+
+.fd-periodSelectorWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fd-periodSelectorLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #f5c400;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fd-criteriaPillMain {
+  display: inline-block;
+  padding: 6px 14px;
+  background: #dbeafe;
+  color: #1e40af;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fd-tableDarkHead th {
+  background-color: #0f172a !important;
+  color: #fff !important;
+  font-size: 11px !important;
+  letter-spacing: 0.8px !important;
+  padding: 14px 24px !important;
+}
+
+.fd-periodSelector {
+  position: relative;
+}
+
+.fd-periodSelectorBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.fd-periodSelectorBtn:hover {
+  border-color: #f5c400;
+  box-shadow: 0 2px 8px rgba(245, 196, 0, 0.2);
+}
+
+.fd-periodSelectorBtn:focus {
+  outline: none;
+  border-color: #f5c400;
+  box-shadow: 0 0 0 3px rgba(245, 196, 0, 0.1);
+}
+
+.fd-periodSelectorText {
+  flex: 1;
+  text-align: left;
+}
+
+.fd-periodSelectorIcon {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.fd-periodSelectorIcon--open {
+  transform: rotate(180deg);
+}
+
+.fd-periodDropdownMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  padding: 8px;
+  z-index: 100;
+  max-height: 400px;
+  overflow-y: auto;
+  animation: dropdownSlideIn 0.2s ease;
+}
+
+@keyframes dropdownSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fd-periodDropdownItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #374151;
+}
+
+.fd-periodDropdownItem:hover {
+  background: #f3f4f6;
+}
+
+.fd-periodDropdownItem--active {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.fd-periodDropdownItem--active:hover {
+  background: #fde68a;
+}
+
+.fd-periodDropdownItemText {
+  flex: 1;
+  min-width: 0;
+}
+
+.fd-periodDropdownItemTitle {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: inherit;
+}
+
+.fd-periodDropdownItemMeta {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.fd-periodDropdownItem--active .fd-periodDropdownItemMeta {
+  color: #78350f;
+}
+
+/* ========================= DETAILS BREAKDOWN ========================= */
+.fd-detailsCard {
+  background: #fff;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  animation: fadeIn 0.3s ease;
+}
+
+.fd-detailsHeader {
+  padding: 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.fd-detailsTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.fd-categorySection {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.fd-categorySection:last-child {
+  border-bottom: none;
+}
+
+.fd-categoryHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.fd-categoryName {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.fd-categoryAvg {
+  font-size: 13px;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.fd-itemsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fd-itemRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  background: #fafbfc;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.fd-itemText {
+  color: #4b5563;
+  flex: 1;
+}
+
+.fd-itemRating {
+  font-weight: 600;
+  color: #1f2937;
+  min-width: 40px;
+  text-align: right;
+}
+
+/* ========================= ANIMATIONS ========================= */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+
+  /* On mobile: sidebar is off-canvas, regardless of collapsed state */
+  .fd-sidebar,
+  .fd--closed .fd-sidebar {
+    transform: translateX(-100%);
+    width: 260px !important;
+    /* full width for overlay */
+  }
+
+  .fd--open .fd-sidebar {
+    transform: translateX(0);
+  }
+
+  /* Reset icon-only styles when shown as overlay on mobile */
+  .fd--closed .fd-brand {
+    padding: 20px 16px;
+    justify-content: flex-start;
+  }
+
+  .fd--closed .fd-brandInfo {
+    opacity: 1;
+    width: auto;
+    overflow: visible;
+  }
+
+  .fd--closed .fd-logo {
+    width: 48px;
+    height: 48px;
+  }
+
+  .fd--closed .fd-nav {
+    padding: 16px 12px;
+  }
+
+  .fd--closed .fd-link {
+    padding: 12px 16px;
+    justify-content: flex-start;
+  }
+
+  .fd--closed .fd-linkText {
+    opacity: 1;
+    width: auto;
+    overflow: visible;
+  }
+
+  .fd--closed .fd-sideFooter {
+    padding: 16px;
+  }
+
+  .fd--closed .fd-footerText {
+    opacity: 0.8;
+    font-size: 10px;
+  }
+
+  .fd-main,
+  .fd--closed .fd-main {
+    margin-left: 0 !important;
+  }
+
+  .fd-overlay {
+    display: block;
+  }
+
+  .fd--open .fd-overlay {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  section.fd-content {
+    padding: 16px 14px 16px;
+  }
+
+  .fd-welcomeHeader {
+    padding: 20px;
+  }
+
+  .fd-periodCard {
+    position: static;
+    margin-top: 0;
+    width: 100%;
+  }
+
+  .fd-statsGrid,
+  .fd-summaryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .fd-table {
+    font-size: 13px;
+  }
+
+  .fd-table th,
+  .fd-table td {
+    padding: 10px 12px;
+  }
+
+  .fd-ratingBar {
+    width: 100px;
+  }
+
+  .fd-periodSelectorCard {
+    padding: 16px;
+  }
+
+  .fd-periodSelectorBtn {
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+
+  .fd-periodDropdownItemTitle {
+    font-size: 13px;
+  }
+
+  .fd-periodDropdownItemMeta {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 640px) {
+  .fd-content {
+    padding: 16px 14px 10px;
+  }
+
+  .fd-title {
+    font-size: 20px;
+  }
+
+  .fd-subtitle {
+    font-size: 12px;
+  }
+
+  .fd-periodCard {
+    padding: 14px 16px;
+  }
+
+  .fd-topbar {
+    padding: 0 12px;
+  }
+
+  .fd-topUserName {
+    display: none;
+  }
+
+  .fd-sidebar {
+    width: 240px;
+  }
+
+  .fd-criteriaRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .fd-criteriaRating {
+    width: 100%;
+  }
+
+  .fd-periodSelectorCard {
+    padding: 14px;
+  }
+
+  .fd-periodSelectorLabel {
+    font-size: 11px;
+  }
+
+  .fd-periodSelectorBtn {
+    padding: 10px 12px;
+  }
+
+  .fd-periodDropdownItem {
+    padding: 10px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+
+  .fd-statCard,
+  .fd-summaryCard {
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .fd-statIcon,
+  .fd-summaryIcon {
+    width: 56px;
+    height: 56px;
+  }
+
+  .fd-statIcon svg,
+  .fd-summaryIcon svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .fd-statNum,
+  .fd-summaryNum {
+    font-size: 40px;
+  }
+
+  .fd-statLabel,
+  .fd-summaryLabel {
+    font-size: 10px;
+  }
+
+  .fd-title {
+    font-size: 18px;
+  }
+
+  .fd-content {
+    padding: 14px 12px 10px;
+  }
+
+  .fd-breadcrumb {
+    font-size: 13px;
+  }
+
+  .fd-ratingNum {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 360px) {
+  .fd-topbar {
+    padding: 0 10px;
+  }
+
+  .fd-burger {
+    width: 38px;
+    height: 36px;
+  }
+
+  .fd-burger svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .fd-title {
+    font-size: 16px;
+  }
+
+  .fd-subtitle {
+    font-size: 11px;
+  }
+
+  .fd-periodCard {
+    padding: 12px 14px;
+  }
+
+  .fd-statCard,
+  .fd-summaryCard {
+    padding: 14px;
+  }
+
+  .fd-statNum,
+  .fd-summaryNum {
+    font-size: 36px;
+  }
+
+  .fd-content {
+    padding: 12px 10px 8px;
+  }
+
+  .fd-sidebar {
+    width: 220px;
+  }
+}
+
+/* Landscape mobile optimization */
+@media (max-width: 900px) and (max-height: 500px) {
+  .fd-content {
+    padding: 12px 14px 8px;
+  }
+
+  .fd-title {
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
+
+  .fd-subtitle {
+    margin: 4px 0 10px;
+  }
+
+  .fd-periodCard {
+    padding: 12px 16px;
+  }
+
+  .fd-statCard,
+  .fd-summaryCard {
+    padding: 14px;
+  }
+
+  .fd-sidebar {
+    width: 220px;
+  }
+}
+
+/* ========================= CUSTOM OVERRIDES & TABLE CENTERING ========================= */
+.fd-table thead.fd-tableDarkHead th.fd-thCenter {
+  text-align: center !important;
+}
+
+.fd-tdRating,
+.fd-tdStatus,
+.fd-tdProgress {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.fd-ratingDisplay {
+  justify-content: center !important;
+}
+
+.fd-ratingBar {
+  margin: 0 auto !important;
+}
+
+.fd-criteriaPillMain {
+  display: inline-block;
+  padding: 6px 14px;
+  background: #dbeafe;
+  color: #1e40af;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fd-tableDarkHead th {
+  background-color: #0f172a !important;
+  color: #fff !important;
+  font-size: 11px !important;
+  letter-spacing: 0.8px !important;
+  padding: 14px 24px !important;
+}
