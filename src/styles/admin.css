@@ -336,6 +336,8 @@
 }
 
 /* Scrollable content wrapper inside main */
+/* NOTE: A second .ad-content definition exists at line ~530 (CONTENT section).
+   That definition wins due to cascade order. This entry is superseded. */
 .ad-content {
   flex: 1;
   overflow-y: auto;
@@ -527,6 +529,8 @@
 }
 
 /* ========================= CONTENT ========================= */
+/* NOTE: This is the active .ad-content definition (overrides the one above).
+   Differences: padding 26px vs 24px, uses #d1d5db scrollbar color, no overflow-x:hidden. */
 .ad-content {
   padding: 26px 26px 10px;
   flex: 1;
@@ -591,6 +595,7 @@
   overflow: hidden;
   border: 1.5px solid #e5e7eb;
   transition: box-shadow 0.25s ease;
+  min-width: 0;
 }
 
 .ad-splitPanel:hover {
@@ -1081,6 +1086,8 @@
 .ad-tableWrap--bordered {
   border: 1.5px solid #e5e7eb;
   border-radius: 8px;
+  /* overflow: hidden clips the horizontal scrollbar on mobile;
+     use overflow-x: auto at 768px (see responsive block) instead */
   overflow: hidden;
 }
 
@@ -1534,7 +1541,8 @@
   width: 220px;
   height: 220px;
   border-radius: 50%;
-  background: rgba(55, 60, 68, 0.04);
+
+  pointer-events: none;  
 }
 
 .ad-title {
@@ -1820,6 +1828,9 @@ select.ad-input {
   margin-bottom: 24px;
 }
 
+/* NOTE: A second .ad-chartHeader definition exists in the CHARTS section below.
+   That definition wins and adds: background:#fff; padding; border-bottom.
+   This entry provides base flex alignment for .ad-chartSection usage. */
 .ad-chartHeader {
   display: flex;
   justify-content: space-between;
@@ -1827,6 +1838,8 @@ select.ad-input {
   margin-bottom: 20px;
 }
 
+/* NOTE: A second .ad-chartTitle definition exists below (12px uppercase).
+   That definition always wins. This 16px version is effectively inactive. */
 .ad-chartTitle {
   font-size: 16px;
   font-weight: 700;
@@ -1855,6 +1868,10 @@ select.ad-input {
   border-color: var(--primary);
 }
 
+/* NOTE: A second .ad-chartBody exists below (padding only, no height).
+   That definition wins and removes the 300px height — used by ad-chartsRow cards
+   where the chart container is sized by its parent card, not by this rule.
+   This height:300px version is only effective inside .ad-chartSection. */
 .ad-chartBody {
   height: 300px;
   width: 100%;
@@ -1883,6 +1900,13 @@ select.ad-input {
   display: flex;
   border-bottom: 1px solid var(--border);
   background: var(--muted);
+  /* Task 7 — prevent tab overflow by allowing horizontal scroll */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ad-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .ad-tabBtn {
@@ -1895,6 +1919,9 @@ select.ad-input {
   border-bottom: 2px solid transparent;
   cursor: pointer;
   transition: all 0.2s ease;
+  /* Task 7 — keep each tab on one line so they scroll rather than wrap */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .ad-tabBtn:hover {
@@ -2246,12 +2273,18 @@ select.ad-input {
   box-shadow: 0 2px 6px rgba(26, 77, 125, 0.25);
 }
 
+/* NOTE: A second .ad-questionContent definition exists in the QUESTIONNAIRE
+   MANAGEMENT section below — it only re-declares flex:1 (a subset of this).
+   That second definition was removed in Wave 3 cleanup. This is the active one. */
 .ad-questionContent {
   flex: 1;
   min-width: 0;
   padding-top: 4px;
 }
 
+/* NOTE: A second .ad-questionText definition exists in the QUESTIONNAIRE MANAGEMENT
+   section below (15px, font-weight:500, color:#1f2937). That definition always wins.
+   This 13.5px version is effectively inactive due to cascade order. */
 .ad-questionText {
   margin: 0;
   font-size: 13.5px;
@@ -2260,6 +2293,8 @@ select.ad-input {
   word-wrap: break-word;
 }
 
+/* NOTE: A second .ad-questionActions definition exists below (gap:8px, no opacity).
+   That definition always wins. This opacity:0.65 fade effect is inactive. */
 .ad-questionActions {
   display: flex;
   gap: 5px;
@@ -2658,32 +2693,39 @@ select.ad-input {
 
 @media (max-width: 768px) {
 
+  /* ── Grid: single column — sidebar is position:fixed (out of flow),
+     so .ad-main must fill the entire viewport width ── */
   .ad,
   .ad.ad--open {
     grid-template-columns: 1fr;
+    position: relative;
   }
 
+
+  /* ── Sidebar: slide in from left using `left` offset (simpler, no stacking issues) ── */
   .ad-sidebar {
     position: fixed;
-    left: 0;
+    left: -260px;
     top: 0;
-    height: 100vh;
-    width: 260px !important;
+    bottom: 0;
+    width: 260px;
     z-index: 1000;
-    transform: translateX(-100%);
-    transition: transform 0.3s ease;
+    transition: left 0.3s ease;
   }
 
-  .ad.ad--open .ad-sidebar {
-    transform: translateX(-100%);
+  .ad--mobile-open .ad-sidebar {
+    left: 0;
   }
 
-  .ad.ad--mobile-open .ad-sidebar {
-    transform: translateX(0);
-  }
-
+  /* ── Overlay ── */
   .ad-overlay {
     display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 999;
+    border: none;
+    cursor: pointer;
   }
 
   .ad.ad--mobile-open .ad-overlay {
@@ -2758,6 +2800,37 @@ select.ad-input {
   .ad-welcomeHeader {
     flex-direction: column;
     align-items: stretch;
+    gap: 10px;
+  }
+
+  /* Task 3 — Add New button: fill full width when header stacks */
+  .ad-welcomeHeader .ad-btnPrimary {
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  /* Task 2 — Filter bar: 2-column grid on tablet */
+  .ad-filterGroup {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Task 4 — Table card: reduce padding on tablet */
+  .ad-tableCard--padded {
+    padding: 16px;
+  }
+
+  /* ── Dashboard enhancements (merged from duplicate 768px block) ── */
+  .ad-dashTopRow {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .ad-dashMeta {
+    padding-top: 0;
+  }
+
+  .ad-progressCardPct {
+    font-size: 22px;
   }
 
   .ad-tableWrap {
@@ -2774,7 +2847,15 @@ select.ad-input {
 
   .ad-modalContent {
     max-width: 100%;
-    margin: 0 16px;
+    /* Task 5 — removed margin: 0 16px; parent .ad-modal already has padding: 20px
+       so adding margin was consuming 36px each side (too tight on 375px phones) */
+  }
+
+  /* Task 6 — allow horizontal scroll on bordered table wrapper at mobile
+     (overflow: hidden in the base rule clips the scrollbar on small screens) */
+  .ad-tableWrap--bordered {
+    overflow-x: auto;
+    overflow-y: visible;
   }
 
   .ad-statsGrid {
@@ -2861,6 +2942,21 @@ select.ad-input {
   .ad-formActions .ad-btnPrimary,
   .ad-formActions .ad-btnSecondary {
     width: 100%;
+  }
+
+  /* Task 2 — Filter bar: single column on phone */
+  .ad-filterGroup {
+    grid-template-columns: 1fr;
+  }
+
+  .ad-filterSelect {
+    min-width: unset;
+    width: 100%;
+  }
+
+  /* Task 4 — Table card: further reduce padding on phone */
+  .ad-tableCard--padded {
+    padding: 12px;
   }
 
   .ad-criteriaCheckbox {
@@ -3235,25 +3331,7 @@ select.ad-input {
   }
 }
 
-@media (max-width: 768px) {
-  .ad-dashTopRow {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .ad-dashMeta {
-    padding-top: 0;
-  }
-
-  .ad-welcomeHeader {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .ad-progressCardPct {
-    font-size: 22px;
-  }
-}
+/* @media (max-width: 768px) dashboard rules merged into main 768px block above */
 
 @media (max-width: 480px) {
   .ad-dashDate {
@@ -3511,9 +3589,8 @@ select.ad-input {
   flex-shrink: 0;
 }
 
-.ad-questionContent {
-  flex: 1;
-}
+/* .ad-questionContent — redundant second definition removed (Wave 3).
+   Active definition is at line ~2262 with flex:1, min-width:0, padding-top:4px. */
 
 .ad-questionText {
   margin: 0;
@@ -3555,58 +3632,91 @@ select.ad-input {
   background: #f3f4f6;
 }
 
-/* ========================= RESPONSIVE / ORIENTATION FIX ========================= */
-/* Desktop default is handled by .ad and .ad--open above */
+/* ========================= RESPONSIVE - QUESTIONNAIRE ========================= */
 
-/* Tablet portrait and below: collapse sidebar to icon-only */
-@media (max-width: 768px) {
-  .ad {
-    grid-template-columns: 0 1fr;
-    position: relative;
-  }
-
-  .ad.ad--open {
-    grid-template-columns: 0 1fr;
-  }
-
-  .ad-sidebar {
-    position: fixed;
-    left: -260px;
-    top: 0;
-    bottom: 0;
-    width: 260px;
-    z-index: 1000;
-    transition: left 0.3s ease;
-  }
-
-  .ad--mobile-open .ad-sidebar {
-    left: 0;
-  }
-
-  .ad-overlay {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
-    z-index: 999;
-    border: none;
-    cursor: pointer;
-  }
-
-  .ad-content {
-    padding: 16px;
+@media (max-width: 900px) {
+  .ad-splitLayout--questionnaire {
+    grid-template-columns: 1fr;
+    gap: 18px;
   }
 }
 
-/* Landscape phones: treat same as tablet, not desktop */
-@media (max-width: 900px) and (orientation: landscape) {
-  .ad {
-    grid-template-columns: 0 1fr;
+@media (max-width: 640px) {
+  .ad-splitPanel--questions .ad-panelHeader {
+    flex-wrap: wrap;
+    gap: 10px;
   }
 
-  .ad.ad--open {
-    grid-template-columns: 0 1fr;
+  .ad-questionItem--card {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 14px;
   }
+
+  .ad-questionItem--card .ad-questionActions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .ad-splitLayout--questionnaire {
+    gap: 14px;
+  }
+
+  .ad-criteriaItem {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .ad-criteriaItemIcon {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+  }
+
+  .ad-criteriaItemTitle {
+    font-size: 14px;
+  }
+
+  .ad-criteriaItemDesc {
+    font-size: 12px;
+  }
+
+  .ad-infoCard--blue {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .ad-infoIcon--blue {
+    width: 38px;
+    height: 38px;
+    font-size: 15px;
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+
+  .ad-splitPanel--questions .ad-panelBody {
+    padding: 14px !important;
+  }
+
+  .ad-searchWrap {
+    max-width: 100%;
+    min-width: unset;
+  }
+}
+
+/* ========================= RESPONSIVE / ORIENTATION FIX ========================= */
+/* Sidebar and layout rules merged into the main @media (max-width: 768px) block above.
+   Landscape phones are also covered by the 768px block since they are ≤768px wide. */
+
+/* Landscape phones: keep sidebar hidden in landscape mode on small screens */
+@media (max-width: 900px) and (orientation: landscape) {
+  .ad,
+  .ad.ad--open {
+    grid-template-columns: 1fr;
+  }
+
 
   .ad-sidebar {
     position: fixed;

@@ -769,12 +769,17 @@
 }
 
 /* Chart inside panel */
+/* Fixed: display:flex prevents Recharts ResponsiveContainer from resolving
+   width/height="100%" — use block layout with explicit pixel dimensions instead.
+   .mockup-donut-text uses position:absolute so it doesn't need flex centering. */
 .mockup-donut-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 160px;
+  display: block;
   position: relative;
+  width: 100%;
+  height: 160px;
+  min-height: 160px;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .mockup-donut-text {
@@ -858,6 +863,7 @@
   .mockup-stats-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .mockup-grid-3,
   .mockup-grid-3-bottom {
     grid-template-columns: 1fr;
@@ -869,24 +875,29 @@
     padding: 16px;
     gap: 16px;
   }
+
   .mockup-header {
     flex-direction: column;
     gap: 24px;
     align-items: stretch;
     padding: 20px;
   }
+
   .mockup-quick-actions {
     flex-wrap: wrap;
     margin-top: 16px;
   }
+
   .mockup-btn {
     flex: 1 1 calc(50% - 6px);
     justify-content: center;
   }
+
   .mockup-period-card {
     width: 100%;
     margin-top: 8px;
   }
+
   .mockup-table-wrapper {
     overflow-x: auto;
     width: 100%;
@@ -898,9 +909,11 @@
   .mockup-stats-grid {
     grid-template-columns: 1fr;
   }
+
   .mockup-btn {
     flex: 1 1 100%;
   }
+
   .mockup-welcome h2 {
     font-size: 20px;
   }

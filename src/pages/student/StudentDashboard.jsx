@@ -505,7 +505,7 @@ export default function StudentDashboard() {
             </div>
 
             <div className="se-tableWrap">
-              <table className="ad-table">
+              <table className="sd-table">
                 <thead>
                   <tr>
                     <th>FACULTY NAME</th>
@@ -532,17 +532,17 @@ export default function StudentDashboard() {
                       enrollmentList.map((item) => (
                         <tr key={item.assignmentId}>
                           <td>
-                            <div className="ad-avatarCell">
-                              <div className="ad-avatar ad-avatar--blue">
+                            <div className="sd-avatarCell">
+                              <div className="sd-avatar sd-avatar--blue">
                                 {(item.name || "??").substring(0, 2).toUpperCase()}
                               </div>
-                              <div className="ad-cellLines">
-                                <span className="ad-cellPrimary">{item.name}</span>
-                                <span className="ad-cellSecondary">Faculty Member</span>
+                              <div className="sd-cellLines">
+                                <span className="sd-cellPrimary">{item.name}</span>
+                                <span className="sd-cellSecondary">Faculty Member</span>
                               </div>
                             </div>
                           </td>
-                          <td className="ad-engagement">{item.subject}</td>
+                          <td className="sd-engagement">{item.subject}</td>
                           <td>
                             <span className="se-sectionBadge">
                               {item.dept} {item.year} - {item.section}
@@ -551,7 +551,7 @@ export default function StudentDashboard() {
                               )}
                             </span>
                           </td>
-                          <td className="ad-tableActions" style={{ justifyContent: "flex-end" }}>
+                          <td className="sd-tableActions" style={{ justifyContent: "flex-end" }}>
                             <button
                               type="button"
                               className="se-removeBtn"
@@ -575,23 +575,23 @@ export default function StudentDashboard() {
                       assignedFaculty.map((item) => (
                         <tr key={item.assignmentId}>
                           <td>
-                            <div className="ad-avatarCell">
-                              <div className="ad-avatar ad-avatar--blue">
+                            <div className="sd-avatarCell">
+                              <div className="sd-avatar sd-avatar--blue">
                                 {(item.name || "??").substring(0, 2).toUpperCase()}
                               </div>
-                              <div className="ad-cellLines">
-                                <span className="ad-cellPrimary">{item.name || "— No faculty"}</span>
-                                <span className="ad-cellSecondary">Faculty Member</span>
+                              <div className="sd-cellLines">
+                                <span className="sd-cellPrimary">{item.name || "— No faculty"}</span>
+                                <span className="sd-cellSecondary">Faculty Member</span>
                               </div>
                             </div>
                           </td>
-                          <td className="ad-engagement">{item.subject}</td>
+                          <td className="sd-engagement">{item.subject}</td>
                           <td>
                             <span className="se-sectionBadge">
                               {item.dept} {item.year} - {item.section}
                             </span>
                           </td>
-                          <td className="ad-tableActions" style={{ justifyContent: "flex-end" }}>
+                          <td className="sd-tableActions" style={{ justifyContent: "flex-end" }}>
                             {item.status === "submitted" ? (
                               <span className="sdb-assignedBadge" title="Already evaluated">Evaluated</span>
                             ) : (
@@ -762,3 +762,4 @@ export default function StudentDashboard() {
     </StudentLayout>
   );
 }
+

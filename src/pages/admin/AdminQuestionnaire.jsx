@@ -78,17 +78,30 @@ export default function AdminQuestionnaire() {
         showToast("Criteria updated successfully!", "success");
         setEditingCriteriaId(null);
       } else {
-        const { data, error } = await supabase.from('criteria').insert({ name: criteriaFormData.name }).select().single();
+        const { data, error } = await supabase.from('criteria').insert({ name: criteriaFormData.name, enabled: true }).select().single();
         if (error) throw error;
-        setCriteriaList(list => [...list, { id: data.id, name: criteriaFormData.name, enabled: false }]);
+        setCriteriaList(list => [...list, { id: data.id, name: criteriaFormData.name, enabled: true }]);
         setQuestionsByCriteria(prev => ({ ...prev, [data.id]: [] }));
         setSelectedCriteriaId(data.id);
-        showToast("Criteria added successfully!", "success");
+        showToast("Criteria added and activated successfully!", "success");
       }
       setCriteriaFormData({ name: "" });
       setShowCriteriaModal(false);
     } catch {
       showToast("Error saving criteria", "error");
+    }
+  };
+
+  const handleToggleCriteria = async (e, item) => {
+    if (e) e.stopPropagation();
+    const newEnabled = !item.enabled;
+    try {
+      const { error } = await supabase.from('criteria').update({ enabled: newEnabled }).eq('id', item.id);
+      if (error) throw error;
+      setCriteriaList(list => list.map(c => c.id === item.id ? { ...c, enabled: newEnabled } : c));
+      showToast(`Criteria ${newEnabled ? "enabled and active for evaluation" : "disabled and hidden from students"}`, "success");
+    } catch {
+      showToast("Error updating criteria status", "error");
     }
   };
 
@@ -259,7 +272,36 @@ export default function AdminQuestionnaire() {
                            "Evaluates this area of performance."} 
                         </p>
                       </div>
-                      <div className="ad-criteriaItemRight">
+                      <div className="ad-criteriaItemRight" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          type="button"
+                          className="ad-statusPill"
+                          onClick={(e) => handleToggleCriteria(e, criteria)}
+                          title={criteria.enabled ? "Active in evaluation. Click to disable." : "Disabled/Hidden. Click to activate."}
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            borderRadius: '999px',
+                            border: 'none',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            background: criteria.enabled ? '#dcfce7' : '#fee2e2',
+                            color: criteria.enabled ? '#15803d' : '#b91c1c',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                          }}
+                        >
+                          <span style={{
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            background: criteria.enabled ? '#22c55e' : '#ef4444',
+                            display: 'inline-block',
+                          }} />
+                          {criteria.enabled ? "Active" : "Disabled"}
+                        </button>
                         <span className="ad-badge ad-badge--neutral">{qCount}</span>
                         <svg className="ad-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
                       </div>
@@ -282,10 +324,29 @@ export default function AdminQuestionnaire() {
           {/* RIGHT PANEL - QUESTIONS */}
           <div className="ad-splitPanel ad-splitPanel--questions">
             <div className="ad-panelHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <h3 className="ad-panelTitle">Criteria Details</h3>
                 {selectedCriteria && (
-                   <span className="ad-badge ad-badge--info">{questionsByCriteria[selectedCriteriaId]?.length || 0} Questions</span>
+                  <>
+                    <span className="ad-badge ad-badge--info">{questionsByCriteria[selectedCriteriaId]?.length || 0} Questions</span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleToggleCriteria(e, selectedCriteria)}
+                      className="ad-btnOutline ad-btnOutline--small"
+                      title="Click to toggle criteria availability in student evaluations"
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        background: selectedCriteria.enabled ? '#ecfdf5' : '#fef2f2',
+                        color: selectedCriteria.enabled ? '#047857' : '#b91c1c',
+                        borderColor: selectedCriteria.enabled ? '#a7f3d0' : '#fecaca',
+                      }}
+                    >
+                      {selectedCriteria.enabled ? "✓ Active in Evaluation" : "✕ Disabled (Hidden)"}
+                    </button>
+                  </>
                 )}
               </div>
               {selectedCriteria && (

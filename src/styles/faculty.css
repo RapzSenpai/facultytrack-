@@ -1,8 +1,13 @@
+.fd.fd--closed {
+  grid-template-columns: 70px 1fr;
+}
+
 .fd {
   min-height: 100vh;
   background: var(--muted);
-  display: block;
-  position: relative;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  align-items: start;
   transition: all 0.3s ease;
   font-family: 'Inter', sans-serif;
   color: var(--foreground);
@@ -10,9 +15,8 @@
 
 /* Sidebar */
 .fd-sidebar {
-  position: fixed;
+  position: sticky;
   top: 0;
-  left: 0;
   height: 100vh;
   width: 260px;
   background: var(--primary);
@@ -74,9 +78,7 @@
   font-size: 0;
 }
 
-.fd--closed .fd-main {
-  margin-left: 70px;
-}
+
 
 .fd-brand {
   display: flex;
@@ -301,8 +303,6 @@
   flex-direction: column;
   min-width: 0;
   min-height: 100vh;
-  margin-left: 260px;
-  transition: margin-left 0.3s ease;
 }
 
 /* Topbar */
@@ -1761,6 +1761,17 @@ section.fd-content {
 
 @media (max-width: 768px) {
 
+  .fd {
+    grid-template-columns: 1fr;
+  }
+  .fd.fd--closed {
+    grid-template-columns: 1fr;
+  }
+  .fd-sidebar {
+    position: fixed;
+    z-index: 1000;
+  }
+
   /* On mobile: sidebar is off-canvas, regardless of collapsed state */
   .fd-sidebar,
   .fd--closed .fd-sidebar {
@@ -1814,10 +1825,7 @@ section.fd-content {
     font-size: 10px;
   }
 
-  .fd-main,
-  .fd--closed .fd-main {
-    margin-left: 0 !important;
-  }
+
 
   .fd-overlay {
     display: block;

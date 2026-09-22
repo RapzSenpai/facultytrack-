@@ -96,8 +96,12 @@ export default function StudentEvaluation() {
         const submitted = new Set(subMap.keys());
         setSubmittedIds(submitted);
 
-        const enabledCriteria = criteria.filter((c) => c.enabled);
-        const builtCriteria = enabledCriteria.map((c) => ({
+        // Active criteria: use explicitly enabled criteria if any exist, otherwise fallback to all criteria
+        const activeCriteriaList = criteria.some((c) => c.enabled)
+          ? criteria.filter((c) => c.enabled)
+          : criteria;
+
+        const builtCriteria = activeCriteriaList.map((c) => ({
           id: c.id,
           category: c.name,
           items: questions
@@ -112,11 +116,19 @@ export default function StudentEvaluation() {
           : [];
         setAllAssignments(activeAssignments);
 
+        const normalize = (str) => (str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const isMatch = (val1, val2) => {
+          if (!val1 || !val2) return false;
+          const n1 = normalize(val1);
+          const n2 = normalize(val2);
+          return n1 === n2 || n1.includes(n2) || n2.includes(n1);
+        };
+
         const defaultMatched = activeAssignments.filter(
           (a) =>
-            a.department === studentDept &&
-            a.yearLevel === studentYear &&
-            a.section === studentSection
+            isMatch(a.department, studentDept) &&
+            isMatch(a.yearLevel, studentYear) &&
+            isMatch(a.section, studentSection)
         );
 
         if (!active) {
@@ -149,7 +161,10 @@ export default function StudentEvaluation() {
                 section: a.section,
                 status: subData ? "submitted" : "pending",
                 submittedAt: subData?.submittedAt,
-                isDefaultMatch: a.department === studentDept && a.yearLevel === studentYear && a.section === studentSection,
+                isDefaultMatch:
+                  isMatch(a.department, studentDept) &&
+                  isMatch(a.yearLevel, studentYear) &&
+                  isMatch(a.section, studentSection),
               };
             });
           setAssignedFaculty(confirmedFaculty);
@@ -382,7 +397,7 @@ export default function StudentEvaluation() {
           </div>
 
           <div className="se-tableWrap">
-            <table className="ad-table">
+            <table className="sd-table">
               <thead>
                 <tr>
                   <th>FACULTY NAME</th>
@@ -402,17 +417,17 @@ export default function StudentEvaluation() {
                   enrollmentList.map((item) => (
                     <tr key={item.assignmentId}>
                       <td>
-                        <div className="ad-avatarCell">
-                          <div className="ad-avatar ad-avatar--blue">
+                        <div className="sd-avatarCell">
+                          <div className="sd-avatar sd-avatar--blue">
                             {(item.name || "??").substring(0, 2).toUpperCase()}
                           </div>
-                          <div className="ad-cellLines">
-                            <span className="ad-cellPrimary">{item.name}</span>
-                            <span className="ad-cellSecondary">Faculty Member</span>
+                          <div className="sd-cellLines">
+                            <span className="sd-cellPrimary">{item.name}</span>
+                            <span className="sd-cellSecondary">Faculty Member</span>
                           </div>
                         </div>
                       </td>
-                      <td className="ad-engagement">{item.subject}</td>
+                      <td className="sd-engagement">{item.subject}</td>
                       <td>
                         <span className="se-sectionBadge">
                           {item.dept} {item.year} - {item.section}
@@ -421,7 +436,7 @@ export default function StudentEvaluation() {
                           )}
                         </span>
                       </td>
-                      <td className="ad-tableActions" style={{ justifyContent: "flex-end" }}>
+                      <td className="sd-tableActions" style={{ justifyContent: "flex-end" }}>
                         <button
                           type="button"
                           className="se-removeBtn"
@@ -715,7 +730,7 @@ export default function StudentEvaluation() {
                       className={`se-suggestionItem ${isDone ? "se-suggestionItem--done" : ""}`}
                       onClick={() => handleSelectFaculty(name)}
                     >
-                      <div className="ad-avatar ad-avatar--blue" style={{ width: 30, height: 30, fontSize: 11, flexShrink: 0 }}>
+                      <div className="sd-avatar sd-avatar--blue" style={{ width: 30, height: 30, fontSize: 11, flexShrink: 0 }}>
                         {name.substring(0, 2).toUpperCase()}
                       </div>
                       <div>
@@ -790,7 +805,7 @@ export default function StudentEvaluation() {
             </div>
           </div>
           <div className="se-tableWrap">
-            <table className="ad-table">
+            <table className="sd-table">
               <thead>
                 <tr>
                   <th>FACULTY NAME</th>
@@ -805,14 +820,14 @@ export default function StudentEvaluation() {
                 {assignedFaculty.map((item) => (
                   <tr key={item.assignmentId}>
                     <td>
-                      <div className="ad-avatarCell">
-                        <div className="ad-avatar ad-avatar--blue">
+                      <div className="sd-avatarCell">
+                        <div className="sd-avatar sd-avatar--blue">
                           {(item.name || "??").substring(0, 2).toUpperCase()}
                         </div>
-                        <span className="ad-cellPrimary">{item.name}</span>
+                        <span className="sd-cellPrimary">{item.name}</span>
                       </div>
                     </td>
-                    <td className="ad-engagement">{item.subject}</td>
+                    <td className="sd-engagement">{item.subject}</td>
                     <td>
                       <span className="se-sectionBadge">
                         {item.dept} {item.year} - {item.section}
@@ -825,8 +840,8 @@ export default function StudentEvaluation() {
                         <span className="sd-statusBadge sd-statusBadge--closed" style={{ background: "#fef3c7", color: "#92400e" }}>Pending</span>
                       )}
                     </td>
-                    <td className="ad-engagement">{item.status === "submitted" ? formatDate(item.submittedAt) : "—"}</td>
-                    <td className="ad-tableActions" style={{ justifyContent: "flex-end" }}>
+                    <td className="sd-engagement">{item.status === "submitted" ? formatDate(item.submittedAt) : "—"}</td>
+                    <td className="sd-tableActions" style={{ justifyContent: "flex-end" }}>
                       {item.status === "submitted" ? (
                         <button
                           type="button"
@@ -988,3 +1003,4 @@ export default function StudentEvaluation() {
     </StudentLayout>
   );
 }
+
