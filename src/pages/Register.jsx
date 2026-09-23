@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { User, Users, ChevronDown, AlertCircle, ArrowLeft, Mail, Lock, Hash } from "lucide-react";
+import { User, Users, ChevronDown, AlertCircle, ArrowLeft, Mail, Lock, Hash, IdCard } from "lucide-react";
 import { supabase } from "../config/supabase";
 import AuthField from "../components/auth/AuthField";
+import { validateIdPhoto, uploadSchoolIdPhoto } from "../utils/idPhoto";
 import "../styles/auth.css";
 import logo from "../assets/Logo (3).png";
 
@@ -46,6 +47,8 @@ export default function Register() {
   const [successMsg, setSuccessMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [departmentOptions, setDepartmentOptions] = useState([]);
+  const [idPhoto, setIdPhoto] = useState(null);
+  const [idPhotoPreview, setIdPhotoPreview] = useState("");
 
   const isStudent = activeTab === "student";
   const idLabel = isStudent ? "STUDENT ID" : "FACULTY ID";
@@ -92,7 +95,16 @@ export default function Register() {
     }
     if (form.password.length < 6) errors.password = "Password must be at least 6 characters.";
     if (form.confirmPassword !== form.password) errors.confirmPassword = "Passwords do not match.";
+    const photoError = validateIdPhoto(idPhoto);
+    if (photoError) errors.idPhoto = photoError;
     return errors;
+  };
+
+  const handleIdPhotoChange = (e) => {
+    const file = e.target.files[0];
+    setIdPhoto(file || null);
+    setIdPhotoPreview(file ? URL.createObjectURL(file) : "");
+    setFieldErrors((prev) => ({ ...prev, idPhoto: "" }));
   };
 
   const handleSubmit = async (e) => {
@@ -110,7 +122,7 @@ export default function Register() {
 
       const fullName = `${form.firstName.trim()} ${form.lastName.trim()}${form.suffix !== "None" ? " " + form.suffix : ""}`;
 
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { error: signUpError, data: signUpData } = await supabase.auth.signUp({
         email: form.email.trim(),
         password: form.password,
         options: {
@@ -130,9 +142,27 @@ export default function Register() {
 
       if (signUpError) throw signUpError;
 
+      // ID photo upload (D12). With a session at signUp the upload
+      // happens now; if email confirmation is enabled there is no
+      // session yet — Login/PendingApproval pick the photo up after
+      // the user verifies and signs in (photoPending flag).
+      let photoPending = false;
+      if (idPhoto) {
+        try {
+          await uploadSchoolIdPhoto(signUpData.user.id, idPhoto);
+        } catch (uploadErr) {
+          if (signUpData.session) {
+            throw new Error("Account created, but the ID photo failed to upload: " + uploadErr.message);
+          }
+          photoPending = true;
+        }
+      }
+
       setSuccessMsg("Registration successful! Your account is currently pending admin approval.");
       setTimeout(() => {
-        navigate("/pending-approval", { state: { email: form.email.trim(), schoolId: form.schoolId.trim() } });
+        navigate("/pending-approval", {
+          state: { email: form.email.trim(), schoolId: form.schoolId.trim(), photoPending },
+        });
       }, 1500);
     } catch (err) {
       console.error("Register error:", err);
@@ -203,6 +233,39 @@ export default function Register() {
           )}
 
           <h2 className="auth-section-heading">Personal Information</h2>
+
+          <div className="auth-grid" style={{ marginBottom: "16px" }}>
+            <AuthField
+              label="SCHOOL ID PHOTO"
+              htmlFor="idPhoto"
+              required
+              error={fieldErrors.idPhoto}
+              icon={IdCard}
+              span2
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                <input
+                  id="idPhoto"
+                  name="idPhoto"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className={`auth-input ${fieldErrors.idPhoto ? "auth-input--invalid" : ""}`}
+                  style={{ padding: "8px 12px", fontSize: "13px" }}
+                  onChange={handleIdPhotoChange}
+                />
+                {idPhotoPreview && (
+                  <img
+                    src={idPhotoPreview}
+                    alt="ID preview"
+                    style={{ width: "56px", height: "40px", objectFit: "cover", borderRadius: "6px", border: "1px solid #e5e7eb" }}
+                  />
+                )}
+              </div>
+              <span className="auth-select-hint" style={{ display: "block", marginTop: "4px", fontSize: "12px", color: "#94a3b8" }}>
+                Take or upload a clear photo of your school ID. JPG, PNG or WebP, max 5MB.
+              </span>
+            </AuthField>
+          </div>
 
           <div className="auth-grid">
             <AuthField

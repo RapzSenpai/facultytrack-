@@ -25,6 +25,7 @@ import AdminReport from "./pages/admin/AdminReport.jsx";
 import AdminClassAssignment from "./pages/admin/AdminClassAssignment.jsx";
 import AdminProfile from "./pages/admin/AdminProfile.jsx";
 import AdminApprovals from "./pages/admin/AdminApprovals.jsx";
+import AdminSubjectCorrections from "./pages/admin/AdminSubjectCorrections.jsx";
 
 function NotFound() {
   return (
@@ -74,6 +75,7 @@ export default function App() {
           <Route path="/admin/report" element={<ProtectedRoute role="admin"><AdminReport /></ProtectedRoute>} />
           <Route path="/admin/profile" element={<ProtectedRoute role="admin"><AdminProfile /></ProtectedRoute>} />
           <Route path="/admin/approvals" element={<ProtectedRoute role="admin"><AdminApprovals /></ProtectedRoute>} />
+          <Route path="/admin/subject-corrections" element={<ProtectedRoute role="admin"><AdminSubjectCorrections /></ProtectedRoute>} />
 
           {/* 404 fallback */}
           <Route path="*" element={<NotFound />} />

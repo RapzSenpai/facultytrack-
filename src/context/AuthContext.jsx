@@ -48,6 +48,7 @@ export function AuthProvider({ children }) {
         section: data.section,
         contactNumber: data.contact_number,
         photoUrl: data.photo_url,
+        schoolIdPhotoPath: data.school_id_photo_path,
         email: data.email,
         role: data.role,
         status: data.status,

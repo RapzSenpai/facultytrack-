@@ -23,7 +23,7 @@ export default function AdminDashboard() {
     Promise.all([
       supabase.from('users').select('*').eq('role', 'faculty'),
       supabase.from('users').select('*').eq('role', 'student'),
-      supabase.from('evaluations').select('*'),
+      supabase.from('admin_evaluations_anon').select('*'),
       supabase.from('academic_years').select('*'),
     ])
       .then(([facultyRes, studentsRes, evaluationsRes, yearsRes]) => {
@@ -50,14 +50,17 @@ export default function AdminDashboard() {
           createdAt: s.created_at,
         }));
 
-        // Map snake_case to camelCase for evaluations
+        // Map snake_case to camelCase for evaluations.
+        // Phase 4 anonymity: student_id is replaced by student_token
+        // (per-row MD5) — distinct-count semantics without identity.
         const evaluationsMapped = evaluations.map(e => ({
           ...e,
-          studentId: e.student_id,
+          studentId: e.student_token,
+          studentDepartment: e.student_department,
           facultyId: e.faculty_id,
           assignmentId: e.assignment_id,
           academicYear: e.academic_year,
-          submittedAt: e.submitted_at,
+          submittedAt: e.submitted_on,
         }));
 
         // Map snake_case to camelCase for years
@@ -153,8 +156,9 @@ export default function AdminDashboard() {
           deptMap[d].totalStudents++;
         });
         periodEvalsRaw.forEach(e => {
-          const s = studentsMapped.find(st => st.id === e.studentId);
-          const d = s?.department || "Unassigned";
+          // Participant's program comes from the anonymous view
+          // (student_department) — no identity read needed.
+          const d = e.studentDepartment || "Unassigned";
           if (deptMap[d]) deptMap[d].participants.add(e.studentId);
         });
         const deptArr = Object.values(deptMap).map(d => ({

@@ -67,7 +67,7 @@ export default function AdminReport() {
 
   useEffect(() => {
     Promise.all([
-      supabase.from('evaluations').select('*'),
+      supabase.from('admin_evaluations_anon').select('*'),
       supabase.from('users').select('*').eq('role', 'faculty'),
       supabase.from('class_assignments').select('*'),
       supabase.from('academic_years').select('*'),
@@ -77,7 +77,8 @@ export default function AdminReport() {
         const evals = (evalsRes.data || []).map(e => ({
           ...e,
           assignmentId: e.assignment_id,
-          studentId: e.student_id,
+          // Phase 4 anonymity: per-row MD5 token instead of student_id
+          studentId: e.student_token,
           academicYear: e.academic_year,
           facultyId: e.faculty_id,
         }));

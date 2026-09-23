@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
-import { Check, X, Search, AlertCircle } from "lucide-react";
+import { Check, X, Search, AlertCircle, IdCard } from "lucide-react";
 
 export default function AdminApprovals() {
     const [activeTab, setActiveTab] = useState("faculty");
@@ -11,6 +11,7 @@ export default function AdminApprovals() {
     const [pendingFaculty, setPendingFaculty] = useState([]);
     const [pendingStudents, setPendingStudents] = useState([]);
     const [toastMsg, setToastMsg] = useState("");
+    const [photoViewer, setPhotoViewer] = useState({ open: false, url: "", name: "" });
 
     const fetchApprovals = async () => {
         setLoading(true);
@@ -19,18 +20,15 @@ export default function AdminApprovals() {
                 supabase.from('users').select('*').eq('role', 'faculty'),
                 supabase.from('users').select('*').eq('role', 'student'),
             ]);
-            const fData = (fRes.data || []).map(u => ({
+            const mapUser = (u) => ({
                 ...u,
                 fullName: u.full_name,
                 schoolId: u.school_id,
                 yearLevel: u.year_level,
-            }));
-            const sData = (sRes.data || []).map(u => ({
-                ...u,
-                fullName: u.full_name,
-                schoolId: u.school_id,
-                yearLevel: u.year_level,
-            }));
+                schoolIdPhotoPath: u.school_id_photo_path,
+            });
+            const fData = (fRes.data || []).map(mapUser);
+            const sData = (sRes.data || []).map(mapUser);
 
             setPendingFaculty(fData.filter(u => u.status === 'pending'));
             setPendingStudents(sData.filter(u => u.status === 'pending'));
@@ -66,6 +64,16 @@ export default function AdminApprovals() {
     const handleReject = async (uid) => {
         if (window.confirm("Reject this account? This will permanently delete the user account.")) {
             try {
+                // Remove the ID photo (D12: photos live only as long as the
+                // account; rejection deletes both). Storage errors don't
+                // block the account deletion itself.
+                const target = [...pendingFaculty, ...pendingStudents].find(u => (u.uid || u.id) === uid);
+                if (target?.schoolIdPhotoPath) {
+                    const { error: photoErr } = await supabase.storage
+                        .from('school-id-photos')
+                        .remove([target.schoolIdPhotoPath]);
+                    if (photoErr) console.warn("ID photo cleanup failed:", photoErr.message);
+                }
                 const { error } = await supabase.rpc('delete_user_account', { target_user_id: uid });
                 if (error) {
                     console.warn("Reject RPC error, attempting direct delete:", error);
@@ -83,6 +91,23 @@ export default function AdminApprovals() {
     };
 
     const activeList = activeTab === "faculty" ? pendingFaculty : pendingStudents;
+
+    // Short-TTL signed URL, audit-logged via RPC before every view.
+    const handleViewPhoto = async (user) => {
+        if (!user.schoolIdPhotoPath) return;
+        try {
+            const { error: logErr } = await supabase.rpc('log_id_photo_view', { p_path: user.schoolIdPhotoPath });
+            if (logErr) throw logErr;
+            const { data, error } = await supabase.storage
+                .from('school-id-photos')
+                .createSignedUrl(user.schoolIdPhotoPath, 60);
+            if (error) throw error;
+            setPhotoViewer({ open: true, url: data.signedUrl, name: user.fullName });
+        } catch (err) {
+            console.error("Photo view error:", err);
+            alert("Could not load the ID photo: " + (err.message || "unknown error."));
+        }
+    };
 
     const filteredList = activeList.filter(user =>
         (user.fullName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -182,6 +207,7 @@ export default function AdminApprovals() {
                                     <th style={{ color: '#4b5563' }}>ID</th>
                                     <th style={{ color: '#4b5563' }}>{activeTab === "faculty" ? "Program" : "Year & Section"}</th>
                                     <th style={{ color: '#4b5563' }}>Email</th>
+                                    <th style={{ color: '#4b5563', textAlign: 'center' }}>ID Photo</th>
 
                                     <th style={{ color: '#4b5563', textAlign: 'center' }}>Status</th>
                                     <th style={{ color: '#4b5563', textAlign: 'center' }}>Actions</th>
@@ -227,6 +253,21 @@ export default function AdminApprovals() {
                                                 </div>
                                             </td>
 
+
+                                            <td style={{ textAlign: 'center' }}>
+                                                {user.schoolIdPhotoPath ? (
+                                                    <button
+                                                        onClick={() => handleViewPhoto(user)}
+                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '5px 10px', borderRadius: '6px', fontSize: '11.5px', fontWeight: '600', cursor: 'pointer' }}
+                                                    >
+                                                        <IdCard size={13} /> View
+                                                    </button>
+                                                ) : (
+                                                    <span style={{ display: 'inline-block', padding: '4px 10px', background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '999px', fontSize: '10px', fontWeight: '800', letterSpacing: '0.5px' }}>
+                                                        MISSING
+                                                    </span>
+                                                )}
+                                            </td>
 
                                             <td style={{ textAlign: 'center' }}>
                                                 <span style={{ display: 'inline-block', padding: '4px 10px', background: '#fffbeb', color: '#b45309', border: '1px solid #fef3c7', borderRadius: '999px', fontSize: '10px', fontWeight: '800', letterSpacing: '0.5px' }}>
@@ -279,6 +320,33 @@ export default function AdminApprovals() {
                 </div>
 
             </section>
+
+            {photoViewer.open && (
+                <div className="ad-modal">
+                    <div className="ad-modalOverlay" onClick={() => setPhotoViewer({ open: false, url: "", name: "" })} />
+                    <div className="ad-modalContent" style={{ maxWidth: '480px' }}>
+                        <div className="ad-modalHeader">
+                            <h3 className="ad-modalTitle">School ID — {photoViewer.name}</h3>
+                            <button className="ad-modalClose" onClick={() => setPhotoViewer({ open: false, url: "", name: "" })}>
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="ad-modalBody" style={{ textAlign: 'center' }}>
+                            <img
+                                src={photoViewer.url}
+                                alt={`School ID of ${photoViewer.name}`}
+                                style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e5e7eb' }}
+                            />
+                            <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '10px' }}>
+                                Private image. This view is recorded in the audit log.
+                            </p>
+                        </div>
+                        <div className="ad-modalFooter">
+                            <button className="ad-btnSecondary" onClick={() => setPhotoViewer({ open: false, url: "", name: "" })}>Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AdminLayout>
     );
 }

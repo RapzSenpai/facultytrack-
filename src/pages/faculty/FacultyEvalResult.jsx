@@ -91,7 +91,7 @@ function buildEvaluationPeriods(evaluations, questions, criteria) {
       });
     });
     const topKeywords = Object.entries(wordCounts)
-      .filter(([word, count]) => count > 1) // Must appear at least twice
+      .filter(([, count]) => count > 1) // Must appear at least twice
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(entry => entry[0]);
@@ -109,7 +109,10 @@ function buildEvaluationPeriods(evaluations, questions, criteria) {
       periodShort: `${academicYear} ${semester}`,
       overallRating,
       totalResponses: evals.length,
-      uniqueStudents: new Set(evaluations.filter(e => e.academicYear === academicYear && e.semester === semester).map(e => e.studentId)).size,
+      // Phase 4 anonymity: student_id is no longer readable by
+      // faculty, so per-period "unique students" is replaced by
+      // the count of submitted forms (no identity needed).
+      uniqueStudents: evals.length,
       performanceSummary: getPerformanceLabel(overallRating),
       remarks: generateRemarks(overallRating),
       categories,
@@ -142,8 +145,11 @@ export default function FacultyEvalResult() {
 
   useEffect(() => {
     if (!currentUser) return;
+    // Phase 4 anonymity: read the identity-stripped view instead of
+    // the evaluations base table (base-table faculty SELECT is
+    // revoked; the view carries no student_id).
     Promise.all([
-      supabase.from('evaluations').select('*').eq('faculty_id', currentUser.id),
+      supabase.from('faculty_evaluations_anon').select('*'),
       supabase.from('questions').select('*'),
       supabase.from('criteria').select('*'),
     ])
@@ -154,11 +160,10 @@ export default function FacultyEvalResult() {
 
         const evals = rawEvals.map(e => ({
           ...e,
-          studentId: e.student_id,
           assignmentId: e.assignment_id,
           facultyId: e.faculty_id,
           academicYear: e.academic_year,
-          submittedAt: e.submitted_at,
+          submittedAt: e.submitted_on,
         }));
 
         const questions = rawQuestions.map(q => ({
@@ -179,18 +184,6 @@ export default function FacultyEvalResult() {
 
   const displayName = userProfile?.fullName || "Faculty";
   const evaluationData = selectedPeriod ? evaluationPeriods[selectedPeriod] : null;
-
-  const getRatingTrend = () => {
-    if (!selectedPeriod || !evaluationData) return null;
-    const keys = Object.keys(evaluationPeriods);
-    const idx = keys.indexOf(selectedPeriod);
-    if (idx < keys.length - 1) {
-      const prev = evaluationPeriods[keys[idx + 1]];
-      return evaluationData.overallRating - prev.overallRating;
-    }
-    return null;
-  };
-  const ratingTrend = getRatingTrend();
 
   // No evaluations state
   if (!loading && Object.keys(evaluationPeriods).length === 0) {

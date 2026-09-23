@@ -1,17 +1,18 @@
 import { useState, useEffect } from "react";
-import { Search, X, List, Calendar, CheckCircle, AlertCircle, Info, MessageSquare, Plus, Minus, BookOpen, ChevronRight } from "lucide-react";
+import { Search, X, List, Calendar, CheckCircle, AlertCircle, Info, MessageSquare, AlertTriangle, ChevronRight } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import StudentLayout from "./StudentLayout";
 
+// Phase 3 (Req 2 / D5): the subject list is admin-controlled.
+// All self-enrollment UI (Add Subject modal, confirm/remove,
+// "Edit Subjects") is removed. Evaluable subjects =
+// section match adjusted by the admin's per-student list
+// (admin/exception enrollment replaces the match; exclusions
+// remove). Subject-list problems are reported in-app via
+// subject_correction_requests and resolved by an admin.
 export default function StudentEvaluation() {
   const [mode, setMode] = useState("loading");
-
-  const [enrollmentList, setEnrollmentList] = useState([]);
-  const [allAssignments, setAllAssignments] = useState([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [addSearch, setAddSearch] = useState("");
-  const [savingEnrollment, setSavingEnrollment] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFaculty, setSelectedFaculty] = useState(null);
@@ -29,6 +30,10 @@ export default function StudentEvaluation() {
   const [activeYear, setActiveYear] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const [correctionMessage, setCorrectionMessage] = useState("");
+  const [correctionRequests, setCorrectionRequests] = useState([]);
+  const [submittingCorrection, setSubmittingCorrection] = useState(false);
+
   const { currentUser, userProfile } = useAuth();
 
   useEffect(() => {
@@ -40,12 +45,23 @@ export default function StudentEvaluation() {
 
     (async () => {
       try {
-        const [assignmentsRes, submissionsRes, criteriaRes, questionsRes, yearsRes] = await Promise.all([
+        const [assignmentsRes, submissionsRes, criteriaRes, questionsRes, yearsRes, enrRes, corrRes] = await Promise.all([
           supabase.from("class_assignments").select("*"),
           supabase.from("evaluations").select("*").eq("student_id", currentUser.id),
           supabase.from("criteria").select("*"),
           supabase.from("questions").select("*"),
           supabase.from("academic_years").select("*"),
+          // Admin-managed per-student list (read-only for students).
+          supabase
+            .from("student_enrollments")
+            .select("confirmed_assignments, excluded_assignments, enrollment_kind")
+            .eq("student_id", currentUser.id)
+            .maybeSingle(),
+          supabase
+            .from("subject_correction_requests")
+            .select("*")
+            .eq("student_id", currentUser.id)
+            .order("created_at", { ascending: false }),
         ]);
 
         const assignments = (assignmentsRes.data || []).map((a) => ({
@@ -96,6 +112,8 @@ export default function StudentEvaluation() {
         const submitted = new Set(subMap.keys());
         setSubmittedIds(submitted);
 
+        setCorrectionRequests(corrRes.data || []);
+
         // Active criteria: use explicitly enabled criteria if any exist, otherwise fallback to all criteria
         const activeCriteriaList = criteria.some((c) => c.enabled)
           ? criteria.filter((c) => c.enabled)
@@ -114,7 +132,6 @@ export default function StudentEvaluation() {
         const activeAssignments = active
           ? assignments.filter((a) => a.academicYear === active.year && a.semester === active.semester)
           : [];
-        setAllAssignments(activeAssignments);
 
         const normalize = (str) => (str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
         const isMatch = (val1, val2) => {
@@ -124,7 +141,7 @@ export default function StudentEvaluation() {
           return n1 === n2 || n1.includes(n2) || n2.includes(n1);
         };
 
-        const defaultMatched = activeAssignments.filter(
+        const sectionMatched = activeAssignments.filter(
           (a) =>
             isMatch(a.department, studentDept) &&
             isMatch(a.yearLevel, studentYear) &&
@@ -137,52 +154,48 @@ export default function StudentEvaluation() {
           return;
         }
 
-        const { data: enrData } = await supabase
-          .from("student_enrollments")
-          .select("*")
-          .eq("student_id", currentUser.id)
-          .eq("academic_year", active.year)
-          .eq("semester", active.semester)
-          .maybeSingle();
+        // Admin-managed per-student list: admin/exception kinds
+        // replace the section match; exclusions always remove.
+        // Legacy confirmed ids (pre-Phase 3 confirmations) widen
+        // the section match.
+        const enr = enrRes?.data || null;
+        const confirmedIds = Array.isArray(enr?.confirmed_assignments)
+          ? new Set(enr.confirmed_assignments)
+          : null;
+        const excludedIds = Array.isArray(enr?.excluded_assignments)
+          ? new Set(enr.excluded_assignments)
+          : new Set();
+        const adminGoverned =
+          confirmedIds !== null &&
+          (enr.enrollment_kind === "admin" || enr.enrollment_kind === "exception");
 
-        if (enrData && Array.isArray(enrData.confirmed_assignments)) {
-          const confirmedSet = new Set(enrData.confirmed_assignments);
-          const confirmedFaculty = activeAssignments
-            .filter((a) => confirmedSet.has(a.id))
-            .map((a) => {
-              const subData = subMap.get(a.id);
-              return {
-                assignmentId: a.id,
-                facultyId: a.facultyId,
-                name: a.facultyName,
-                subject: `${a.subjectCode} - ${a.subjectName}`,
-                dept: a.department,
-                year: a.yearLevel,
-                section: a.section,
-                status: subData ? "submitted" : "pending",
-                submittedAt: subData?.submittedAt,
-                isDefaultMatch:
-                  isMatch(a.department, studentDept) &&
-                  isMatch(a.yearLevel, studentYear) &&
-                  isMatch(a.section, studentSection),
-              };
-            });
-          setAssignedFaculty(confirmedFaculty);
-          setMode("evaluation");
-          return;
-        }
+        const evaluable = adminGoverned
+          ? activeAssignments.filter(
+              (a) => confirmedIds.has(a.id) && !excludedIds.has(a.id)
+            )
+          : activeAssignments.filter(
+              (a) =>
+                !excludedIds.has(a.id) &&
+                (sectionMatched.some((m) => m.id === a.id) ||
+                  (confirmedIds !== null && confirmedIds.has(a.id)))
+            );
 
-        setEnrollmentList(defaultMatched.map((a) => ({
-          assignmentId: a.id,
-          facultyId: a.facultyId,
-          name: a.facultyName,
-          subject: `${a.subjectCode} - ${a.subjectName}`,
-          dept: a.department,
-          year: a.yearLevel,
-          section: a.section,
-          isDefaultMatch: true,
-        })));
-        setMode("enrollment");
+        setAssignedFaculty(evaluable.map((a) => {
+          const subData = subMap.get(a.id);
+          return {
+            assignmentId: a.id,
+            facultyId: a.facultyId,
+            name: a.facultyName,
+            subject: `${a.subjectCode} - ${a.subjectName}`,
+            dept: a.department,
+            year: a.yearLevel,
+            section: a.section,
+            status: subData ? "submitted" : "pending",
+            submittedAt: subData?.submittedAt,
+            isDefaultMatch: sectionMatched.some((m) => m.id === a.id),
+          };
+        }));
+        setMode("evaluation");
       } catch (err) {
         console.error("Evaluation page fetch error:", err);
       } finally {
@@ -190,58 +203,6 @@ export default function StudentEvaluation() {
       }
     })();
   }, [currentUser, userProfile]);
-
-  const handleAddSubject = (assignment) => {
-    const already = enrollmentList.some((e) => e.assignmentId === assignment.id);
-    if (already) return;
-    setEnrollmentList((prev) => [...prev, {
-      assignmentId: assignment.id,
-      facultyId: assignment.facultyId,
-      name: assignment.facultyName,
-      subject: `${assignment.subjectCode} - ${assignment.subjectName}`,
-      dept: assignment.department,
-      year: assignment.yearLevel,
-      section: assignment.section,
-      isDefaultMatch: false,
-    }]);
-    setShowAddModal(false);
-    setAddSearch("");
-  };
-
-  const handleRemoveSubject = (assignmentId) => {
-    setEnrollmentList((prev) => prev.filter((e) => e.assignmentId !== assignmentId));
-  };
-
-  const handleConfirmEnrollment = async () => {
-    if (!activeYear || !currentUser) return;
-    if (enrollmentList.length === 0) {
-      alert("Please add at least one subject before confirming.");
-      return;
-    }
-    setSavingEnrollment(true);
-    try {
-      const { error } = await supabase.from("student_enrollments").upsert(
-        {
-          student_id: currentUser.id,
-          academic_year: activeYear.year,
-          semester: activeYear.semester,
-          confirmed_assignments: enrollmentList.map((e) => e.assignmentId),
-        },
-        { onConflict: "student_id,academic_year,semester" }
-      );
-      if (error) throw new Error(error.message);
-      setAssignedFaculty(enrollmentList.map((e) => ({
-        ...e,
-        status: submittedIds.has(e.assignmentId) ? "submitted" : "pending",
-        submittedAt: submissionsData.get(e.assignmentId)?.submittedAt,
-      })));
-      setMode("evaluation");
-    } catch (err) {
-      alert("Error: " + err.message);
-    } finally {
-      setSavingEnrollment(false);
-    }
-  };
 
   const handleEvaluate = (faculty) => {
     setSelectedFaculty(faculty);
@@ -270,26 +231,30 @@ export default function StudentEvaluation() {
     if (!activeYear) { alert("No active evaluation period is available."); return; }
     setSubmitting(true);
     try {
-      const { data, error } = await supabase
-        .from("evaluations")
-        .insert({
-          student_id: currentUser.id,
-          faculty_id: selectedFaculty.facultyId,
+      // Submission goes through the submit-evaluation Edge Function
+      // (the only write path for evaluations; RLS blocks direct inserts).
+      const { data, error } = await supabase.functions.invoke("submit-evaluation", {
+        body: {
           assignment_id: selectedFaculty.assignmentId,
-          academic_year: activeYear.year,
-          semester: activeYear.semester,
           ratings,
           comment,
-          submitted_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-      if (error) throw new Error(error.message);
+        },
+      });
+      if (error) {
+        let message = error.message || "Submission failed. Please try again.";
+        try {
+          const body = await error.context.json();
+          if (body?.error) message = body.error;
+        } catch {
+          // keep the default message for non-JSON error bodies
+        }
+        throw new Error(message);
+      }
       const newSubData = new Map(submissionsData);
       newSubData.set(selectedFaculty.assignmentId, {
         ratings,
         comment,
-        submittedAt: data.submitted_at,
+        submittedAt: data?.evaluation?.submitted_at || new Date().toISOString(),
       });
       setSubmissionsData(newSubData);
 
@@ -297,7 +262,7 @@ export default function StudentEvaluation() {
       setSubmittedIds(newSubmittedIds);
       setAssignedFaculty((prev) =>
         prev.map((f) => f.assignmentId === selectedFaculty.assignmentId
-          ? { ...f, status: "submitted", submittedAt: data.submitted_at }
+          ? { ...f, status: "submitted", submittedAt: data.evaluation?.submitted_at || new Date().toISOString() }
           : f)
       );
       setShowModal(false);
@@ -310,14 +275,37 @@ export default function StudentEvaluation() {
     }
   };
 
-  const dept = userProfile?.department || userProfile?.dept || "—";
-  const yearLevel = userProfile?.yearLevel || userProfile?.year || "—";
-  const section = userProfile?.section || "—";
+  const refreshCorrectionRequests = async () => {
+    const { data } = await supabase
+      .from("subject_correction_requests")
+      .select("*")
+      .eq("student_id", currentUser.id)
+      .order("created_at", { ascending: false });
+    setCorrectionRequests(data || []);
+  };
 
-  const filteredFaculty = assignedFaculty.filter((f) =>
-    f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    f.subject.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleSubmitCorrection = async () => {
+    const message = correctionMessage.trim();
+    if (!message) {
+      alert("Please describe the issue before sending.");
+      return;
+    }
+    setSubmittingCorrection(true);
+    try {
+      const { error } = await supabase.from("subject_correction_requests").insert({
+        student_id: currentUser.id,
+        message,
+      });
+      if (error) throw new Error(error.message);
+      setCorrectionMessage("");
+      await refreshCorrectionRequests();
+      alert("Report sent. The administrator will review your subject list.");
+    } catch (err) {
+      alert("Error: " + err.message);
+    } finally {
+      setSubmittingCorrection(false);
+    }
+  };
 
   const totalQuestions = evaluationCriteria.reduce((sum, c) => sum + c.items.length, 0);
   const answeredQuestions = Object.keys(ratings).length;
@@ -332,16 +320,6 @@ export default function StudentEvaluation() {
   const endDate = activeYear?.endDate ? new Date(activeYear.endDate + "T23:59:59") : null;
   const isEvaluationOpen = !loading && activeYear !== null && (!endDate || now <= endDate);
 
-  const addableAssignments = allAssignments.filter(
-    (a) => !enrollmentList.some((e) => e.assignmentId === a.id)
-  ).filter((a) =>
-    addSearch === "" ||
-    (a.subjectCode || "").toLowerCase().includes(addSearch.toLowerCase()) ||
-    (a.subjectName || "").toLowerCase().includes(addSearch.toLowerCase()) ||
-    (a.facultyName || "").toLowerCase().includes(addSearch.toLowerCase()) ||
-    (a.department || "").toLowerCase().includes(addSearch.toLowerCase())
-  );
-
   if (mode === "loading" || loading) {
     return (
       <StudentLayout breadcrumb="Evaluate Teacher">
@@ -350,184 +328,7 @@ export default function StudentEvaluation() {
     );
   }
 
-  if (mode === "enrollment") {
-    return (
-      <StudentLayout breadcrumb="Evaluate Teacher">
-        <div className="sd-welcomeHeader">
-          <div>
-            <h2 className="sd-title">Review Your Enrolled Subjects</h2>
-            <p className="sd-subtitle">
-              Confirm the subjects you are taking this semester before evaluating your teachers.
-            </p>
-          </div>
-          <div className="sd-dateInfo">
-            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
-          </div>
-        </div>
-
-        <div className="sd-infoCard">
-          <div className="sd-infoIcon"><Calendar size={24} /></div>
-          <div>
-            <div className="sd-infoTitle">
-              Academic Year: {activeYear ? `${activeYear.year} ${activeYear.semester}` : "—"}
-            </div>
-            <div className="sd-infoText">
-              <strong>Your Section:</strong> {dept} {yearLevel} - {section}
-            </div>
-            <div className="sd-infoText">
-              The list below was <strong>automatically matched</strong> to your section. Review it carefully — remove any subject you are <em>not</em> taking, and add any irregular or retake subjects you are enrolled in.
-            </div>
-          </div>
-        </div>
-
-        <div className="se-tableCard">
-          <div className="se-tableHeader">
-            <div>
-              <h3 className="se-tableTitle">Your Subjects This Semester</h3>
-              <p className="se-tableHint">{enrollmentList.length} subject(s) added</p>
-            </div>
-            <button
-              type="button"
-              className="se-addSubjectBtn"
-              onClick={() => { setShowAddModal(true); setAddSearch(""); }}
-            >
-              <Plus size={16} />
-              Add Subject
-            </button>
-          </div>
-
-          <div className="se-tableWrap">
-            <table className="sd-table">
-              <thead>
-                <tr>
-                  <th>FACULTY NAME</th>
-                  <th>SUBJECT</th>
-                  <th>SECTION</th>
-                  <th style={{ textAlign: "right" }}>REMOVE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {enrollmentList.length === 0 ? (
-                  <tr>
-                    <td colSpan="4" style={{ textAlign: "center", padding: "40px", color: "#9ca3af" }}>
-                      No subjects added yet. Click "+ Add Subject" to add one.
-                    </td>
-                  </tr>
-                ) : (
-                  enrollmentList.map((item) => (
-                    <tr key={item.assignmentId}>
-                      <td>
-                        <div className="sd-avatarCell">
-                          <div className="sd-avatar sd-avatar--blue">
-                            {(item.name || "??").substring(0, 2).toUpperCase()}
-                          </div>
-                          <div className="sd-cellLines">
-                            <span className="sd-cellPrimary">{item.name}</span>
-                            <span className="sd-cellSecondary">Faculty Member</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="sd-engagement">{item.subject}</td>
-                      <td>
-                        <span className="se-sectionBadge">
-                          {item.dept} {item.year} - {item.section}
-                          {!item.isDefaultMatch && (
-                            <span className="se-addedBadge">Added</span>
-                          )}
-                        </span>
-                      </td>
-                      <td className="sd-tableActions" style={{ justifyContent: "flex-end" }}>
-                        <button
-                          type="button"
-                          className="se-removeBtn"
-                          title="Remove subject"
-                          onClick={() => handleRemoveSubject(item.assignmentId)}
-                        >
-                          <Minus size={15} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="se-enrollmentFooter">
-            <p className="se-enrollmentNote">
-              <Info size={14} />
-              Once confirmed, you can still edit this list as long as you haven't submitted an evaluation.
-            </p>
-            <button
-              type="button"
-              className="se-confirmBtn"
-              onClick={handleConfirmEnrollment}
-              disabled={savingEnrollment || enrollmentList.length === 0}
-            >
-              {savingEnrollment ? "Saving..." : "Confirm Subjects"}
-              {!savingEnrollment && <ChevronRight size={16} />}
-            </button>
-          </div>
-        </div>
-
-        {showAddModal && (
-          <div className="se-modal" role="dialog" aria-modal="true">
-            <div className="se-modalOverlay" onClick={() => setShowAddModal(false)} />
-            <div className="se-modalContent se-addModal">
-              <div className="se-modalHeader">
-                <div>
-                  <h3 className="se-modalTitle">Add a Subject</h3>
-                  <p className="se-modalSubtitle">Search for any subject offered this semester.</p>
-                </div>
-                <button type="button" className="se-modalClose" onClick={() => setShowAddModal(false)}>
-                  <X size={22} />
-                </button>
-              </div>
-              <div style={{ padding: "16px 24px 12px" }}>
-                <div style={{ position: "relative" }}>
-                  <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9ca3af" }} />
-                  <input
-                    type="text"
-                    className="se-search"
-                    style={{ width: "100%", paddingLeft: 36, boxSizing: "border-box" }}
-                    placeholder="Search by subject, teacher, or program..."
-                    value={addSearch}
-                    onChange={(e) => setAddSearch(e.target.value)}
-                    autoFocus
-                  />
-                </div>
-              </div>
-              <div className="se-addModalList">
-                {addableAssignments.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "32px", color: "#9ca3af" }}>
-                    {addSearch ? "No subjects match your search." : "All available subjects are already in your list."}
-                  </div>
-                ) : (
-                  addableAssignments.map((a) => (
-                    <div key={a.id} className="se-addModalRow">
-                      <div className="se-addModalInfo">
-                        <span className="se-addModalSubject">{a.subjectCode} — {a.subjectName}</span>
-                        <span className="se-addModalMeta">{a.facultyName} · {a.department} {a.yearLevel}-{a.section}</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="se-addBtn"
-                        onClick={() => handleAddSubject(a)}
-                      >
-                        <Plus size={15} />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </StudentLayout>
-    );
-  }
-
-  const uniqueFacultyNames = [...new Set(assignedFaculty.map((f) => f.name))].sort();
+  const uniqueFacultyNames = [...new Set(assignedFaculty.map((f) => f.name).filter(Boolean))].sort();
   const filteredFacultyNames = uniqueFacultyNames.filter((name) =>
     name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -557,6 +358,24 @@ export default function StudentEvaluation() {
     if (!ts) return "—";
     const date = new Date(ts);
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  };
+
+  const formatDateTime = (ts) => {
+    if (!ts) return "—";
+    const date = new Date(ts);
+    return date.toLocaleString("en-US", {
+      month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+    });
+  };
+
+  const requestStatusBadge = (status) => {
+    if (status === "resolved") {
+      return <span className="sd-statusBadge sd-statusBadge--open" style={{ background: "#dcfce7", color: "#166534" }}>Resolved</span>;
+    }
+    if (status === "dismissed") {
+      return <span className="sd-statusBadge sd-statusBadge--closed" style={{ background: "#f3f4f6", color: "#6b7280" }}>Dismissed</span>;
+    }
+    return <span className="sd-statusBadge sd-statusBadge--closed" style={{ background: "#fef3c7", color: "#92400e" }}>Under review</span>;
   };
 
   return (
@@ -616,7 +435,7 @@ export default function StudentEvaluation() {
             {" "}You have ~{hoursLeft} hour{hoursLeft !== 1 ? "s" : ""} left to submit.{" "}
             Deadline:{" "}
             <strong>
-              {endDate.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })},{" "}
+              {endDate.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })},{""}
               {endDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
             </strong>
           </span>
@@ -673,27 +492,19 @@ export default function StudentEvaluation() {
             <span className="se-stepBadge">STEP 1</span>
             <h3 className="se-stepTitle">Select Faculty Member &amp; Subject</h3>
           </div>
-          <button
-            type="button"
-            className="se-editEnrollmentBtn se-editEnrollmentBtn-outline"
-            onClick={() => setMode("enrollment")}
-            title="Edit your subject list"
-          >
-            <BookOpen size={15} />
-            Edit Subjects
-          </button>
         </div>
 
         <div className="se-infoCallout">
           <Info size={16} className="se-infoCalloutIcon" />
           <div>
             <p className="se-infoCalloutStrong">
-              Showing faculty from your confirmed enrolled subjects only.
+              Your subject list is set by the administrator for your program and section.
             </p>
             <p className="se-infoCalloutText">
-              You have <strong>{assignedFaculty.length}</strong> subject(s) confirmed this semester.
+              You have <strong>{assignedFaculty.length}</strong> subject(s) this semester.
               Progress: <strong>{submittedCount}/{assignedFaculty.length}</strong> evaluated.
-              {" "}If a faculty member is missing, click <strong>Edit Subjects</strong> to update your list.
+              {" "}If a subject is wrong or missing, use <strong>Report an Issue</strong> below —
+              the administrator will correct your list.
             </p>
           </div>
         </div>
@@ -720,7 +531,6 @@ export default function StudentEvaluation() {
             {searchQuery && !selectedFaculty && filteredFacultyNames.length > 0 && (
               <div className="se-suggestionList">
                 {filteredFacultyNames.map((name) => {
-                  const f = assignedFaculty.find((x) => x.name === name);
                   const isDone = assignedFaculty
                     .filter((x) => x.name === name)
                     .every((x) => x.status === "submitted");
@@ -757,7 +567,7 @@ export default function StudentEvaluation() {
                   {selectedFaculty
                     ? subjectsForFaculty.length === 0
                       ? "— No subjects available —"
-                      : "— Select a faculty member first —"
+                      : "— Select a subject —"
                     : "— Select a faculty member first —"}
                 </option>
                 {subjectsForFaculty.map((f) => (
@@ -870,6 +680,71 @@ export default function StudentEvaluation() {
           </div>
         </div>
       )}
+
+      <div className="se-tableCard">
+        <div className="se-tableHeader se-tableHeader-flex">
+          <div>
+            <h3 className="se-tableTitle">Report an Issue</h3>
+            <p className="se-tableHint">
+              Wrong, missing, or extra subject on your list? Tell the administrator here.
+            </p>
+          </div>
+        </div>
+
+        <div style={{ padding: "16px" }}>
+          <textarea
+            className="se-commentsTextarea"
+            style={{ width: "100%", boxSizing: "border-box" }}
+            placeholder="Example: 'I am enrolled in IT 311 with Prof. Santos but it is not on my list' or 'I am not taking COM 101 — please remove it'..."
+            rows="3"
+            value={correctionMessage}
+            onChange={(e) => setCorrectionMessage(e.target.value)}
+          />
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "10px" }}>
+            <button
+              type="button"
+              className="se-confirmBtn"
+              onClick={handleSubmitCorrection}
+              disabled={submittingCorrection || !correctionMessage.trim()}
+            >
+              <AlertTriangle size={14} style={{ marginRight: 6 }} />
+              {submittingCorrection ? "Sending..." : "Send Report"}
+            </button>
+          </div>
+
+          {correctionRequests.length > 0 && (
+            <div style={{ marginTop: "16px" }}>
+              <p className="se-tableHint" style={{ marginBottom: "8px" }}>
+                Your previous reports
+              </p>
+              <div className="se-tableWrap" style={{ border: "1px solid #e5e7eb", borderRadius: "8px" }}>
+                <table className="sd-table">
+                  <thead>
+                    <tr>
+                      <th>REPORT</th>
+                      <th>SENT</th>
+                      <th>STATUS</th>
+                      <th>ADMIN NOTE</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {correctionRequests.map((req) => (
+                      <tr key={req.id}>
+                        <td className="sd-engagement" style={{ maxWidth: "360px" }}>{req.message}</td>
+                        <td className="sd-engagement">{formatDateTime(req.created_at)}</td>
+                        <td>{requestStatusBadge(req.status)}</td>
+                        <td className="sd-engagement" style={{ maxWidth: "240px" }}>
+                          {req.resolution_note || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {showModal && selectedFaculty && (
         <div className="se-modal" role="dialog" aria-modal="true">
@@ -1003,4 +878,3 @@ export default function StudentEvaluation() {
     </StudentLayout>
   );
 }
-

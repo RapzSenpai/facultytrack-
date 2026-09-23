@@ -43,6 +43,7 @@ const navSections = [
       { key: "subject", label: "Subject", path: "/admin/subject", icon: BookOpen },
       { key: "class-assignment", label: "Class Assignment", path: "/admin/class-assignment", icon: ClipboardList },
       { key: "academic-year", label: "Academic Year", path: "/admin/academic-year", icon: CalendarDays },
+      { key: "subject-corrections", label: "Subject Corrections", path: "/admin/subject-corrections", icon: ClipboardCheck },
       { key: "questionnaire", label: "Questionnaire", path: "/admin/questionnaire", icon: FileText },
       { key: "report", label: "Evaluation Report", path: "/admin/report", icon: FileText },
     ],

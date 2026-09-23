@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Clock, CheckCircle2, RefreshCw, ArrowRight } from "lucide-react";
+import { Clock, CheckCircle2, RefreshCw, ArrowRight, Upload } from "lucide-react";
 import { supabase } from "../config/supabase";
+import { useAuth } from "../context/AuthContext";
+import { validateIdPhoto, uploadSchoolIdPhoto } from "../utils/idPhoto";
 import "../styles/auth.css";
 
 export default function PendingApproval() {
@@ -11,6 +13,19 @@ export default function PendingApproval() {
   const identifier = email || schoolId;
 
   const [status, setStatus] = useState("pending");
+  const { currentUser, userProfile, refreshUserProfile } = useAuth();
+
+  const needsPhotoUpload =
+    currentUser &&
+    userProfile &&
+    userProfile.status === "pending" &&
+    !userProfile.schoolIdPhotoPath &&
+    (userProfile.role === "student" || userProfile.role === "faculty");
+
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoError, setPhotoError] = useState("");
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoDone, setPhotoDone] = useState(false);
 
   useEffect(() => {
     if (!identifier) return;
@@ -55,6 +70,23 @@ export default function PendingApproval() {
   }, [identifier]);
 
   const isApproved = status === "active";
+
+  const handlePhotoUpload = async () => {
+    setPhotoError(validateIdPhoto(photoFile));
+    if (!photoFile || validateIdPhoto(photoFile)) return;
+    setPhotoUploading(true);
+    try {
+      await uploadSchoolIdPhoto(currentUser.id, photoFile);
+      setPhotoDone(true);
+      setPhotoFile(null);
+      await supabase.auth.signOut();
+      await refreshUserProfile();
+    } catch (err) {
+      setPhotoError(err.message || "Upload failed. Please try again.");
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
 
   return (
     <div className="auth-page">
@@ -124,6 +156,41 @@ export default function PendingApproval() {
                 <RefreshCw size={13} style={{ animation: 'spin 2s linear infinite' }} />
                 <span>Checking status in real-time...</span>
               </div>
+
+              {needsPhotoUpload && !photoDone && (
+                <div style={{ marginTop: '20px', padding: '16px', background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '10px', textAlign: 'left' }}>
+                  <strong style={{ display: 'block', fontSize: '13.5px', color: '#92400e', marginBottom: '8px' }}>
+                    School ID photo still needed
+                  </strong>
+                  <p style={{ fontSize: '13px', color: '#78350f', margin: '0 0 10px', lineHeight: '1.5' }}>
+                    Your registration is missing the required school ID photo. Upload it now — admins review it before approving your account.
+                  </p>
+                  {photoError && <p style={{ fontSize: '12.5px', color: '#b91c1c', margin: '0 0 8px' }}>{photoError}</p>}
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(e) => { setPhotoFile(e.target.files[0] || null); setPhotoError(""); }}
+                      style={{ fontSize: '12.5px', flex: 1, minWidth: '180px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handlePhotoUpload}
+                      disabled={!photoFile || photoUploading}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 14px', fontSize: '12.5px', fontWeight: '600', cursor: photoFile && !photoUploading ? 'pointer' : 'not-allowed' }}
+                    >
+                      <Upload size={14} />
+                      {photoUploading ? "Uploading..." : "Upload ID Photo"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {photoDone && (
+                <div style={{ marginTop: '20px', padding: '12px 16px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '10px', fontSize: '13px', color: '#065f46', fontWeight: '600' }}>
+                  School ID photo uploaded. Your account is ready for admin review.
+                </div>
+              )}
 
               <hr className="auth-divider" style={{ marginTop: 20, borderColor: "#F3F4F6" }} />
 

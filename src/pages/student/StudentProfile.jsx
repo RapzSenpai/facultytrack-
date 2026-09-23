@@ -9,21 +9,16 @@ import {
   Camera,
   Upload,
   Info,
-  UserCheck,
-  ChevronDown
+  UserCheck
 } from "lucide-react";
 import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
 import StudentLayout from "./StudentLayout";
 
-const YEAR_LEVEL_OPTIONS = [
-  { value: "1st Year", label: "1st Year" },
-  { value: "2nd Year", label: "2nd Year" },
-  { value: "3rd Year", label: "3rd Year" },
-  { value: "4th Year", label: "4th Year" },
-];
-
-const SECTION_OPTIONS = ["A", "B", "C", "D", "E"];
+// Phase 3 (Req 2 / D5): program/year/section are admin-managed.
+// The RLS policy "Users can update own profile safely" (migration
+// 008) rejects any self-update of department/year_level/section,
+// so the edit form shows them read-only.
 
 export default function StudentProfile() {
   const { currentUser, userProfile, refreshUserProfile } = useAuth();
@@ -31,7 +26,6 @@ export default function StudentProfile() {
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  const [departmentOptions, setDepartmentOptions] = useState([]);
 
   const [form, setForm] = useState({
     fullName: "",
@@ -96,31 +90,6 @@ export default function StudentProfile() {
     return () => { isMounted = false; };
   }, [userProfile, currentUser]);
 
-  useEffect(() => {
-    const fetchDepartments = async () => {
-      try {
-        const { data, error } = await supabase.from("departments").select("name");
-        if (!error && Array.isArray(data) && data.length > 0) {
-          const unique = [...new Set(data.map((d) => d.name).filter(Boolean))].sort();
-          setDepartmentOptions(unique.map((d) => ({ code: d, name: d })));
-        } else {
-          const fallbacks = [
-            "BSIT - BACHELOR OF SCIENCE IN INFORMATION TECHNOLOGY",
-            "BSEntrep - BACHELOR OF SCIENCE IN ENTREPRENEURSHIP",
-            "BPED - BACHELOR OF SCIENCE PHYSICAL EDUCATION",
-            "BSHM - BACHELOR OF SCIENCE IN HOSPITALITY MANAGEMENT",
-            "BSED - BACHELOR OF SECONDARY EDUCATION",
-            "BEED - BACHELOR OF ELEMENTARY EDUCATION"
-          ];
-          setDepartmentOptions(fallbacks.map((d) => ({ code: d, name: d })));
-        }
-      } catch (err) {
-        console.error("Failed to load departments:", err);
-      }
-    };
-    fetchDepartments();
-  }, []);
-
   const handleChange = (field, val) => {
     setForm((prev) => ({ ...prev, [field]: val }));
   };
@@ -164,12 +133,11 @@ export default function StudentProfile() {
       const updatedData = {
         full_name: form.fullName.trim(),
         email: form.email.trim(),
-        department: form.department,
-        year_level: form.yearLevel,
-        section: form.section,
         contact_number: form.contactNumber.trim(),
         photo_url: form.photoUrl,
       };
+      // department / year_level / section are intentionally NOT sent:
+      // they are admin-managed (D5) and RLS rejects changing them.
 
       const { error } = await supabase
         .from("users")
@@ -333,61 +301,64 @@ export default function StudentProfile() {
               <div className="sp-formRow sp-formRow--3col">
                 <div className="sp-formGroup">
                   <label className="sp-label">Program</label>
-                  <div className="sp-selectWrap">
-                    <select
-                      className="sp-select"
-                      value={form.department}
-                      onChange={(e) => handleChange("department", e.target.value)}
-                    >
-                      {departmentOptions.length > 0 ? (
-                        departmentOptions.map((d) => (
-                          <option key={d.code} value={d.code}>
-                            {d.code} - {d.name}
-                          </option>
-                        ))
-                      ) : (
-                        <>
-                          <option value="BSIT">BSIT</option>
-                          <option value="BSCS">BSCS</option>
-                          <option value="BSIS">BSIS</option>
-                          <option value="BSED">BSED</option>
-                        </>
-                      )}
-                    </select>
-                    <ChevronDown size={16} className="sp-selectCaret" />
+                  <div
+                    className="sp-selectWrap"
+                    style={{ opacity: 0.75 }}
+                    title="Managed by the administrator — contact the admin office to correct it"
+                  >
+                    <input
+                      type="text"
+                      className="sp-input"
+                      value={form.department || "—"}
+                      readOnly
+                      disabled
+                    />
                   </div>
                 </div>
 
                 <div className="sp-formGroup">
                   <label className="sp-label">Year Level</label>
-                  <div className="sp-selectWrap">
-                    <select
-                      className="sp-select"
-                      value={form.yearLevel}
-                      onChange={(e) => handleChange("yearLevel", e.target.value)}
-                    >
-                      {YEAR_LEVEL_OPTIONS.map((y) => (
-                        <option key={y.value} value={y.value}>{y.label}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={16} className="sp-selectCaret" />
+                  <div
+                    className="sp-selectWrap"
+                    style={{ opacity: 0.75 }}
+                    title="Managed by the administrator — contact the admin office to correct it"
+                  >
+                    <input
+                      type="text"
+                      className="sp-input"
+                      value={form.yearLevel || "—"}
+                      readOnly
+                      disabled
+                    />
                   </div>
                 </div>
 
                 <div className="sp-formGroup">
                   <label className="sp-label">Section</label>
-                  <div className="sp-selectWrap">
-                    <select
-                      className="sp-select"
-                      value={form.section}
-                      onChange={(e) => handleChange("section", e.target.value)}
-                    >
-                      {SECTION_OPTIONS.map((sec) => (
-                        <option key={sec} value={sec}>{sec}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={16} className="sp-selectCaret" />
+                  <div
+                    className="sp-selectWrap"
+                    style={{ opacity: 0.75 }}
+                    title="Managed by the administrator — contact the admin office to correct it"
+                  >
+                    <input
+                      type="text"
+                      className="sp-input"
+                      value={form.section || "—"}
+                      readOnly
+                      disabled
+                    />
                   </div>
+                </div>
+              </div>
+
+              <div className="sp-formGroup" style={{ marginTop: "4px" }}>
+                <div className="sp-photoUploadCard" style={{ padding: "10px 14px" }}>
+                  <Info size={16} style={{ color: "#6b7280", flexShrink: 0 }} />
+                  <span className="sp-photoUploadHint">
+                    Program, year level, and section are maintained by the
+                    administrator. If something is wrong, report it on the
+                    Evaluate Teacher page.
+                  </span>
                 </div>
               </div>
 

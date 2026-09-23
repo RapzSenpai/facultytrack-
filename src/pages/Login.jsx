@@ -138,8 +138,18 @@ export default function Login() {
       }
 
       if (userData.status === "pending") {
-        await supabase.auth.signOut();
-        navigate("/pending-approval", { state: { email: userData.email, schoolId: userData.school_id } });
+        // Registration with email confirmation enabled leaves the ID
+        // photo unuploaded (no session at signup). Keep the session so
+        // PendingApproval can collect it, then it signs the user out.
+        const needsPhoto =
+          !userData.school_id_photo_path &&
+          (userData.role === "student" || userData.role === "faculty");
+        if (!needsPhoto) {
+          await supabase.auth.signOut();
+        }
+        navigate("/pending-approval", {
+          state: { email: userData.email, schoolId: userData.school_id, photoPending: needsPhoto },
+        });
         return;
       }
 

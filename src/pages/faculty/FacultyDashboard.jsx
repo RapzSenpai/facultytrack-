@@ -14,8 +14,11 @@ export default function FacultyDashboard() {
 
   useEffect(() => {
     if (!currentUser) return;
+    // Phase 4 anonymity: faculty read the identity-stripped view
+    // (faculty_evaluations_anon — no student_id, base-table reads
+    // are revoked). The view already scopes rows to the caller.
     Promise.all([
-      supabase.from('evaluations').select('*').eq('faculty_id', currentUser.id),
+      supabase.from('faculty_evaluations_anon').select('*'),
       supabase.from('academic_years').select('*'),
     ])
       .then(([evalRes, yearRes]) => {
