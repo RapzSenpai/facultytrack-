@@ -1534,35 +1534,42 @@
 }
 
 .se-scaleNum {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
   font-size: 14px;
-  color: #ffffff;
+  color: #ffffff !important;
+  background: #1e3a8a;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.se-scaleItem--5 .se-scaleNum {
-  background: #10b981;
+.se-scaleItem--5 .se-scaleNum,
+.se-scaleNum--5 {
+  background: #10b981 !important;
 }
 
-.se-scaleItem--4 .se-scaleNum {
-  background: #0ea5e9;
+.se-scaleItem--4 .se-scaleNum,
+.se-scaleNum--4 {
+  background: #0ea5e9 !important;
 }
 
-.se-scaleItem--3 .se-scaleNum {
-  background: #3b82f6;
+.se-scaleItem--3 .se-scaleNum,
+.se-scaleNum--3 {
+  background: #3b82f6 !important;
 }
 
-.se-scaleItem--2 .se-scaleNum {
-  background: #f59e0b;
+.se-scaleItem--2 .se-scaleNum,
+.se-scaleNum--2 {
+  background: #f59e0b !important;
 }
 
-.se-scaleItem--1 .se-scaleNum {
-  background: #ef4444;
+.se-scaleItem--1 .se-scaleNum,
+.se-scaleNum--1 {
+  background: #ef4444 !important;
 }
 
 .se-scaleLabel {
@@ -1762,9 +1769,9 @@
   width: 44px;
   height: 44px;
   border-radius: 10px;
-  border: 1.5px solid #e2e8f0;
+  border: 1.5px solid #cbd5e1;
   background: #ffffff;
-  color: #475569;
+  color: #334155;
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -1773,6 +1780,8 @@
   gap: 1px;
   transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   outline: none;
+  font-weight: 700;
+  font-size: 15px;
 }
 
 .se-ratingBtnNum {
@@ -1825,6 +1834,12 @@
 }
 
 /* Active Rating States */
+.se-ratingBtn--active {
+  background: #1e3a8a;
+  color: #ffffff !important;
+  border-color: #1e3a8a;
+  box-shadow: 0 4px 12px rgba(30, 58, 138, 0.35);
+}
 .se-ratingBtn--1.se-ratingBtn--active {
   background: #ef4444;
   color: #ffffff;

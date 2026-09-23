@@ -705,8 +705,8 @@ export default function StudentEvaluation() {
                     { num: 2, label: "Fair" },
                     { num: 1, label: "Poor" },
                   ].map((s) => (
-                    <div key={s.num} className="se-scaleItem">
-                      <span className="se-scaleNum">{s.num}</span>
+                    <div key={s.num} className={`se-scaleItem se-scaleItem--${s.num}`}>
+                      <span className={`se-scaleNum se-scaleNum--${s.num}`}>{s.num}</span>
                       <span className="se-scaleLabel">{s.label}</span>
                     </div>
                   ))}
@@ -747,7 +747,7 @@ export default function StudentEvaluation() {
                                 <button
                                   key={rating}
                                   type="button"
-                                  className={`se-ratingBtn ${ratings[item.id] === rating ? "se-ratingBtn--active" : ""}`}
+                                  className={`se-ratingBtn se-ratingBtn--${rating} ${ratings[item.id] === rating ? "se-ratingBtn--active" : ""}`}
                                   onClick={() => handleRatingChange(item.id, rating)}
                                   title={rating === 5 ? "Outstanding" : rating === 4 ? "Very Good" : rating === 3 ? "Good" : rating === 2 ? "Fair" : "Poor"}
                                 >
