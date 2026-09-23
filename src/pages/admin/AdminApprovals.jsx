@@ -91,10 +91,11 @@ export default function AdminApprovals() {
                 const { error } = await supabase.rpc('delete_user_account', { target_user_id: uid });
                 if (error) {
                     console.warn("Reject RPC error, attempting direct delete:", error);
+                    const rpcMsg = error.message;
                     const { data: delData, error: delError } = await supabase.from('users').delete().eq('id', uid).select('id');
-                    if (delError) throw delError;
+                    if (delError) throw new Error(`Reject failed (server call: ${rpcMsg}; fallback: ${delError.message})`);
                     if (!delData || delData.length === 0) {
-                        throw new Error("Nothing was deleted — you may not have permission for this user's program, or the account no longer exists.");
+                        throw new Error(`Account not removed (server call: ${rpcMsg}). Likely cause: missing migration 020 or other-program account.`);
                     }
                 }
                 logAdminAction("account.reject", "users", uid, {});
