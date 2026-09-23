@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
+import { createClient } from "@supabase/supabase-js";
 import AdminLayout from "./AdminLayout";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
@@ -17,6 +18,103 @@ export default function AdminProgramAssignments() {
   const [assignments, setAssignments] = useState([]);
   const [selectedAdmin, setSelectedAdmin] = useState("");
   const [checked, setChecked] = useState(new Set());
+
+  // Add Program Head form (super-only): admins cannot self-register,
+  // so creation lives here. Signup runs on an isolated client so the
+  // new session never replaces the super admin's own session.
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newDeptIds, setNewDeptIds] = useState(new Set());
+  const [creating, setCreating] = useState(false);
+  const [createMsg, setCreateMsg] = useState("");
+  const [createErr, setCreateErr] = useState("");
+
+  const toggleNewDept = (deptId) => {
+    setNewDeptIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(deptId)) next.delete(deptId);
+      else next.add(deptId);
+      return next;
+    });
+  };
+
+  const reloadAdmins = async () => {
+    const [adminRes, assignRes] = await Promise.all([
+      supabase.from("users").select("id, full_name, email, role").in("role", ["admin", "super_admin"]).order("full_name"),
+      supabase.from("admin_program_assignments").select("admin_id, department_id"),
+    ]);
+    setAdmins(adminRes.data || []);
+    setAssignments(assignRes.data || []);
+  };
+
+  const handleCreateHead = async () => {
+    setCreateMsg("");
+    setCreateErr("");
+    const name = newName.trim();
+    const email = newEmail.trim();
+    if (!name || !email || newPassword.length < 6) {
+      setCreateErr("Name, valid email, and a 6+ character temporary password are required.");
+      return;
+    }
+    if (newDeptIds.size === 0) {
+      setCreateErr("Pick at least one program — an admin with no programs sees nothing.");
+      return;
+    }
+    setCreating(true);
+    try {
+      // Isolated client: persistSession false keeps everything in
+      // memory, so the super admin stays signed in on the main client.
+      const tempAuth = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY,
+        { auth: { persistSession: false, autoRefreshToken: false } },
+      );
+      const { data: signUpData, error: signUpError } = await tempAuth.auth.signUp({
+        email,
+        password: newPassword,
+        options: { data: { full_name: name, role: "student" } },
+      });
+      if (signUpError) {
+        if (signUpError.message?.toLowerCase().includes("already")) {
+          throw new Error("That email is already registered — pick them from the admin list to adjust programs.");
+        }
+        throw signUpError;
+      }
+      const newId = signUpData?.user?.id;
+      if (!newId) throw new Error("Signup returned no user. Please try again.");
+
+      // Promote: the signup trigger clamps roles to student/faculty,
+      // so elevation happens here, as super admin, via RLS-allowed update.
+      const { data: promoted, error: promoteError } = await supabase
+        .from("users")
+        .update({ full_name: name, role: "admin", status: "active", approved_at: new Date().toISOString() })
+        .eq("id", newId)
+        .select("id");
+      if (promoteError) throw promoteError;
+      if (!promoted || promoted.length === 0) {
+        throw new Error("Account created but promotion failed. Assign manually or remove the account and retry.");
+      }
+
+      const { error: assignError } = await supabase
+        .from("admin_program_assignments")
+        .insert([...newDeptIds].map((department_id) => ({ admin_id: newId, department_id })));
+      if (assignError) throw assignError;
+
+      logAdminAction("admin.create", "users", newId, { programs: newDeptIds.size });
+      await reloadAdmins();
+      setSelectedAdmin(newId);
+      setNewName("");
+      setNewEmail("");
+      setNewPassword("");
+      setNewDeptIds(new Set());
+      setCreateMsg(`${name} is now a Program Head. Hand them the temporary password; if email confirmation is on, they must verify their inbox before first login.`);
+    } catch (err) {
+      setCreateErr(err.message || "Could not create the admin. Please try again.");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const isSuper = userProfile?.role === "super_admin";
 
@@ -126,6 +224,58 @@ export default function AdminProgramAssignments() {
             Loading assignments...
           </div>
         ) : (
+          <>
+          {/* Add Program Head: admins cannot self-register, so the
+              super admin creates the account + programs in one step. */}
+          <div className="ad-tableCard" style={{ marginBottom: "20px", padding: "20px 24px" }}>
+            <h3 className="fd-tableTitle" style={{ fontSize: "14px", fontWeight: 800, textTransform: "uppercase", marginBottom: "4px" }}>
+              Add Program Head
+            </h3>
+            <p style={{ fontSize: "13px", color: "#6b7280", margin: "0 0 14px" }}>
+              Creates the login, promotes it to admin, and assigns programs — all at once.
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", marginBottom: "12px" }}>
+              <input
+                className="ad-filterSelect"
+                placeholder="Full name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
+              <input
+                className="ad-filterSelect"
+                placeholder="Email"
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+              />
+              <input
+                className="ad-filterSelect"
+                placeholder="Temporary password (6+ chars)"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px", marginBottom: "12px" }}>
+              {departments.map((d) => (
+                <label key={d.id} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px", color: "#374151", cursor: "pointer" }}>
+                  <input type="checkbox" checked={newDeptIds.has(d.id)} onChange={() => toggleNewDept(d.id)} />
+                  <span style={{ fontWeight: 600 }}>{d.name}</span>
+                </label>
+              ))}
+            </div>
+            {createErr && <p style={{ fontSize: "13px", color: "#b91c1c", margin: "0 0 8px" }}>{createErr}</p>}
+            {createMsg && <p style={{ fontSize: "13px", color: "#065f46", margin: "0 0 8px" }}>{createMsg}</p>}
+            <button
+              type="button"
+              className="ad-btnSearch"
+              disabled={creating}
+              onClick={handleCreateHead}
+              style={{ opacity: creating ? 0.6 : 1 }}
+            >
+              {creating ? "Creating..." : "Create Program Head"}
+            </button>
+          </div>
           <div style={{ display: "flex", gap: "20px", flexWrap: "wrap", alignItems: "flex-start" }}>
             {/* Admin picker + overview */}
             <div className="ad-tableCard" style={{ flex: "1 1 300px" }}>
@@ -230,6 +380,7 @@ export default function AdminProgramAssignments() {
               </div>
             </div>
           </div>
+          </>
         )}
       </section>
     </AdminLayout>
