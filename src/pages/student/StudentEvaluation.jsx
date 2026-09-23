@@ -1,18 +1,49 @@
 import { useState, useEffect } from "react";
-import { Search, X, List, Calendar, CheckCircle, AlertCircle, Info, MessageSquare, Plus, Minus, BookOpen, ChevronRight } from "lucide-react";
+import { Search, X, List, Calendar, CheckCircle, AlertCircle, Info, MessageSquare } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import StudentLayout from "./StudentLayout";
 
+// Institutional fallback criteria so questionnaire is never blank
+const FALLBACK_CRITERIA = [
+  {
+    id: "fb-1",
+    category: "Instructional Competence & Subject Mastery",
+    items: [
+      { id: "q1", text: "Demonstrates comprehensive and up-to-date knowledge of the subject matter." },
+      { id: "q2", text: "Explains lessons and concepts clearly with practical, real-world examples." },
+      { id: "q3", text: "Organizes topics logically and follows the approved course syllabus." },
+      { id: "q4", text: "Encourages student questions, analytical discussions, and critical thinking." },
+    ],
+  },
+  {
+    id: "fb-2",
+    category: "Classroom Management & Learning Environment",
+    items: [
+      { id: "q5", text: "Starts and dismisses classes punctually and maintains consistent attendance." },
+      { id: "q6", text: "Fosters an inclusive, respectful, and motivating classroom atmosphere." },
+      { id: "q7", text: "Enforces classroom rules and academic standards fairly and consistently." },
+    ],
+  },
+  {
+    id: "fb-3",
+    category: "Assessment & Constructive Feedback",
+    items: [
+      { id: "q8", text: "Provides timely and constructive feedback on exams, assignments, and projects." },
+      { id: "q9", text: "Evaluates student work objectively based on transparent grading criteria." },
+    ],
+  },
+  {
+    id: "fb-4",
+    category: "Professionalism & Communication",
+    items: [
+      { id: "q10", text: "Shows approachability, professionalism, and willingness to assist students." },
+      { id: "q11", text: "Communicates course expectations, deadlines, and grade standing clearly." },
+    ],
+  },
+];
+
 export default function StudentEvaluation() {
-  const [mode, setMode] = useState("loading");
-
-  const [enrollmentList, setEnrollmentList] = useState([]);
-  const [allAssignments, setAllAssignments] = useState([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [addSearch, setAddSearch] = useState("");
-  const [savingEnrollment, setSavingEnrollment] = useState(false);
-
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFaculty, setSelectedFaculty] = useState(null);
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
@@ -24,7 +55,6 @@ export default function StudentEvaluation() {
   const [assignedFaculty, setAssignedFaculty] = useState([]);
   const [submissionsData, setSubmissionsData] = useState(new Map());
   const [submittedIds, setSubmittedIds] = useState(new Set());
-  const [isReadOnly, setIsReadOnly] = useState(false);
   const [evaluationCriteria, setEvaluationCriteria] = useState([]);
   const [activeYear, setActiveYear] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -96,7 +126,7 @@ export default function StudentEvaluation() {
         const submitted = new Set(subMap.keys());
         setSubmittedIds(submitted);
 
-        // Active criteria: use explicitly enabled criteria if any exist, otherwise fallback to all criteria
+        // Active criteria: load active criteria with questions, or fallback to standard criteria
         const activeCriteriaList = criteria.some((c) => c.enabled)
           ? criteria.filter((c) => c.enabled)
           : criteria;
@@ -109,80 +139,76 @@ export default function StudentEvaluation() {
             .sort((a, b) => a.order - b.order)
             .map((q) => ({ id: q.id, text: q.text })),
         })).filter((c) => c.items.length > 0);
-        setEvaluationCriteria(builtCriteria);
 
-        const activeAssignments = active
-          ? assignments.filter((a) => a.academicYear === active.year && a.semester === active.semester)
-          : [];
-        setAllAssignments(activeAssignments);
-
-        const normalize = (str) => (str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-        const isMatch = (val1, val2) => {
-          if (!val1 || !val2) return false;
-          const n1 = normalize(val1);
-          const n2 = normalize(val2);
-          return n1 === n2 || n1.includes(n2) || n2.includes(n1);
-        };
-
-        const defaultMatched = activeAssignments.filter(
-          (a) =>
-            isMatch(a.department, studentDept) &&
-            isMatch(a.yearLevel, studentYear) &&
-            isMatch(a.section, studentSection)
-        );
+        setEvaluationCriteria(builtCriteria.length > 0 ? builtCriteria : FALLBACK_CRITERIA);
 
         if (!active) {
           setAssignedFaculty([]);
-          setMode("evaluation");
           return;
         }
 
-        const { data: enrData } = await supabase
-          .from("student_enrollments")
-          .select("*")
-          .eq("student_id", currentUser.id)
-          .eq("academic_year", active.year)
-          .eq("semester", active.semester)
-          .maybeSingle();
+        const activeAssignments = assignments.filter(
+          (a) => a.academicYear === active.year && a.semester === active.semester
+        );
 
-        if (enrData && Array.isArray(enrData.confirmed_assignments)) {
-          const confirmedSet = new Set(enrData.confirmed_assignments);
-          const confirmedFaculty = activeAssignments
-            .filter((a) => confirmedSet.has(a.id))
-            .map((a) => {
-              const subData = subMap.get(a.id);
-              return {
-                assignmentId: a.id,
-                facultyId: a.facultyId,
-                name: a.facultyName,
-                subject: `${a.subjectCode} - ${a.subjectName}`,
-                dept: a.department,
-                year: a.yearLevel,
-                section: a.section,
-                status: subData ? "submitted" : "pending",
-                submittedAt: subData?.submittedAt,
-                isDefaultMatch:
-                  isMatch(a.department, studentDept) &&
-                  isMatch(a.yearLevel, studentYear) &&
-                  isMatch(a.section, studentSection),
-              };
-            });
-          setAssignedFaculty(confirmedFaculty);
-          setMode("evaluation");
-          return;
+        // Robust normalizers
+        const normalizeYear = (y) => {
+          if (!y) return "";
+          const str = String(y).toLowerCase().replace(/[^a-z0-9]/g, "");
+          if (str.includes("1") || str.includes("first")) return "1";
+          if (str.includes("2") || str.includes("second")) return "2";
+          if (str.includes("3") || str.includes("third")) return "3";
+          if (str.includes("4") || str.includes("fourth")) return "4";
+          return str;
+        };
+
+        const normalizeSection = (s) => {
+          if (!s) return "";
+          return String(s).toLowerCase().replace(/section/g, "").replace(/[^a-z0-9]/g, "");
+        };
+
+        const normalizeDept = (d) => {
+          if (!d) return "";
+          return String(d).toLowerCase().replace(/[^a-z0-9]/g, "");
+        };
+
+        // Automatic matching
+        const matchedFaculty = activeAssignments
+          .filter((a) => {
+            const deptMatch = normalizeDept(a.department) === normalizeDept(studentDept);
+            const yearMatch = normalizeYear(a.yearLevel) === normalizeYear(studentYear);
+            const sectionMatch = normalizeSection(a.section) === normalizeSection(studentSection);
+            return deptMatch && yearMatch && sectionMatch;
+          })
+          .map((a) => {
+            const subData = subMap.get(a.id);
+            return {
+              assignmentId: a.id,
+              facultyId: a.facultyId,
+              name: a.facultyName || "— No faculty assigned",
+              subject: `${a.subjectCode} - ${a.subjectName}`,
+              subjectCode: a.subjectCode,
+              dept: a.department,
+              year: a.yearLevel,
+              section: a.section,
+              status: subData ? "submitted" : "pending",
+              submittedAt: subData?.submittedAt || null,
+            };
+          });
+
+        setAssignedFaculty(matchedFaculty);
+
+        // Pre-selection if navigated with URL parameters (?assignmentId=... or ?facultyId=...)
+        const searchParams = new URLSearchParams(window.location.search);
+        const initialAssignmentId = searchParams.get("assignmentId");
+        if (initialAssignmentId) {
+          const target = matchedFaculty.find((f) => f.assignmentId === initialAssignmentId);
+          if (target && target.status !== "submitted") {
+            setSelectedFaculty(target);
+            setSelectedSubjectId(target.assignmentId);
+            setSearchQuery(target.name || "");
+          }
         }
-
-        setEnrollmentList(defaultMatched.map((a) => ({
-          assignmentId: a.id,
-          facultyId: a.facultyId,
-          name: a.facultyName,
-          subject: `${a.subjectCode} - ${a.subjectName}`,
-          dept: a.department,
-          year: a.yearLevel,
-          section: a.section,
-          isDefaultMatch: true,
-        })));
-        setMode("enrollment");
       } catch (err) {
         console.error("Evaluation page fetch error:", err);
       } finally {
@@ -191,73 +217,11 @@ export default function StudentEvaluation() {
     })();
   }, [currentUser, userProfile]);
 
-  const handleAddSubject = (assignment) => {
-    const already = enrollmentList.some((e) => e.assignmentId === assignment.id);
-    if (already) return;
-    setEnrollmentList((prev) => [...prev, {
-      assignmentId: assignment.id,
-      facultyId: assignment.facultyId,
-      name: assignment.facultyName,
-      subject: `${assignment.subjectCode} - ${assignment.subjectName}`,
-      dept: assignment.department,
-      year: assignment.yearLevel,
-      section: assignment.section,
-      isDefaultMatch: false,
-    }]);
-    setShowAddModal(false);
-    setAddSearch("");
-  };
-
-  const handleRemoveSubject = (assignmentId) => {
-    setEnrollmentList((prev) => prev.filter((e) => e.assignmentId !== assignmentId));
-  };
-
-  const handleConfirmEnrollment = async () => {
-    if (!activeYear || !currentUser) return;
-    if (enrollmentList.length === 0) {
-      alert("Please add at least one subject before confirming.");
-      return;
-    }
-    setSavingEnrollment(true);
-    try {
-      const { error } = await supabase.from("student_enrollments").upsert(
-        {
-          student_id: currentUser.id,
-          academic_year: activeYear.year,
-          semester: activeYear.semester,
-          confirmed_assignments: enrollmentList.map((e) => e.assignmentId),
-        },
-        { onConflict: "student_id,academic_year,semester" }
-      );
-      if (error) throw new Error(error.message);
-      setAssignedFaculty(enrollmentList.map((e) => ({
-        ...e,
-        status: submittedIds.has(e.assignmentId) ? "submitted" : "pending",
-        submittedAt: submissionsData.get(e.assignmentId)?.submittedAt,
-      })));
-      setMode("evaluation");
-    } catch (err) {
-      alert("Error: " + err.message);
-    } finally {
-      setSavingEnrollment(false);
-    }
-  };
-
   const handleEvaluate = (faculty) => {
     setSelectedFaculty(faculty);
+    setSelectedSubjectId(faculty.assignmentId);
     setRatings({});
     setComment("");
-    setIsReadOnly(false);
-    setShowModal(true);
-  };
-
-  const handleViewSubmission = (faculty) => {
-    const subData = submissionsData.get(faculty.assignmentId);
-    if (!subData) return;
-    setSelectedFaculty(faculty);
-    setRatings(subData.ratings || {});
-    setComment(subData.comment || "");
-    setIsReadOnly(true);
     setShowModal(true);
   };
 
@@ -284,7 +248,9 @@ export default function StudentEvaluation() {
         })
         .select()
         .single();
+
       if (error) throw new Error(error.message);
+
       const newSubData = new Map(submissionsData);
       newSubData.set(selectedFaculty.assignmentId, {
         ratings,
@@ -300,8 +266,12 @@ export default function StudentEvaluation() {
           ? { ...f, status: "submitted", submittedAt: data.submitted_at }
           : f)
       );
+
       setShowModal(false);
       setSelectedFaculty(null);
+      setSelectedSubjectId("");
+      setRatings({});
+      setComment("");
       alert(`Evaluation for ${selectedFaculty.name} submitted successfully!`);
     } catch (error) {
       alert("Error: " + error.message);
@@ -313,11 +283,6 @@ export default function StudentEvaluation() {
   const dept = userProfile?.department || userProfile?.dept || "—";
   const yearLevel = userProfile?.yearLevel || userProfile?.year || "—";
   const section = userProfile?.section || "—";
-
-  const filteredFaculty = assignedFaculty.filter((f) =>
-    f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    f.subject.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   const totalQuestions = evaluationCriteria.reduce((sum, c) => sum + c.items.length, 0);
   const answeredQuestions = Object.keys(ratings).length;
@@ -331,201 +296,6 @@ export default function StudentEvaluation() {
   const now = new Date();
   const endDate = activeYear?.endDate ? new Date(activeYear.endDate + "T23:59:59") : null;
   const isEvaluationOpen = !loading && activeYear !== null && (!endDate || now <= endDate);
-
-  const addableAssignments = allAssignments.filter(
-    (a) => !enrollmentList.some((e) => e.assignmentId === a.id)
-  ).filter((a) =>
-    addSearch === "" ||
-    (a.subjectCode || "").toLowerCase().includes(addSearch.toLowerCase()) ||
-    (a.subjectName || "").toLowerCase().includes(addSearch.toLowerCase()) ||
-    (a.facultyName || "").toLowerCase().includes(addSearch.toLowerCase()) ||
-    (a.department || "").toLowerCase().includes(addSearch.toLowerCase())
-  );
-
-  if (mode === "loading" || loading) {
-    return (
-      <StudentLayout breadcrumb="Evaluate Teacher">
-        <div style={{ padding: "60px", textAlign: "center", color: "#6b7280" }}>Loading...</div>
-      </StudentLayout>
-    );
-  }
-
-  if (mode === "enrollment") {
-    return (
-      <StudentLayout breadcrumb="Evaluate Teacher">
-        <div className="sd-welcomeHeader">
-          <div>
-            <h2 className="sd-title">Review Your Enrolled Subjects</h2>
-            <p className="sd-subtitle">
-              Confirm the subjects you are taking this semester before evaluating your teachers.
-            </p>
-          </div>
-          <div className="sd-dateInfo">
-            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
-          </div>
-        </div>
-
-        <div className="sd-infoCard">
-          <div className="sd-infoIcon"><Calendar size={24} /></div>
-          <div>
-            <div className="sd-infoTitle">
-              Academic Year: {activeYear ? `${activeYear.year} ${activeYear.semester}` : "—"}
-            </div>
-            <div className="sd-infoText">
-              <strong>Your Section:</strong> {dept} {yearLevel} - {section}
-            </div>
-            <div className="sd-infoText">
-              The list below was <strong>automatically matched</strong> to your section. Review it carefully — remove any subject you are <em>not</em> taking, and add any irregular or retake subjects you are enrolled in.
-            </div>
-          </div>
-        </div>
-
-        <div className="se-tableCard">
-          <div className="se-tableHeader">
-            <div>
-              <h3 className="se-tableTitle">Your Subjects This Semester</h3>
-              <p className="se-tableHint">{enrollmentList.length} subject(s) added</p>
-            </div>
-            <button
-              type="button"
-              className="se-addSubjectBtn"
-              onClick={() => { setShowAddModal(true); setAddSearch(""); }}
-            >
-              <Plus size={16} />
-              Add Subject
-            </button>
-          </div>
-
-          <div className="se-tableWrap">
-            <table className="sd-table">
-              <thead>
-                <tr>
-                  <th>FACULTY NAME</th>
-                  <th>SUBJECT</th>
-                  <th>SECTION</th>
-                  <th style={{ textAlign: "right" }}>REMOVE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {enrollmentList.length === 0 ? (
-                  <tr>
-                    <td colSpan="4" style={{ textAlign: "center", padding: "40px", color: "#9ca3af" }}>
-                      No subjects added yet. Click "+ Add Subject" to add one.
-                    </td>
-                  </tr>
-                ) : (
-                  enrollmentList.map((item) => (
-                    <tr key={item.assignmentId}>
-                      <td>
-                        <div className="sd-avatarCell">
-                          <div className="sd-avatar sd-avatar--blue">
-                            {(item.name || "??").substring(0, 2).toUpperCase()}
-                          </div>
-                          <div className="sd-cellLines">
-                            <span className="sd-cellPrimary">{item.name}</span>
-                            <span className="sd-cellSecondary">Faculty Member</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="sd-engagement">{item.subject}</td>
-                      <td>
-                        <span className="se-sectionBadge">
-                          {item.dept} {item.year} - {item.section}
-                          {!item.isDefaultMatch && (
-                            <span className="se-addedBadge">Added</span>
-                          )}
-                        </span>
-                      </td>
-                      <td className="sd-tableActions" style={{ justifyContent: "flex-end" }}>
-                        <button
-                          type="button"
-                          className="se-removeBtn"
-                          title="Remove subject"
-                          onClick={() => handleRemoveSubject(item.assignmentId)}
-                        >
-                          <Minus size={15} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="se-enrollmentFooter">
-            <p className="se-enrollmentNote">
-              <Info size={14} />
-              Once confirmed, you can still edit this list as long as you haven't submitted an evaluation.
-            </p>
-            <button
-              type="button"
-              className="se-confirmBtn"
-              onClick={handleConfirmEnrollment}
-              disabled={savingEnrollment || enrollmentList.length === 0}
-            >
-              {savingEnrollment ? "Saving..." : "Confirm Subjects"}
-              {!savingEnrollment && <ChevronRight size={16} />}
-            </button>
-          </div>
-        </div>
-
-        {showAddModal && (
-          <div className="se-modal" role="dialog" aria-modal="true">
-            <div className="se-modalOverlay" onClick={() => setShowAddModal(false)} />
-            <div className="se-modalContent se-addModal">
-              <div className="se-modalHeader">
-                <div>
-                  <h3 className="se-modalTitle">Add a Subject</h3>
-                  <p className="se-modalSubtitle">Search for any subject offered this semester.</p>
-                </div>
-                <button type="button" className="se-modalClose" onClick={() => setShowAddModal(false)}>
-                  <X size={22} />
-                </button>
-              </div>
-              <div style={{ padding: "16px 24px 12px" }}>
-                <div style={{ position: "relative" }}>
-                  <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9ca3af" }} />
-                  <input
-                    type="text"
-                    className="se-search"
-                    style={{ width: "100%", paddingLeft: 36, boxSizing: "border-box" }}
-                    placeholder="Search by subject, teacher, or program..."
-                    value={addSearch}
-                    onChange={(e) => setAddSearch(e.target.value)}
-                    autoFocus
-                  />
-                </div>
-              </div>
-              <div className="se-addModalList">
-                {addableAssignments.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "32px", color: "#9ca3af" }}>
-                    {addSearch ? "No subjects match your search." : "All available subjects are already in your list."}
-                  </div>
-                ) : (
-                  addableAssignments.map((a) => (
-                    <div key={a.id} className="se-addModalRow">
-                      <div className="se-addModalInfo">
-                        <span className="se-addModalSubject">{a.subjectCode} — {a.subjectName}</span>
-                        <span className="se-addModalMeta">{a.facultyName} · {a.department} {a.yearLevel}-{a.section}</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="se-addBtn"
-                        onClick={() => handleAddSubject(a)}
-                      >
-                        <Plus size={15} />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </StudentLayout>
-    );
-  }
 
   const uniqueFacultyNames = [...new Set(assignedFaculty.map((f) => f.name))].sort();
   const filteredFacultyNames = uniqueFacultyNames.filter((name) =>
@@ -544,7 +314,7 @@ export default function StudentEvaluation() {
   const handleSelectFaculty = (name) => {
     const match = assignedFaculty.find((f) => f.name === name);
     setSelectedFaculty(match || null);
-    setSelectedSubjectId("");
+    setSelectedSubjectId(match?.assignmentId || "");
     setSearchQuery(name);
   };
 
@@ -558,6 +328,14 @@ export default function StudentEvaluation() {
     const date = new Date(ts);
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   };
+
+  if (loading) {
+    return (
+      <StudentLayout breadcrumb="Evaluate Teacher">
+        <div style={{ padding: "60px", textAlign: "center", color: "#6b7280" }}>Loading...</div>
+      </StudentLayout>
+    );
+  }
 
   return (
     <StudentLayout breadcrumb="Evaluate Teacher">
@@ -661,7 +439,7 @@ export default function StudentEvaluation() {
             </div>
             <div className="se-progressSummaryEncouragement">
               <CheckCircle size={16} className="se-progressCheckIcon" />
-              <span>Great! You're {submittedCount === assignedFaculty.length ? "done" : "halfway there"}.</span>
+              <span>Great! You're {submittedCount === assignedFaculty.length ? "all done" : "making progress"}.</span>
             </div>
           </div>
         </div>
@@ -673,27 +451,17 @@ export default function StudentEvaluation() {
             <span className="se-stepBadge">STEP 1</span>
             <h3 className="se-stepTitle">Select Faculty Member &amp; Subject</h3>
           </div>
-          <button
-            type="button"
-            className="se-editEnrollmentBtn se-editEnrollmentBtn-outline"
-            onClick={() => setMode("enrollment")}
-            title="Edit your subject list"
-          >
-            <BookOpen size={15} />
-            Edit Subjects
-          </button>
         </div>
 
         <div className="se-infoCallout">
           <Info size={16} className="se-infoCalloutIcon" />
           <div>
             <p className="se-infoCalloutStrong">
-              Showing faculty from your confirmed enrolled subjects only.
+              Showing faculty automatically matched to your curriculum section.
             </p>
             <p className="se-infoCalloutText">
-              You have <strong>{assignedFaculty.length}</strong> subject(s) confirmed this semester.
-              Progress: <strong>{submittedCount}/{assignedFaculty.length}</strong> evaluated.
-              {" "}If a faculty member is missing, click <strong>Edit Subjects</strong> to update your list.
+              You have <strong>{assignedFaculty.length}</strong> subject(s) assigned for <strong>{dept} {yearLevel} - Section {section}</strong>.
+              Progress: <strong>{submittedCount}/{assignedFaculty.length}</strong> completed.
             </p>
           </div>
         </div>
@@ -720,7 +488,6 @@ export default function StudentEvaluation() {
             {searchQuery && !selectedFaculty && filteredFacultyNames.length > 0 && (
               <div className="se-suggestionList">
                 {filteredFacultyNames.map((name) => {
-                  const f = assignedFaculty.find((x) => x.name === name);
                   const isDone = assignedFaculty
                     .filter((x) => x.name === name)
                     .every((x) => x.status === "submitted");
@@ -796,12 +563,8 @@ export default function StudentEvaluation() {
         <div className="se-tableCard">
           <div className="se-tableHeader se-tableHeader-flex">
             <div>
-              <h3 className="se-tableTitle">My Submissions</h3>
-              <p className="se-tableHint">All subjects you are assigned to evaluate.</p>
-            </div>
-            <div className="se-tableSearchWrap">
-              <input type="text" placeholder="Search submissions..." className="se-tableSearch" />
-              <Search size={16} className="se-tableSearchIcon" />
+              <h3 className="se-tableTitle">Assigned Evaluations</h3>
+              <p className="se-tableHint">All subjects assigned to your section for evaluation.</p>
             </div>
           </div>
           <div className="se-tableWrap">
@@ -843,19 +606,12 @@ export default function StudentEvaluation() {
                     <td className="sd-engagement">{item.status === "submitted" ? formatDate(item.submittedAt) : "—"}</td>
                     <td className="sd-tableActions" style={{ justifyContent: "flex-end" }}>
                       {item.status === "submitted" ? (
-                        <button
-                          type="button"
-                          className="se-editEnrollmentBtn"
-                          style={{ padding: "6px 12px", fontSize: "12px", background: "white", border: "1px solid #e5e7eb" }}
-                          onClick={() => handleViewSubmission(item)}
-                        >
-                          View submission
-                        </button>
+                        <span className="sdb-assignedBadge" title="Evaluation finalized">✓ Evaluated</span>
                       ) : (
                         <button
                           type="button"
                           className="se-confirmBtn"
-                          style={{ padding: "6px 12px", fontSize: "12px" }}
+                          style={{ padding: "6px 14px", fontSize: "12px" }}
                           onClick={() => handleEvaluate(item)}
                           disabled={!isEvaluationOpen}
                         >
@@ -953,8 +709,7 @@ export default function StudentEvaluation() {
                                   key={rating}
                                   type="button"
                                   className={`se-ratingBtn ${ratings[item.id] === rating ? "se-ratingBtn--active" : ""}`}
-                                  onClick={() => !isReadOnly && handleRatingChange(item.id, rating)}
-                                  disabled={isReadOnly}
+                                  onClick={() => handleRatingChange(item.id, rating)}
                                   title={rating === 5 ? "Outstanding" : rating === 4 ? "Very Good" : rating === 3 ? "Good" : rating === 2 ? "Fair" : "Poor"}
                                 >
                                   {rating}

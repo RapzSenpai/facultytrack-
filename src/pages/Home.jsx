@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { ArrowRight, ShieldCheck, Clock, Lock } from "lucide-react";
 import Navbar from "../components/Navbar.jsx";
 import Footer from "../components/Footer.jsx";
 
@@ -109,6 +110,9 @@ export default function Home() {
           <div className="hero__grid">
 
             <div className="hero__left">
+              <div className="hero__badge hero__badge--mobile">
+                Consolatrix College of Toledo City
+              </div>
               <h1 className="hero__title">
                 Faculty Evaluation System
               </h1>
@@ -117,11 +121,16 @@ export default function Home() {
               </p>
               <div className="hero__actions">
                 <Link className="hero__btn" to="/login">
-                  Get Started
+                  Get Started <ArrowRight size={16} style={{ marginLeft: "6px" }} />
                 </Link>
                 <a className="hero__btn-ghost" href="#why-section">
                   Learn More
                 </a>
+              </div>
+              <div className="hero__trust hero__trust--mobile">
+                <span className="hero__trust-item"><ShieldCheck size={14} /> Anonymous</span>
+                <span className="hero__trust-dot">•</span>
+                <span className="hero__trust-item"><Lock size={14} /> Official Portal</span>
               </div>
             </div>
 

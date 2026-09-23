@@ -17,10 +17,10 @@ import { useAuth } from "../../context/AuthContext";
 import StudentLayout from "./StudentLayout";
 
 const YEAR_LEVEL_OPTIONS = [
-  { value: "1st Year", label: "1st Year" },
-  { value: "2nd Year", label: "2nd Year" },
-  { value: "3rd Year", label: "3rd Year" },
-  { value: "4th Year", label: "4th Year" },
+  { value: "1st", label: "1st Year" },
+  { value: "2nd", label: "2nd Year" },
+  { value: "3rd", label: "3rd Year" },
+  { value: "4th", label: "4th Year" },
 ];
 
 const SECTION_OPTIONS = ["A", "B", "C", "D", "E"];
@@ -80,12 +80,14 @@ export default function StudentProfile() {
               role: data.role,
               status: data.status,
             });
+            const rawYear = data.year_level || "";
+            const normYear = rawYear.includes("2") ? "2nd" : rawYear.includes("3") ? "3rd" : rawYear.includes("4") ? "4th" : "1st";
             setForm({
               fullName: data.full_name || currentUser?.displayName || "",
               email: data.email || currentUser?.email || "",
               department: data.department || "BSIT",
-              yearLevel: data.year_level || "4th Year",
-              section: data.section || "D",
+              yearLevel: normYear,
+              section: data.section || "A",
               contactNumber: data.contact_number || "",
               photoUrl: data.photo_url || "",
             });
