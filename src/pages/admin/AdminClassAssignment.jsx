@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 
@@ -15,9 +15,11 @@ export default function AdminClassAssignment() {
   const [assignmentList, setAssignmentList] = useState([]);
   const [facultyOptions, setFacultyOptions] = useState([]);
   const [subjectOptions, setSubjectOptions] = useState([]);
+  const [sectionOptions, setSectionOptions] = useState([]);
   const [departmentOptions, setDepartmentOptions] = useState([]);
   const [academicYearOptions, setAcademicYearOptions] = useState([]);
   const [deletedFacultyIds, setDeletedFacultyIds] = useState(new Set());
+  const [showAllSubjectsInModal, setShowAllSubjectsInModal] = useState(false);
 
   const [formData, setFormData] = useState({
     facultyId: "", facultyName: "", subjectCode: "", subjectName: "",
@@ -27,12 +29,13 @@ export default function AdminClassAssignment() {
   useEffect(() => {
     const loadAllData = async () => {
       try {
-        const [assignRes, facRes, subRes, deptRes, ayRes] = await Promise.all([
+        const [assignRes, facRes, subRes, deptRes, ayRes, secRes] = await Promise.all([
           supabase.from('class_assignments').select('*'),
           supabase.from('users').select('*'),
           supabase.from('subjects').select('*'),
           supabase.from('departments').select('*'),
           supabase.from('academic_years').select('*'),
+          supabase.from('sections').select('*').order('name'),
         ]);
 
         const assignments = (assignRes.data || []).map(a => ({
@@ -48,12 +51,14 @@ export default function AdminClassAssignment() {
         const subjects = subRes.data || [];
         const depts = deptRes.data || [];
         const ays = ayRes.data || [];
+        const secs = secRes.data || [];
 
         setAssignmentList(assignments);
         setFacultyOptions(users.filter(u => u.role === "faculty" && u.status !== "deleted").map(u => ({ ...u, fullName: u.full_name })));
         setSubjectOptions(subjects);
         setDepartmentOptions(depts);
         setAcademicYearOptions(ays);
+        setSectionOptions(secs);
         const deletedUids = new Set(
           users.filter(u => u.status === "deleted").map(u => u.id || u.uid)
         );
@@ -126,7 +131,42 @@ export default function AdminClassAssignment() {
     .filter(a => !filterDept || a.department === filterDept)
     .filter(a => !filterYear || a.yearLevel === filterYear)
     .filter(a => !filterSemester || a.semester === filterSemester)
-    .filter(a => !filterAY || a.academicYear === filterAY);
+  const normYear = (y) => {
+    if (!y) return "";
+    const str = String(y).toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (str.includes("1")) return "1st";
+    if (str.includes("2")) return "2nd";
+    if (str.includes("3")) return "3rd";
+    if (str.includes("4")) return "4th";
+    return y;
+  };
+
+  const availableSections = useMemo(() => {
+    if (!formData.department || !formData.yearLevel) {
+      return ["A", "B", "C", "D"];
+    }
+    const matches = sectionOptions.filter(
+      (sec) =>
+        (sec.department || "").toLowerCase() === formData.department.toLowerCase() &&
+        normYear(sec.year_level) === normYear(formData.yearLevel)
+    );
+    if (matches.length > 0) {
+      return matches.map((m) => m.name);
+    }
+    return ["A", "B", "C", "D"];
+  }, [formData.department, formData.yearLevel, sectionOptions]);
+
+  const modalSubjectOptions = useMemo(() => {
+    if (showAllSubjectsInModal || !formData.department || !formData.yearLevel) {
+      return subjectOptions;
+    }
+    const filtered = subjectOptions.filter(
+      (s) =>
+        (s.department || "").toLowerCase() === formData.department.toLowerCase() &&
+        normYear(s.year_level) === normYear(formData.yearLevel)
+    );
+    return filtered.length > 0 ? filtered : subjectOptions;
+  }, [formData.department, formData.yearLevel, subjectOptions, showAllSubjectsInModal]);
 
   return (
     <AdminLayout title="Class Assignment">
@@ -342,8 +382,51 @@ export default function AdminClassAssignment() {
                 </select>
               </div>
 
+              <div className="ad-formRow">
+                <div className="ad-formGroup">
+                  <label className="ad-label">Program *</label>
+                  <select
+                    className="ad-input"
+                    value={formData.department || ""}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  >
+                    <option value="">Select program</option>
+                    {departmentOptions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  </select>
+                </div>
+                <div className="ad-formGroup">
+                  <label className="ad-label">Year Level *</label>
+                  <select
+                    className="ad-input"
+                    value={formData.yearLevel || ""}
+                    onChange={(e) => setFormData({ ...formData, yearLevel: e.target.value })}
+                  >
+                    <option value="">Select year</option>
+                    {["1st", "2nd", "3rd", "4th"].map(y => <option key={y} value={y}>{y} Year</option>)}
+                  </select>
+                </div>
+              </div>
+
               <div className="ad-formGroup">
-                <label className="ad-label">Subject *</label>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                  <label className="ad-label" style={{ margin: 0 }}>
+                    Subject *
+                    {formData.department && formData.yearLevel && !showAllSubjectsInModal && modalSubjectOptions.length < subjectOptions.length && (
+                      <span style={{ fontSize: "11px", color: "#059669", fontWeight: "700", marginLeft: "6px" }}>
+                        (Filtered for {formData.department} {formData.yearLevel})
+                      </span>
+                    )}
+                  </label>
+                  {formData.department && formData.yearLevel && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllSubjectsInModal(!showAllSubjectsInModal)}
+                      style={{ background: "none", border: "none", color: "#2563eb", fontSize: "12px", cursor: "pointer", textDecoration: "underline" }}
+                    >
+                      {showAllSubjectsInModal ? "Filter by Curriculum" : "Show All Subjects"}
+                    </button>
+                  )}
+                </div>
                 <select
                   className="ad-input"
                   value={formData.subjectCode || ""}
@@ -353,33 +436,27 @@ export default function AdminClassAssignment() {
                   }}
                 >
                   <option value="">Select subject</option>
-                  {subjectOptions.map(s => <option key={s.code} value={s.code}>{s.code} - {s.description}</option>)}
+                  {modalSubjectOptions.map(s => <option key={s.id || s.code} value={s.code}>{s.code} - {s.description}</option>)}
                 </select>
               </div>
 
               <div className="ad-formRow">
                 <div className="ad-formGroup">
-                  <label className="ad-label">Program *</label>
-                  <select className="ad-input" value={formData.department || ""} onChange={(e) => setFormData({ ...formData, department: e.target.value })}>
-                    <option value="">Select program</option>
-                    {departmentOptions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-                  </select>
-                </div>
-                <div className="ad-formGroup">
-                  <label className="ad-label">Year Level *</label>
-                  <select className="ad-input" value={formData.yearLevel || ""} onChange={(e) => setFormData({ ...formData, yearLevel: e.target.value })}>
-                    <option value="">Select year</option>
-                    {["1st", "2nd", "3rd", "4th"].map(y => <option key={y} value={y}>{y} Year</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="ad-formRow">
-                <div className="ad-formGroup">
-                  <label className="ad-label">Section *</label>
-                  <select className="ad-input" value={formData.section || ""} onChange={(e) => setFormData({ ...formData, section: e.target.value })}>
+                  <label className="ad-label">
+                    Section *
+                    {availableSections.length > 0 && formData.department && (
+                      <span style={{ fontSize: "11px", color: "#64748b", fontWeight: "500", marginLeft: "4px" }}>
+                        ({availableSections.length} available)
+                      </span>
+                    )}
+                  </label>
+                  <select
+                    className="ad-input"
+                    value={formData.section || ""}
+                    onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                  >
                     <option value="">Select section</option>
-                    {["A", "B", "C", "D"].map(s => <option key={s} value={s}>Section {s}</option>)}
+                    {availableSections.map(s => <option key={s} value={s}>Section {s}</option>)}
                   </select>
                 </div>
                 <div className="ad-formGroup">

@@ -44,8 +44,8 @@ const navSections = [
     id: "manage-evaluation",
     label: "MANAGE EVALUATION",
     items: [
-      { key: "department", label: "Program", path: "/admin/department", icon: GraduationCap },
-      { key: "subject", label: "Subject", path: "/admin/subject", icon: BookOpen },
+      { key: "department", label: "Curriculum & Sections", path: "/admin/department", icon: GraduationCap },
+      { key: "subject", label: "All Subjects", path: "/admin/subject", icon: BookOpen },
       { key: "class-assignment", label: "Class Assignment", path: "/admin/class-assignment", icon: ClipboardList },
       { key: "academic-year", label: "Academic Year", path: "/admin/academic-year", icon: CalendarDays },
       { key: "subject-corrections", label: "Subject Corrections", path: "/admin/subject-corrections", icon: ClipboardCheck },

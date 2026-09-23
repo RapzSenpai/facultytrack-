@@ -49,6 +49,7 @@ export default function Register() {
   const [departmentOptions, setDepartmentOptions] = useState([]);
   const [idPhoto, setIdPhoto] = useState(null);
   const [idPhotoPreview, setIdPhotoPreview] = useState("");
+  const [availableSections, setAvailableSections] = useState(SECTIONS);
 
   const isStudent = activeTab === "student";
   const idLabel = isStudent ? "STUDENT ID" : "FACULTY ID";
@@ -68,6 +69,36 @@ export default function Register() {
       })
       .catch((err) => console.error("Dept fetch exception:", err));
   }, []);
+
+  // Dynamically load active sections for the student's chosen program and year level
+  useEffect(() => {
+    if (!form.department || !form.yearLevel) {
+      setAvailableSections(SECTIONS);
+      return;
+    }
+    const norm = (y) => {
+      const str = String(y).toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (str.includes("1")) return "1st";
+      if (str.includes("2")) return "2nd";
+      if (str.includes("3")) return "3rd";
+      if (str.includes("4")) return "4th";
+      return y;
+    };
+    supabase
+      .from("sections")
+      .select("name")
+      .ilike("department", form.department)
+      .eq("year_level", norm(form.yearLevel))
+      .order("name")
+      .then(({ data, error }) => {
+        if (!error && data && data.length > 0) {
+          setAvailableSections(data.map((d) => d.name));
+        } else {
+          setAvailableSections(SECTIONS);
+        }
+      })
+      .catch(() => setAvailableSections(SECTIONS));
+  }, [form.department, form.yearLevel]);
 
   const switchTab = (tab) => {
     setActiveTab(tab);
@@ -234,39 +265,6 @@ export default function Register() {
 
           <h2 className="auth-section-heading">Personal Information</h2>
 
-          <div className="auth-grid" style={{ marginBottom: "16px" }}>
-            <AuthField
-              label="SCHOOL ID PHOTO"
-              htmlFor="idPhoto"
-              required
-              error={fieldErrors.idPhoto}
-              icon={IdCard}
-              span2
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-                <input
-                  id="idPhoto"
-                  name="idPhoto"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className={`auth-input ${fieldErrors.idPhoto ? "auth-input--invalid" : ""}`}
-                  style={{ padding: "8px 12px", fontSize: "13px" }}
-                  onChange={handleIdPhotoChange}
-                />
-                {idPhotoPreview && (
-                  <img
-                    src={idPhotoPreview}
-                    alt="ID preview"
-                    style={{ width: "56px", height: "40px", objectFit: "cover", borderRadius: "6px", border: "1px solid #e5e7eb" }}
-                  />
-                )}
-              </div>
-              <span className="auth-select-hint" style={{ display: "block", marginTop: "4px", fontSize: "12px", color: "#94a3b8" }}>
-                Take or upload a clear photo of your school ID. JPG, PNG or WebP, max 5MB.
-              </span>
-            </AuthField>
-          </div>
-
           <div className="auth-grid">
             <AuthField
               label={idLabel}
@@ -368,9 +366,7 @@ export default function Register() {
                 </SelectWrap>
               </AuthField>
             )}
-          </div>
 
-          <div className="auth-grid">
             {isStudent && (
               <>
                 <AuthField label="YEAR LEVEL" htmlFor="yearLevel" required error={fieldErrors.yearLevel}>
@@ -400,7 +396,7 @@ export default function Register() {
                       onChange={handleChange}
                     >
                       <option value="">Select section</option>
-                      {SECTIONS.map((s) => (
+                      {availableSections.map((s) => (
                         <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
@@ -408,6 +404,50 @@ export default function Register() {
                 </AuthField>
               </>
             )}
+
+            <AuthField
+              label="SCHOOL ID PHOTO"
+              htmlFor="idPhoto"
+              required
+              error={fieldErrors.idPhoto}
+              span2
+            >
+              <div className="auth-id-upload">
+                <input
+                  id="idPhoto"
+                  name="idPhoto"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="auth-id-file-input"
+                  onChange={handleIdPhotoChange}
+                />
+                <label htmlFor="idPhoto" className={`auth-id-dropzone ${fieldErrors.idPhoto ? "auth-id-dropzone--invalid" : ""}`}>
+                  {idPhotoPreview ? (
+                    <div className="auth-id-preview-row">
+                      <img
+                        src={idPhotoPreview}
+                        alt="ID preview"
+                        className="auth-id-preview-img"
+                      />
+                      <div className="auth-id-preview-info">
+                        <span className="auth-id-preview-name">{idPhoto?.name || "School ID Photo Selected"}</span>
+                        <span className="auth-id-preview-action">Click to change photo</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="auth-id-placeholder">
+                      <div className="auth-id-icon-circle">
+                        <IdCard size={20} />
+                      </div>
+                      <div className="auth-id-text">
+                        <strong>Upload School ID Photo</strong>
+                        <span>JPG, PNG or WebP, up to 5MB</span>
+                      </div>
+                    </div>
+                  )}
+                </label>
+              </div>
+            </AuthField>
 
             <AuthField label="PASSWORD" htmlFor="reg-password" required error={fieldErrors.password} icon={Lock}>
               <input
