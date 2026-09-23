@@ -3732,3 +3732,223 @@ select.ad-input {
     left: 0;
   }
 }
+
+/* ========================= RESPONSIVE - MOBILE (≤768px) ========================= */
+
+@media (max-width: 768px) {
+
+  /* ── Layout: collapse sidebar out of grid flow ── */
+  .ad,
+  .ad.ad--open {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Sidebar: slide-in drawer on mobile ── */
+  .ad-sidebar {
+    position: fixed;
+    left: -260px;
+    top: 0;
+    bottom: 0;
+    width: 260px !important;
+    z-index: 1000;
+    transition: left 0.3s ease;
+  }
+
+  /* When burger is tapped, JS adds ad--mobile-open */
+  .ad--mobile-open .ad-sidebar {
+    left: 0;
+  }
+
+  /* ── Overlay backdrop ── */
+  .ad-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 999;
+    border: none;
+    cursor: pointer;
+  }
+
+  .ad--mobile-open .ad-overlay {
+    display: block;
+  }
+
+  /* ── Main content: full width ── */
+  .ad-main {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* ── Topbar ── */
+  .ad-topbar {
+    padding: 0 12px;
+  }
+
+  .ad-topUserName {
+    display: none; /* hide name on small screens, keep avatar */
+  }
+
+  /* ── Content padding ── */
+  .ad-content {
+    padding: 16px 12px;
+  }
+
+  /* ── Page header: stack on mobile ── */
+  .ad-welcomeHeader {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px;
+  }
+
+  .ad-welcomeHeader .ad-btnPrimary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* ── Filter bar: wrap to multiple lines ── */
+  .ad-filterBar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ad-filterBar .ad-searchWrap {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .ad-filterBar .ad-filterSelect {
+    flex: 1 1 140px;
+  }
+
+  .ad-filterCount {
+    width: 100%;
+    text-align: right;
+  }
+
+  /* ── Tables: horizontal scroll instead of overflow break ── */
+  .ad-tableWrap,
+  .ad-tableWrap--bordered {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .ad-table {
+    min-width: 600px; /* ensure table doesn't collapse */
+  }
+
+  /* ── Form rows: stack to single column ── */
+  .ad-formRow {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  /* ── Charts: stack vertically ── */
+  .ad-chartsRow {
+    grid-template-columns: 1fr !important;
+    gap: 16px;
+  }
+
+  /* ── Stat cards: 2 per row on mobile ── */
+  .ad-statsGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  /* ── Filter card ── */
+  .ad-filterCard {
+    padding: 12px;
+  }
+
+  .ad-filterGroup {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px;
+  }
+
+  .ad-filterGroup .ad-btnSearch {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  /* ── Modals: full screen on mobile ── */
+  .ad-modalContent,
+  .ad-modalContent--large {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0;
+    border-radius: 16px 16px 0 0;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .ad-modal {
+    align-items: flex-end;
+  }
+
+  .ad-modalBody {
+    padding: 16px;
+  }
+
+  .ad-modalFooter {
+    padding: 12px 16px;
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+
+  .ad-modalFooter button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* ── Table action buttons: shrink ── */
+  .ad-tableActions {
+    gap: 4px;
+  }
+
+  .ad-actionBtn {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+/* ========================= RESPONSIVE - SMALL PHONES (≤480px) ========================= */
+
+@media (max-width: 480px) {
+
+  /* ── Stat cards: single column on tiny screens ── */
+  .ad-statsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Filter group: single column ── */
+  .ad-filterGroup {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Table card padding ── */
+  .ad-tableCard--padded {
+    padding: 12px;
+  }
+
+  /* ── Chart body: stack donut + table ── */
+  .ad-chartBody {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+
+  /* ── Topbar title ── */
+  .ad-breadcrumb {
+    font-size: 14px;
+  }
+
+  /* ── Button sizes ── */
+  .ad-btnPrimary,
+  .ad-btnSecondary {
+    font-size: 13px;
+    padding: 8px 14px;
+  }
+}

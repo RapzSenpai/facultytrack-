@@ -36,24 +36,34 @@ export default function AdminDepartment() {
   }, [fetchDepartments]);
 
   const handleSave = async () => {
-    if (!formData.name || !formData.description) return alert("Please fill all fields");
+    if (!formData.name || !formData.description) {
+      alert("Please fill in both Program Name and Description.");
+      return;
+    }
 
     setLoading(true);
     const isEditing = !!editingDepartment;
 
     try {
+      let error;
       if (isEditing) {
-        const { error } = await supabase.from("departments").update(formData).eq("id", editingDepartment.id);
-        if (error) throw error;
+        ({ error } = await supabase.from("departments").update(formData).eq("id", editingDepartment.id));
       } else {
-        const { error } = await supabase.from("departments").insert(formData);
-        if (error) throw error;
+        ({ error } = await supabase.from("departments").insert(formData));
       }
+
+      if (error) {
+        alert(`Failed to save: ${error.message || 'Unknown error. Check your permissions.'}`);
+        console.error("Save error:", error);
+        return;
+      }
+
       setShowModal(false);
       setFormData({ name: "", description: "" });
       fetchDepartments();
     } catch (err) {
       console.error("Save error:", err);
+      alert("Network error: Could not connect to the server.");
     } finally {
       setLoading(false);
     }

@@ -57,8 +57,6 @@ export default function AdminFaculty() {
     const isEditing = !!editingFaculty;
 
     try {
-      let error = null;
-
       if (isEditing) {
         const { error: updateError } = await supabase
           .from('users')
@@ -69,9 +67,15 @@ export default function AdminFaculty() {
             department: formData.department,
           })
           .eq('id', editingFaculty.id);
-        error = updateError;
+
+        if (updateError) {
+          alert(`Update failed: ${updateError.message || 'Unknown error.'}`);
+          console.error("Update error:", updateError);
+          return;
+        }
       } else {
-        const { error: signUpError } = await supabase.auth.signUp({
+        // Step 1: Create the auth user
+        const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
           options: {
@@ -83,17 +87,36 @@ export default function AdminFaculty() {
             }
           }
         });
-        error = signUpError;
+
+        if (signUpError) {
+          alert(`Registration failed: ${signUpError.message}`);
+          console.error("SignUp error:", signUpError);
+          return;
+        }
+
+        // Step 2: Directly insert profile into users table so it shows up immediately
+        // (in case email confirmation is required, the trigger may not fire until confirmed)
+        if (authData?.user?.id) {
+          const { error: insertError } = await supabase.from('users').upsert({
+            id: authData.user.id,
+            email: formData.email,
+            full_name: formData.name,
+            role: 'faculty',
+            school_id: formData.schoolId,
+            department: formData.department,
+            status: 'active',
+          }, { onConflict: 'id' });
+
+          if (insertError) {
+            console.warn("Profile upsert warning (may already exist):", insertError.message);
+          }
+        }
       }
 
-      if (error) {
-        alert(`Error: ${error.message || "Something went wrong"}`);
-      } else {
-        await fetchData();
-        setShowModal(false);
-        setFormData(initialForm);
-        setEditingFaculty(null);
-      }
+      await fetchData();
+      setShowModal(false);
+      setFormData(initialForm);
+      setEditingFaculty(null);
     } catch (err) {
       alert("Network error: Could not connect to the server.");
       console.error("Save error:", err);

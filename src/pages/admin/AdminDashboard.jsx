@@ -25,12 +25,14 @@ export default function AdminDashboard() {
       supabase.from('users').select('*').eq('role', 'student'),
       supabase.from('evaluations').select('*'),
       supabase.from('academic_years').select('*'),
+      supabase.from('class_assignments').select('*'),
     ])
-      .then(([facultyRes, studentsRes, evaluationsRes, yearsRes]) => {
+      .then(([facultyRes, studentsRes, evaluationsRes, yearsRes, assignmentsRes]) => {
         const faculty = facultyRes.data || [];
         const students = studentsRes.data || [];
         const evaluations = evaluationsRes.data || [];
         const years = yearsRes.data || [];
+        const assignments = assignmentsRes?.data || [];
 
         // Map snake_case to camelCase for faculty
         const facultyMapped = faculty.map(f => ({
@@ -182,10 +184,12 @@ export default function AdminDashboard() {
         Object.keys(facMap).forEach(id => {
           const f = facultyMapped.find(fac => fac.id === id);
           if (f) {
+            const assignDept = assignments.find(a => (a.faculty_id === id || a.facultyId === id) && a.department)?.department;
+            const dept = f.department || assignDept || "—";
             facArr.push({
               id,
-              name: `${f.firstName} ${f.lastName}`,
-              department: f.department || "Unknown",
+              name: f.fullName || (f.firstName && f.lastName ? `${f.firstName} ${f.lastName}` : (f.firstName || f.lastName || "Faculty Member")),
+              department: dept,
               avgRating: facMap[id].count > 0 ? (facMap[id].totalRating / facMap[id].count).toFixed(2) : "0.00",
               evals: facMap[id].count
             });
@@ -473,7 +477,14 @@ export default function AdminDashboard() {
                   <h3 className="mockup-panel-title">Top Rated Faculty</h3>
                   <p className="mockup-panel-subtitle">Based on average evaluation ratings.</p>
                 </div>
-                <a href="#" className="mockup-panel-action">View all →</a>
+                <button
+                  type="button"
+                  className="mockup-panel-action"
+                  onClick={() => navigate('/admin/report')}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  View all →
+                </button>
               </div>
               <div>
                 {loading ? (
@@ -486,7 +497,7 @@ export default function AdminDashboard() {
                       <div className={`mockup-fac-rank ${i < 3 ? 'top' : ''}`}>{i + 1}</div>
                       <div className="mockup-fac-avatar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></div>
                       <div className="mockup-fac-name">{f.name}</div>
-                      <div className="mockup-fac-dept">{f.department}</div>
+                      <div className="mockup-fac-dept">{f.department && f.department !== "Unknown" ? f.department : "—"}</div>
                       <div className="mockup-fac-rating">{f.avgRating}</div>
                       <div className="mockup-fac-evals">{f.evals} evals</div>
                     </div>
