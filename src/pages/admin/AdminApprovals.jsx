@@ -53,11 +53,17 @@ export default function AdminApprovals() {
     const handleApprove = async (uid) => {
         if (window.confirm("Approve this account?")) {
             try {
-                const { error } = await supabase.from('users').update({
+                // NOTE: PostgREST returns success with ZERO rows when RLS
+                // filters the target (e.g. other-program user) — that is
+                // not an error object, so verify a row actually changed.
+                const { data, error } = await supabase.from('users').update({
                     status: 'active',
                     approved_at: new Date().toISOString(),
-                }).eq('id', uid);
+                }).eq('id', uid).select('id');
                 if (error) throw error;
+                if (!data || data.length === 0) {
+                    throw new Error("Nothing was updated — you may not have permission for this user's program, or the account no longer exists.");
+                }
                 logAdminAction("account.approve", "users", uid, {});
                 setToastMsg("Account approved successfully! User can now log in.");
                 fetchApprovals();
@@ -85,8 +91,11 @@ export default function AdminApprovals() {
                 const { error } = await supabase.rpc('delete_user_account', { target_user_id: uid });
                 if (error) {
                     console.warn("Reject RPC error, attempting direct delete:", error);
-                    const { error: delError } = await supabase.from('users').delete().eq('id', uid);
+                    const { data: delData, error: delError } = await supabase.from('users').delete().eq('id', uid).select('id');
                     if (delError) throw delError;
+                    if (!delData || delData.length === 0) {
+                        throw new Error("Nothing was deleted — you may not have permission for this user's program, or the account no longer exists.");
+                    }
                 }
                 logAdminAction("account.reject", "users", uid, {});
                 setToastMsg("Account rejected and removed successfully.");
