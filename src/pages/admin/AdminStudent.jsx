@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 
@@ -21,6 +21,7 @@ export default function AdminStudent() {
   const [loading, setLoading] = useState(false);
   const [studentList, setStudentList] = useState([]);
   const [departmentOptions, setDepartmentOptions] = useState([]);
+  const [sectionList, setSectionList] = useState([]);
 
   const [formData, setFormData] = useState(EMPTY_FORM);
 
@@ -48,7 +49,39 @@ export default function AdminStudent() {
         if (!error) setDepartmentOptions(Array.isArray(data) ? data : []);
       })
       .catch(err => console.error("Dept fetch error:", err));
+
+    supabase.from('sections').select('*')
+      .then(({ data }) => {
+        if (data) setSectionList(data);
+      })
+      .catch(() => {});
   }, []);
+
+  const allSectionOptions = useMemo(() => {
+    const set = new Set(SECTIONS);
+    sectionList.forEach((s) => { if (s.name) set.add(s.name); });
+    studentList.forEach((st) => { if (st.section) set.add(st.section); });
+    return Array.from(set).sort();
+  }, [sectionList, studentList]);
+
+  const modalSectionOptions = useMemo(() => {
+    if (formData.department && formData.yearLevel) {
+      const normYear = (y) => (y || '').toString().toLowerCase().replace(/[^0-9]/g, '');
+      const targetYearNum = normYear(formData.yearLevel);
+      const filtered = sectionList.filter(s => {
+        const deptMatch = !s.department || s.department.toLowerCase() === formData.department.toLowerCase();
+        const yearNum = normYear(s.year_level);
+        const yearMatch = !s.year_level || yearNum === targetYearNum;
+        return deptMatch && yearMatch;
+      });
+      if (filtered.length > 0) {
+        const set = new Set(filtered.map(s => s.name));
+        if (formData.section) set.add(formData.section);
+        return Array.from(set).sort();
+      }
+    }
+    return allSectionOptions;
+  }, [formData.department, formData.yearLevel, formData.section, sectionList, allSectionOptions]);
 
   const handleDelete = async (uid) => {
     if (window.confirm("Are you sure you want to delete this student?")) {
@@ -220,7 +253,7 @@ export default function AdminStudent() {
 
             <select className="ad-filterSelect" value={filterSection} onChange={(e) => setFilterSection(e.target.value)}>
               <option value="">All Sections</option>
-              {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+              {allSectionOptions.map(s => <option key={s} value={s}>Section {s}</option>)}
             </select>
 
             {(filterDept || filterYear || filterSection || searchQuery) && (
@@ -431,7 +464,7 @@ export default function AdminStudent() {
                   <label className="ad-label">Section</label>
                   <select className="ad-input" value={formData.section} onChange={(e) => setFormData({ ...formData, section: e.target.value })}>
                     <option value="">Select section</option>
-                    {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+                    {modalSectionOptions.map(s => <option key={s} value={s}>Section {s}</option>)}
                   </select>
                 </div>
               </div>

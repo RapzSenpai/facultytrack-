@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 
@@ -69,17 +70,32 @@ export default function AdminSubject() {
       <section className="ad-content">
         <div className="ad-welcomeHeader">
           <div>
-            <h2 className="ad-title">Subject Management</h2>
-            <p className="ad-subtitle">Manage all subjects in the system</p>
+            <h2 className="ad-title">Master Subject Catalog</h2>
+            <p className="ad-subtitle">Global repository of all subjects across all courses.</p>
           </div>
-          <button className="ad-btnPrimary" onClick={() => {
-            setEditingSubject(null);
-            setFormData({ code: "", description: "" });
-            setShowModal(true);
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-            Add New Subject
-          </button>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <Link to="/admin/department" className="ad-btnSecondary" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              Go to Curriculum & Sections →
+            </Link>
+            <button className="ad-btnPrimary" onClick={() => {
+              setEditingSubject(null);
+              setFormData({ code: "", description: "" });
+              setShowModal(true);
+            }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+              Add New Subject
+            </button>
+          </div>
+        </div>
+
+        {/* Informative Banner */}
+        <div style={{ background: "#eff6ff", border: "1.5px solid #bfdbfe", borderRadius: "10px", padding: "12px 18px", marginBottom: "20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", fontSize: "13px", color: "#1e40af" }}>
+          <div>
+            <strong>Curriculum Organization:</strong> Subjects can now be managed directly inside each <strong>Program & Year Level</strong> under the unified curriculum console.
+          </div>
+          <Link to="/admin/department" style={{ fontWeight: 700, color: "#1d4ed8", textDecoration: "underline" }}>
+            Open Curriculum & Sections Console
+          </Link>
         </div>
 
         <div className="ad-tableCard ad-tableCard--padded">
