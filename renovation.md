@@ -118,7 +118,7 @@ Conventions used everywhere: `[CLIENT]` = decided by client · `[REQ]` = origina
 | 2 | School ID photos (Req 1 / D12) | **DONE (code)** — Register.jsx blocker fixed + lint/build verified; user still needs to apply 007 + run smoke tests if not yet done |
 | 3 | Remove Add Subject (Req 2 / D5) | **IN PROGRESS (code complete)** — awaiting 008 application + function redeploy + smoke tests |
 | 4 | Student anonymity refactor (Req 11) | **DONE** (009 applied + verified) |
-| 5 | Result release gating (Req 7 / D2–D4) | Not started |
+| 5 | Result release gating (Req 7 / D2–D4) | **IN PROGRESS (code complete)** — awaiting 011 application + smoke tests |
 | 6 | Moderation + priority (Req 3, 8 / D6, D7) | Not started |
 | 7 | Super Admin + program scoping + exports (Req 9, 10 / D8–D11) | Not started |
 | 8 | AI chatbox + summaries + role separation (Req 4, 5, 6) | Not started |
@@ -286,16 +286,43 @@ lookups in `users` policies now go through SECURITY DEFINER helpers (`is_admin()
 `is_faculty()`, `current_user_department()`; 005's pattern). Redundant student-only policy
 dropped. Non-recursive, re-runnable, no Edge Function changes. Login must now succeed for
 all roles (original symptom gone; role scoping per-role verification queries are at the
-bottom of the migration file).
+bottom of the migration file).### Phase 5 — Result Release Gating (Req 7 / D2–D4) — code complete, 🚧 pending apply/smoke
 
-### Phase 5 — Result Release Gating (Req 7 / D2–D4) — planned
-- `grade_submissions` (faculty_id, academic_year, semester, submitted_at; UNIQUE triple) —
-  faculty self-mark [D3]; admin reads.
-- `evaluation_releases` (academic_year, semester, department nullable; `approved`, `approved_by/at`,
-  `release_date`) — release rule per §4.7: **approved AND release_date IS NOT NULL AND passed**.
-- Admin screen: per-faculty grade status → set release date → approve. Scoped admins approve
-  their program (full scoping arrives Phase 7; design the table for it now).
-- Backfill all pre-existing periods as released. Faculty UI: pending-release state.
+**Delivered:**
+- `supabase/migrations/011_phase5_release_gating.sql` (re-runnable, verification + rule
+  truth-table checks at the bottom):
+  - `grade_submissions` (faculty_id, academic_year, semester, submitted_at; UNIQUE triple)
+    [D2/D3] — faculty self-mark/unmark own rows; admin SELECT. No grades ever stored.
+  - `evaluation_releases` (academic_year, semester, department NULL = all programs,
+    approved, approved_by/at, release_date) — designed for Phase 7 program scoping now;
+    unique index on COALESCE(department,'') because a plain UNIQUE treats NULLs as distinct.
+  - `is_period_released(year, semester, department)` — **the single source of the §4.7 rule**:
+    `approved AND release_date IS NOT NULL AND release_date <= CURRENT_DATE` (a missing
+    release_date NEVER counts as released). SECURITY DEFINER; matches global OR exact-program row.
+  - `faculty_evaluations_anon` rebuilt **release-aware**: unreleased periods are invisible
+    to faculty at the data layer — not merely grayed out.
+  - `faculty_release_status` view: per-period `has_evaluations` / `grades_submitted` /
+    `released` booleans for the caller only (no result data).
+  - Backfill: every pre-existing period inserted as global + approved + effective
+    immediately, so no historical result disappears.
+- `src/utils/releaseStatus.js`: faculty release-status fetch + grades toggle (id pinned by RLS).
+- `src/utils/periodRelease.js`: client mirror of the rule for UI display only (SQL is the gate).
+- `FacultyDashboard.jsx`: pending-release banner, grades-submitted self-mark card [D3],
+  rating card shows "Pending" until release; table gated on `activeReleased`.
+- `FacultyEvalResult.jsx`: distinguishes "no results" vs "results pending release" [D4]
+  via `faculty_release_status`; belt-and-braces client filter to released periods.
+- `AdminReleaseManagement.jsx` (route `/admin/release-management`, nav "Release Management"):
+  period picker with status pill (draft/scheduled/released), release date + approve
+  checkbox, save (select-then-update/insert because the unique index is on
+  COALESCE(department,'')), honest status explainer, per-faculty grades-submitted table.
+
+**Remaining for Phase 5 completion (user steps):**
+1. Apply `011_phase5_release_gating.sql` in the SQL editor (verification + rule checks at
+   the bottom of the file).
+2. Smoke tests (README §Phase 5): backfill keeps history visible; faculty dashboard shows
+   pending banner + grades toggle persists; results page distinguishes pending vs empty;
+   admin sets a future date + approve → hidden until the date passes → visible after;
+   passed date without approval stays hidden.
 
 ### Phase 6 — Moderation + Priority (Req 3, 8 / D6, D7) — planned
 
@@ -341,10 +368,14 @@ Storage bucket `school-id-photos` (private, 5 MB, jpeg/png/webp),
 RPCs: `delete_user_account`, `resolve_school_id`, `check_account_status`, `log_id_photo_view`,
 helpers: `is_admin()`, trigger `handle_new_user` (roles clamped to student/faculty).
 
-**Planned:** Phase 5: `grade_submissions`,
-`evaluation_releases` · Phase 6: `priority_reviews`, `blocked_words`, moderation/priority
+**Planned:** Phase 6: `priority_reviews`, `blocked_words`, moderation/priority
 columns on `evaluations` · Phase 7: `admin_program_assignments`, `is_super_admin()`,
 `is_admin_for_program()` · Phase 8: none (functions only).
+
+**Views:** `faculty_evaluations_anon` (009, rebuilt release-aware in 011),
+`admin_evaluations_anon` (009), `faculty_release_status` (011).
+**Rule helpers:** `is_period_released()` (011, §4.7), `is_admin()` / `is_faculty()` /
+`current_user_department()` (005/010).
 
 **Edge Functions:** `submit-evaluation` (live) · planned: `summarize-comments`,
 `admin-analyst`, `export-report`.

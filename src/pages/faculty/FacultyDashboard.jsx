@@ -3,12 +3,16 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import FacultyLayout from "./FacultyLayout";
+import { fetchFacultyReleaseStatus, setGradesSubmitted } from "../../utils/releaseStatus";
 
 export default function FacultyDashboard() {
   const [overallRating, setOverallRating] = useState(null);
   const [totalResponses, setTotalResponses] = useState(null);
   const [activeYear, setActiveYear] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Phase 5: release gating + grades-submitted [D2/D3]
+  const [releaseStatus, setReleaseStatus] = useState([]);
+  const [gradeSaving, setGradeSaving] = useState(false);
   const navigate = useNavigate();
   const { currentUser, userProfile } = useAuth();
 
@@ -17,13 +21,17 @@ export default function FacultyDashboard() {
     // Phase 4 anonymity: faculty read the identity-stripped view
     // (faculty_evaluations_anon — no student_id, base-table reads
     // are revoked). The view already scopes rows to the caller.
+    // Phase 5: the view is now release-aware, so everything it
+    // returns belongs to released periods by definition.
     Promise.all([
       supabase.from('faculty_evaluations_anon').select('*'),
       supabase.from('academic_years').select('*'),
+      fetchFacultyReleaseStatus().catch(() => []),
     ])
-      .then(([evalRes, yearRes]) => {
+      .then(([evalRes, yearRes, statusRows]) => {
         const evals = evalRes.data || [];
         const years = yearRes.data || [];
+        setReleaseStatus(statusRows || []);
 
         const allScores = evals
           .flatMap(e => Object.values(e.ratings || {}).map(Number));
@@ -46,6 +54,51 @@ export default function FacultyDashboard() {
   const displayName = userProfile?.fullName || "Faculty";
   const firstName = displayName.split(" ")[0];
 
+  // Phase 5 [D3]: toggle "grades submitted" for the active period.
+  const handleToggleGrades = async () => {
+    if (!activeYear || gradeSaving) return;
+    const year = activeYear.year;
+    const semester = activeYear.semester;
+    const current = releaseStatus.find(
+      (r) => r.academic_year === year && r.semester === semester,
+    );
+    const next = !(current?.grades_submitted ?? false);
+    setGradeSaving(true);
+    try {
+      await setGradesSubmitted(currentUser.id, year, semester, next);
+      setReleaseStatus((prev) =>
+        prev.some((r) => r.academic_year === year && r.semester === semester)
+          ? prev.map((r) =>
+              r.academic_year === year && r.semester === semester
+                ? { ...r, grades_submitted: next }
+                : r,
+            )
+          : [
+              ...prev,
+              { academic_year: year, semester, grades_submitted: next, released: false, has_evaluations: true },
+            ],
+      );
+    } catch (err) {
+      console.error("Failed to update grades-submitted status:", err);
+      alert("Could not update the grades-submitted status. Please try again.");
+    } finally {
+      setGradeSaving(false);
+    }
+  };
+
+  // Phase 5: status of the ACTIVE period for banner + card.
+  const activeStatus = activeYear
+    ? releaseStatus.find(
+        (r) => r.academic_year === activeYear.year && r.semester === activeYear.semester,
+      )
+    : null;
+  // Evaluations exist in the base table even when the period is not
+  // yet released — surface the true participation signal via the
+  // status view rather than counting released rows only.
+  const activeHasEvaluations = activeStatus ? activeStatus.has_evaluations : overallRating !== null;
+  const activeReleased = activeStatus ? activeStatus.released : false;
+  const activeGradesSubmitted = activeStatus ? activeStatus.grades_submitted : false;
+
   return (
     <FacultyLayout breadcrumb="Dashboard">
       <section className="fd-content">
@@ -65,6 +118,76 @@ export default function FacultyDashboard() {
           </div>
         </div>
 
+        {/* Phase 5 [D4]: pending-release notice for the active period. */}
+        {activeYear && !activeReleased && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              background: "#fffbeb",
+              border: "1px solid #fcd34d",
+              borderRadius: "10px",
+              padding: "14px 18px",
+              marginBottom: "20px",
+              color: "#92400e",
+              fontSize: "14px",
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span>
+              Results for {activeYear.year} {activeYear.semester} are not yet released. They will appear automatically once the admin approves the release.
+            </span>
+          </div>
+        )}
+
+        {/* Phase 5 [D3]: self-mark grades-submitted status. */}
+        {activeYear && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "12px",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: "10px",
+              padding: "14px 18px",
+              marginBottom: "20px",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: "13px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                GRADES SUBMITTED
+              </div>
+              <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
+                Mark your grades for {activeYear.year} {activeYear.semester} as submitted (admins see this status when scheduling the release).
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={gradeSaving}
+              onClick={handleToggleGrades}
+              style={{
+                padding: "8px 18px",
+                borderRadius: "8px",
+                border: "none",
+                cursor: gradeSaving ? "wait" : "pointer",
+                fontWeight: 700,
+                fontSize: "13px",
+                whiteSpace: "nowrap",
+                background: activeGradesSubmitted ? "#16a34a" : "#1d4ed8",
+                color: "#fff",
+                opacity: gradeSaving ? 0.6 : 1,
+              }}
+            >
+              {gradeSaving ? "Saving…" : activeGradesSubmitted ? "Submitted ✓" : "Mark as Submitted"}
+            </button>
+          </div>
+        )}
+
         <div className="fd-statsGrid">
           <div className="fd-statCard">
             <div className="fd-statCard--header">
@@ -76,9 +199,11 @@ export default function FacultyDashboard() {
               </div>
             </div>
             <div className="fd-statNum">
-              {loading ? "—" : overallRating !== null ? overallRating.toFixed(1) : "N/A"}
+              {loading ? "—" : activeReleased ? (overallRating !== null ? overallRating.toFixed(1) : "N/A") : "Pending"}
             </div>
-            <div className="fd-statTitle">Average evaluation score</div>
+            <div className="fd-statTitle">
+              {activeReleased ? "Average evaluation score" : "Awaiting admin release"}
+            </div>
           </div>
 
           <div className="fd-statCard">
@@ -110,7 +235,7 @@ export default function FacultyDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {!loading && overallRating !== null && activeYear ? (
+                {!loading && activeHasEvaluations && activeReleased && activeYear ? (
                   <tr>
                     <td>
                       <div className="ad-avatarCell">
@@ -137,7 +262,13 @@ export default function FacultyDashboard() {
                 ) : (
                   <tr>
                     <td colSpan="3" style={{ textAlign: "center", padding: "20px", color: "#9ca3af" }}>
-                      {loading ? "Loading..." : "No evaluations yet for the current period."}
+                      {loading
+                        ? "Loading..."
+                        : !activeReleased
+                          ? "Results for the current period are pending admin release."
+                          : activeHasEvaluations
+                            ? "No evaluations yet for the current period."
+                            : "No evaluations yet for the current period."}
                     </td>
                   </tr>
                 )}

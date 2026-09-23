@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import FacultyLayout from "./FacultyLayout";
+import { fetchFacultyReleaseStatus } from "../../utils/releaseStatus";
 const getPerformanceLabel = (rating) => {
   if (rating >= 4.5) return "Outstanding";
   if (rating >= 4.0) return "Excellent";
@@ -130,6 +131,8 @@ export default function FacultyEvalResult() {
   const [selectedPeriod, setSelectedPeriod] = useState(null);
   const [evaluationPeriods, setEvaluationPeriods] = useState({});
   const [loading, setLoading] = useState(true);
+  // Phase 5 [D4]: periods with evaluations but no release yet.
+  const [pendingStatuses, setPendingStatuses] = useState([]);
   const { currentUser, userProfile } = useAuth();
 
   // Close period dropdown on outside click
@@ -148,15 +151,24 @@ export default function FacultyEvalResult() {
     // Phase 4 anonymity: read the identity-stripped view instead of
     // the evaluations base table (base-table faculty SELECT is
     // revoked; the view carries no student_id).
+    // Phase 5: the view is release-aware — unreleased periods are
+    // invisible here by design; pendingStatuses powers the notice.
     Promise.all([
       supabase.from('faculty_evaluations_anon').select('*'),
       supabase.from('questions').select('*'),
       supabase.from('criteria').select('*'),
+      fetchFacultyReleaseStatus().catch(() => []),
     ])
-      .then(([evalRes, questionRes, criteriaRes]) => {
+      .then(([evalRes, questionRes, criteriaRes, statusRows]) => {
         const rawEvals = evalRes.data || [];
         const rawQuestions = questionRes.data || [];
         const rawCriteria = criteriaRes.data || [];
+        const statuses = statusRows || [];
+
+        const releasedKeys = new Set(
+          statuses.filter((s) => s.released).map((s) => `${s.academic_year}__${s.semester}`),
+        );
+        setPendingStatuses(statuses.filter((s) => s.has_evaluations && !s.released));
 
         const evals = rawEvals.map(e => ({
           ...e,
@@ -173,7 +185,13 @@ export default function FacultyEvalResult() {
 
         const criteria = rawCriteria;
 
-        const periods = buildEvaluationPeriods(evals, questions, criteria);
+        // The view already filters to released periods; the set is a
+        // belt-and-braces guard against stale client state.
+        const visibleEvals = evals.filter((e) =>
+          releasedKeys.has(`${e.academicYear}__${e.semester}`),
+        );
+
+        const periods = buildEvaluationPeriods(visibleEvals, questions, criteria);
         setEvaluationPeriods(periods);
         const keys = Object.keys(periods);
         if (keys.length > 0) setSelectedPeriod(keys[0]);
@@ -185,7 +203,13 @@ export default function FacultyEvalResult() {
   const displayName = userProfile?.fullName || "Faculty";
   const evaluationData = selectedPeriod ? evaluationPeriods[selectedPeriod] : null;
 
-  // No evaluations state
+  // No evaluations state — Phase 5 distinguishes "nothing at all"
+  // from "results exist but are pending admin release" [D4].
+  const hasPendingOnly =
+    !loading &&
+    Object.keys(evaluationPeriods).length === 0 &&
+    pendingStatuses.length > 0;
+
   if (!loading && Object.keys(evaluationPeriods).length === 0) {
     return (
       <FacultyLayout breadcrumb="Evaluation Results">
@@ -201,8 +225,20 @@ export default function FacultyEvalResult() {
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
             </svg>
-            <p style={{ fontSize: "16px", fontWeight: 500 }}>No evaluation results yet</p>
-            <p style={{ fontSize: "14px", marginTop: "8px" }}>Your results will appear here once students complete their evaluations.</p>
+            {hasPendingOnly ? (
+              <>
+                <p style={{ fontSize: "16px", fontWeight: 500 }}>Results pending release</p>
+                <p style={{ fontSize: "14px", marginTop: "8px" }}>
+                  Evaluations exist for: {pendingStatuses.map((p) => `${p.academic_year} ${p.semester}`).join(", ")}.
+                  {" "}They will appear here once the admin approves the release.
+                </p>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: "16px", fontWeight: 500 }}>No evaluation results yet</p>
+                <p style={{ fontSize: "14px", marginTop: "8px" }}>Your results will appear here once students complete their evaluations.</p>
+              </>
+            )}
           </div>
         </section>
       </FacultyLayout>

@@ -1,5 +1,22 @@
 # Edge Functions — Deploy Notes
 
+## Phase 5 (migration 011 — result release gating)
+
+No Edge Function changes. Apply `011_phase5_release_gating.sql`, then release the
+frontend build (faculty/admin pages use the new views/tables in the same release).
+The migration backfills all pre-existing periods as released, so history stays visible.
+
+Smoke tests:
+- Faculty dashboard: pending-release banner on the active (unreleased) period;
+  "Mark as Submitted" grades toggle persists [D3]; historical periods render normally.
+- Faculty results page: unreleased periods show "Results pending release" (with the
+  period list), released periods render as before.
+- Admin → Release Management: pick the active period, set a FUTURE date + approve →
+  faculty still see nothing; after the date passes (or set today's date) results appear.
+  Uncheck approve with a past date → hidden again (D4: passed date ≠ released).
+- Console as faculty: `supabase.from('faculty_evaluations_anon').select('*')` returns
+  only released periods' rows.
+
 ## Hotfix (migration 010 — users RLS recursion, login 500)
 
 Pre-existing bug from 002/004/006: SELECT policies on `users` queried
