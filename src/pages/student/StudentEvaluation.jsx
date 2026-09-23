@@ -328,10 +328,6 @@ export default function StudentEvaluation() {
   const progressPercentage = totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0;
   const submittedCount = assignedFaculty.filter((f) => f.status === "submitted").length;
 
-  const currentStep = !showModal
-    ? 1
-    : (submitting ? 4 : (answeredQuestions < totalQuestions ? 2 : 3));
-
   const now = new Date();
   const endDate = activeYear?.endDate ? new Date(activeYear.endDate + "T23:59:59") : null;
   const isEvaluationOpen = !loading && activeYear !== null && (!endDate || now <= endDate);
@@ -378,52 +374,6 @@ export default function StudentEvaluation() {
 
   return (
     <StudentLayout breadcrumb="Evaluate Teacher">
-      <div className="se-pageHeader">
-        <div className="se-pageHeaderTop">
-          <div className="se-pageHeaderLeft">
-            <h2 className="se-pageTitle">Submit Evaluation</h2>
-            <p className="se-pageSubtitle">
-              {activeYear
-                ? `${activeYear.year} — ${activeYear.semester} · Rate each faculty member carefully.`
-                : "No active evaluation period found."}
-            </p>
-          </div>
-        </div>
-
-        <div className="se-stepper">
-          <div className={`se-step-item ${currentStep >= 1 ? "active" : ""} ${currentStep > 1 ? "completed" : ""}`}>
-            <div className="se-step-circle">1</div>
-            <div className="se-step-text">
-              <span className="se-step-title">Select Faculty</span>
-              <span className="se-step-desc">Choose faculty and subject</span>
-            </div>
-          </div>
-          <div className="se-step-divider"></div>
-          <div className={`se-step-item ${currentStep >= 2 ? "active" : ""} ${currentStep > 2 ? "completed" : ""}`}>
-            <div className="se-step-circle">2</div>
-            <div className="se-step-text">
-              <span className="se-step-title">Answer Questions</span>
-              <span className="se-step-desc">Rate and give feedback</span>
-            </div>
-          </div>
-          <div className="se-step-divider"></div>
-          <div className={`se-step-item ${currentStep >= 3 ? "active" : ""} ${currentStep > 3 ? "completed" : ""}`}>
-            <div className="se-step-circle">3</div>
-            <div className="se-step-text">
-              <span className="se-step-title">Review</span>
-              <span className="se-step-desc">Check your responses</span>
-            </div>
-          </div>
-          <div className="se-step-divider"></div>
-          <div className={`se-step-item ${currentStep >= 4 ? "active" : ""} ${currentStep > 4 ? "completed" : ""}`}>
-            <div className="se-step-circle">4</div>
-            <div className="se-step-text">
-              <span className="se-step-title">Submit</span>
-              <span className="se-step-desc">Complete evaluation</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {showUrgencyBanner && (
         <div className="se-urgencyBanner">
