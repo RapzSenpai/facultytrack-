@@ -1419,7 +1419,7 @@
 /* Sticky Progress Section */
 .se-progressSection {
   flex-shrink: 0;
-  padding: 12px 24px;
+  padding: 14px 24px;
   background: #ffffff;
   border-bottom: 1px solid #e2e8f0;
 }
@@ -1428,34 +1428,79 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.se-progressInfoLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .se-progressLabel {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   color: #475569;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
+}
+
+.se-progressBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #dbeafe;
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 1.2;
+  transition: all 0.3s ease;
+}
+
+.se-progressBadge--complete {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
 }
 
 .se-progressText {
   font-size: 12px;
-  font-weight: 600;
-  color: #1e293b;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.se-progressText strong {
+  font-weight: 700;
+  color: #0f172a;
 }
 
 .se-progressBar {
-  height: 6px;
-  background: #f1f5f9;
+  height: 8px;
+  background: #e2e8f0;
   border-radius: 999px;
   overflow: hidden;
+  position: relative;
 }
 
 .se-progressFill {
   height: 100%;
+  background: linear-gradient(90deg, #2563eb, #3b82f6);
   border-radius: 999px;
-  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease;
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.25);
+}
+
+.se-progressFill--complete {
+  background: linear-gradient(90deg, #10b981, #059669);
+  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.25);
+}
+
+.se-progressPercent {
+  display: none;
 }
 
 /* Scrollable Modal Body */

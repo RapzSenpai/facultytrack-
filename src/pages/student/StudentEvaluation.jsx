@@ -682,13 +682,22 @@ export default function StudentEvaluation() {
 
             <div className="se-progressSection">
               <div className="se-progressInfo">
-                <span className="se-progressLabel">Completion Progress</span>
-                <span className="se-progressText">{answeredQuestions} of {totalQuestions} questions answered</span>
+                <div className="se-progressInfoLeft">
+                  <span className="se-progressLabel">Completion Progress</span>
+                  <span className={`se-progressBadge ${progressPercentage === 100 ? "se-progressBadge--complete" : ""}`}>
+                    {progressPercentage}%
+                  </span>
+                </div>
+                <span className="se-progressText">
+                  <strong>{answeredQuestions}</strong> of <strong>{totalQuestions}</strong> questions answered
+                </span>
               </div>
               <div className="se-progressBar">
-                <div className="se-progressFill" style={{ width: `${progressPercentage}%` }} />
+                <div
+                  className={`se-progressFill ${progressPercentage === 100 ? "se-progressFill--complete" : ""}`}
+                  style={{ width: `${progressPercentage}%` }}
+                />
               </div>
-              <div className="se-progressPercent">{progressPercentage}%</div>
             </div>
 
             <div className="se-modalBody">
