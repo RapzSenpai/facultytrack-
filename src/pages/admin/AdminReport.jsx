@@ -191,15 +191,123 @@ export default function AdminReport() {
 
   const handleSearch = () => { };
 
+  // ── PDF Export ──────────────────────────────────────────────
+  const handleExportPDF = () => {
+    if (reportData.length === 0) {
+      alert("No data to export. Please adjust your filters.");
+      return;
+    }
+
+    const ayLabel  = filterAY  || "All Academic Years";
+    const semLabel = filterSem || "All Semesters";
+    const deptLabel = filterDept || "All Programs";
+    const now = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
+
+    const ratingColor = (r) => {
+      const n = Number(r);
+      if (isNaN(n)) return "#6b7280";
+      if (n >= 4.5) return "#16a34a";
+      if (n >= 4.0) return "#2563eb";
+      if (n >= 3.0) return "#d97706";
+      return "#dc2626";
+    };
+
+    const rows = reportData.map((r, i) => `
+      <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'}">
+        <td>${i + 1}</td>
+        <td><strong>${r.faculty}</strong></td>
+        <td>${r.department}</td>
+        <td>${r.subject}</td>
+        <td>${r.section}</td>
+        <td style="text-align:center">${r.students}</td>
+        <td style="text-align:center">${r.formCount}</td>
+        <td style="text-align:center;font-weight:700;color:${ratingColor(r.rating)}">${r.rating !== "—" ? r.rating : "—"}</td>
+        <td style="color:${ratingColor(r.rating)};font-weight:600">${getPerformanceLabel(r.rating)}</td>
+      </tr>
+    `).join("");
+
+    const commentsSection = reportData
+      .filter(r => r.comments.length > 0)
+      .map(r => `
+        <div style="margin-bottom:16px;page-break-inside:avoid">
+          <div style="font-weight:700;color:#1e3a8a;margin-bottom:6px;font-size:13px">${r.faculty} — ${r.subject} (${r.section})</div>
+          ${r.comments.map(c => `<div style="background:#f8fafc;border-left:3px solid #3b82f6;padding:8px 12px;margin-bottom:6px;font-size:12px;color:#374151;border-radius:4px">"${c}"</div>`).join("")}
+        </div>
+      `).join("");
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8"/>
+        <title>Evaluation Report — ${ayLabel} ${semLabel}</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; font-size: 13px; padding: 32px; }
+          .header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #1e3a8a; padding-bottom: 16px; }
+          .header h1 { font-size: 20px; color: #1e3a8a; font-weight: 800; letter-spacing: -0.5px; }
+          .header h2 { font-size: 14px; color: #374151; font-weight: 600; margin-top: 4px; }
+          .meta { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 12px; color: #6b7280; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 28px; font-size: 12px; }
+          th { background: #1e3a8a; color: #fff; padding: 9px 10px; text-align: left; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; }
+          td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
+          .section-title { font-size: 14px; font-weight: 700; color: #1e3a8a; margin: 24px 0 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+          .footer { margin-top: 32px; text-align: center; font-size: 11px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>FacultyTrack — Faculty Evaluation Report</h1>
+          <h2>${ayLabel} &bull; ${semLabel} &bull; ${deptLabel}</h2>
+        </div>
+        <div class="meta">
+          <span>Generated: ${now}</span>
+          <span>Total Records: ${reportData.length}</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>Faculty Name</th><th>Program</th><th>Subject</th>
+              <th>Section</th><th>Students</th><th>Forms</th><th>Avg Rating</th><th>Performance</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${commentsSection ? `<div class="section-title">Student Comments</div>${commentsSection}` : ""}
+        <div class="footer">FacultyTrack Faculty Evaluation System &mdash; Confidential</div>
+        <script>window.onload = () => { window.print(); }<\/script>
+      </body>
+      </html>
+    `;
+
+    const win = window.open("", "_blank", "width=900,height=700");
+    win.document.write(html);
+    win.document.close();
+  };
+
   return (
     <AdminLayout title="Evaluation Report">
       <section className="ad-content">
        <div className="ad-welcomeHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
             <h2 className="ad-title">Evaluation Report</h2>
-            <p className="ad-subtitle">Manage all programs in the system.</p>
+            <p className="ad-subtitle">View and export faculty evaluation results.</p>
           </div>
-          </div>
+          <button
+            className="ad-btnPrimary"
+            onClick={handleExportPDF}
+            disabled={loading || reportData.length === 0}
+            title={reportData.length === 0 ? "No data to export" : `Export ${reportData.length} records to PDF`}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Export CSV
+          </button>
+        </div>
 
         <div className="ad-filterCard">
           <div className="ad-filterGroup" style={{ gridTemplateColumns: 'repeat(4, 1fr) auto' }}>
@@ -298,61 +406,128 @@ export default function AdminReport() {
         {!loading && hasChartData && (
           <div className="ad-chartsRow">
 
-            {/* LEFT: Department Performance */}
+            {/* LEFT: Program Performance — horizontal bar chart */}
             <div className="ad-tableCard" style={{ marginBottom: 0 }}>
               <div className="ad-chartHeader">
                 <div className="ad-chartHeaderInner">
-                  <span className="ad-chartIcon"><BarChartIcon /></span>
+                  <span className="ad-chartIcon" style={{ background: '#1e3a8a', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
+                    <BarChartIcon />
+                  </span>
                   <span className="ad-chartTitle">PROGRAM PERFORMANCE</span>
                 </div>
-                <span className="ad-chartBadge">By Overall Rating</span>
+                <span className="ad-chartBadge" style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 10px', fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  By Overall Rating
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
               </div>
               <div className="ad-chartBody">
                 <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={deptData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                    <XAxis dataKey="dept" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[0, 5]} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+                  <BarChart
+                    data={deptData}
+                    layout="vertical"
+                    margin={{ top: 10, right: 30, left: 10, bottom: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                    <XAxis
+                      type="number"
+                      domain={[0, 5]}
+                      ticks={[1, 2, 3, 4, 5]}
+                      tick={{ fontSize: 11, fill: "#9ca3af" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="dept"
+                      tick={{ fontSize: 12, fill: "#374151", fontWeight: 600 }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={60}
+                    />
                     <Tooltip
                       formatter={(v) => [v, "Average Rating"]}
                       contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}
                     />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="avg" name="Average Rating" fill="#b91c1c" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="avg" name="Average Rating" fill="#2563eb" radius={[0, 4, 4, 0]} barSize={22} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
-            {/* RIGHT: Rating Distribution */}
+            {/* RIGHT: Rating Distribution — donut + custom table */}
             <div className="ad-tableCard" style={{ marginBottom: 0 }}>
               <div className="ad-chartHeader">
                 <div className="ad-chartHeaderInner">
-                  <span className="ad-chartIcon"><PieChartIcon /></span>
+                  <span className="ad-chartIcon" style={{ background: '#1e3a8a', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
+                    <PieChartIcon />
+                  </span>
                   <span className="ad-chartTitle">RATING DISTRIBUTION</span>
                 </div>
-                <span className="ad-chartBadge">Current Semester</span>
+                <span className="ad-chartBadge" style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 10px', fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  Current Semester
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
               </div>
-              <div className="ad-chartBody">
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="45%"
-                      innerRadius={75}
-                      outerRadius={110}
-                      paddingAngle={2}
-                      dataKey="value"
-                    >
-                      {pieData.map((entry, i) => (
-                        <Cell key={i} fill={tierColors[entry.name] || "#9ca3af"} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }} />
-                    <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                  </PieChart>
-                </ResponsiveContainer>
+              <div className="ad-chartBody" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                {/* Donut */}
+                <div style={{ flexShrink: 0 }}>
+                  <ResponsiveContainer width={200} height={200}>
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={90}
+                        paddingAngle={2}
+                        dataKey="value"
+                        startAngle={90}
+                        endAngle={-270}
+                      >
+                        {pieData.map((entry, i) => (
+                          <Cell key={i} fill={tierColors[entry.name] || "#9ca3af"} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Custom legend table */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>Rating Range</th>
+                        <th style={{ textAlign: 'center', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>Responses</th>
+                        <th style={{ textAlign: 'right', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>Percentage</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pieData.map((entry, i) => {
+                        const total = pieData.reduce((s, e) => s + e.value, 0);
+                        const pct = total > 0 ? Math.round((entry.value / total) * 100) : 0;
+                        return (
+                          <tr key={i}>
+                            <td style={{ padding: '8px 0', borderBottom: '1px solid #f9fafb' }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: tierColors[entry.name] || '#9ca3af', flexShrink: 0 }} />
+                                {entry.name}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'center', padding: '8px 0', borderBottom: '1px solid #f9fafb', fontWeight: 600 }}>{entry.value}</td>
+                            <td style={{ textAlign: 'right', padding: '8px 0', borderBottom: '1px solid #f9fafb', fontWeight: 700, color: tierColors[entry.name] || '#374151' }}>{pct}%</td>
+                          </tr>
+                        );
+                      })}
+                      <tr>
+                        <td style={{ padding: '10px 0 0', fontWeight: 700, color: '#111827' }}>Total</td>
+                        <td style={{ textAlign: 'center', padding: '10px 0 0', fontWeight: 700, color: '#111827' }}>{pieData.reduce((s, e) => s + e.value, 0)}</td>
+                        <td style={{ textAlign: 'right', padding: '10px 0 0', fontWeight: 700, color: '#111827' }}>100%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
 

@@ -15,10 +15,21 @@ import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
 import StudentLayout from "./StudentLayout";
 
+<<<<<<< HEAD
 // Phase 3 (Req 2 / D5): program/year/section are admin-managed.
 // The RLS policy "Users can update own profile safely" (migration
 // 008) rejects any self-update of department/year_level/section,
 // so the edit form shows them read-only.
+=======
+const YEAR_LEVEL_OPTIONS = [
+  { value: "1st", label: "1st Year" },
+  { value: "2nd", label: "2nd Year" },
+  { value: "3rd", label: "3rd Year" },
+  { value: "4th", label: "4th Year" },
+];
+
+const SECTION_OPTIONS = ["A", "B", "C", "D", "E"];
+>>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
 
 export default function StudentProfile() {
   const { currentUser, userProfile, refreshUserProfile } = useAuth();
@@ -74,12 +85,14 @@ export default function StudentProfile() {
               role: data.role,
               status: data.status,
             });
+            const rawYear = data.year_level || "";
+            const normYear = rawYear.includes("2") ? "2nd" : rawYear.includes("3") ? "3rd" : rawYear.includes("4") ? "4th" : "1st";
             setForm({
               fullName: data.full_name || currentUser?.displayName || "",
               email: data.email || currentUser?.email || "",
               department: data.department || "BSIT",
-              yearLevel: data.year_level || "4th Year",
-              section: data.section || "D",
+              yearLevel: normYear,
+              section: data.section || "A",
               contactNumber: data.contact_number || "",
               photoUrl: data.photo_url || "",
             });

@@ -5,6 +5,9 @@ import { supabase } from "../../config/supabase";
 const YEAR_LEVELS = ["1st", "2nd", "3rd", "4th"];
 const SECTIONS = ["A", "B", "C", "D"];
 
+// Normalize year level for comparison: "1st Year", "1ST", "1st" → "1st"
+const normalizeYear = (y) => (y || "").replace(/[\s\-_]*(year)?\s*/gi, "").toLowerCase();
+
 const EMPTY_FORM = { schoolId: "", name: "", email: "", password: "", department: "", yearLevel: "", section: "" };
 
 export default function AdminStudent() {
@@ -29,6 +32,7 @@ export default function AdminStudent() {
           ...s,
           fullName: s.full_name,
           schoolId: s.school_id,
+          yearLevel: s.year_level,  // map snake_case DB column to camelCase
         })));
       }
     } catch (err) {
@@ -87,8 +91,6 @@ export default function AdminStudent() {
     const isEditing = !!editingStudent;
 
     try {
-      let error = null;
-
       if (isEditing) {
         const { error: updateError } = await supabase
           .from('users')
@@ -101,9 +103,15 @@ export default function AdminStudent() {
             section: formData.section,
           })
           .eq('id', editingStudent.id);
-        error = updateError;
+
+        if (updateError) {
+          alert(`Update failed: ${updateError.message || 'Unknown error.'}`);
+          console.error("Update error:", updateError);
+          return;
+        }
       } else {
-        const { error: signUpError } = await supabase.auth.signUp({
+        // Step 1: Create the auth user
+        const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
           options: {
@@ -117,17 +125,39 @@ export default function AdminStudent() {
             }
           }
         });
-        error = signUpError;
+
+        if (signUpError) {
+          alert(`Registration failed: ${signUpError.message}`);
+          console.error("SignUp error:", signUpError);
+          return;
+        }
+
+        // Step 2: Directly insert profile so it shows up immediately
+        // (in case email confirmation is required, the trigger may not fire until confirmed)
+        if (authData?.user?.id) {
+          const { error: insertError } = await supabase.from('users').upsert({
+            id: authData.user.id,
+            email: formData.email,
+            full_name: formData.name,
+            role: 'student',
+            school_id: formData.schoolId,
+            department: formData.department,
+            year_level: formData.yearLevel,
+            section: formData.section,
+            status: 'active',
+          }, { onConflict: 'id' });
+
+          if (insertError) {
+            console.warn("Profile upsert warning (may already exist):", insertError.message);
+          }
+        }
       }
 
-      if (!error) {
-        setShowModal(false);
-        fetchStudents();
-      } else {
-        alert(`Error: ${error.message || "Something went wrong"}`);
-      }
+      setShowModal(false);
+      fetchStudents();
     } catch (err) {
       console.error("Save error:", err);
+      alert("Network error: Could not connect to the server.");
     } finally {
       setLoading(false);
     }
@@ -141,8 +171,8 @@ export default function AdminStudent() {
 
   const displayedStudents = filteredStudents
     .filter(s => !filterDept || s.department === filterDept)
-    .filter(s => !filterYear || s.yearLevel === filterYear)
-    .filter(s => !filterSection || s.section === filterSection);
+    .filter(s => !filterYear || normalizeYear(s.yearLevel) === normalizeYear(filterYear))
+    .filter(s => !filterSection || (s.section || "").toUpperCase() === filterSection.toUpperCase());
 
   return (
     <AdminLayout title="Student Management">
@@ -239,9 +269,13 @@ export default function AdminStudent() {
                       <td>{student.email}</td>
                       <td>{student.department}</td>
                       <td>
-                        <span style={{ display: 'inline-block', padding: '4px 10px', background: '#f3f4f6', color: '#1e3a8a', borderRadius: '6px', fontSize: '11px', fontWeight: '800', border: '1px solid #e5e7eb', letterSpacing: '0.5px' }}>
-                          {student.yearLevel ? student.yearLevel.toUpperCase() : "—"}
-                        </span>
+                        {student.yearLevel ? (
+                          <span style={{ display: 'inline-block', padding: '4px 10px', background: '#f3f4f6', color: '#1e3a8a', borderRadius: '6px', fontSize: '11px', fontWeight: '800', border: '1px solid #e5e7eb', letterSpacing: '0.5px' }}>
+                            {student.yearLevel.toUpperCase().replace(/YEAR/i, '').trim()} YR
+                          </span>
+                        ) : (
+                          <span style={{ color: '#9ca3af', fontSize: '12px' }}>—</span>
+                        )}
                       </td>
                       <td>
                         <span style={{ display: 'inline-block', padding: '4px 10px', background: '#f3f4f6', color: '#1e3a8a', borderRadius: '6px', fontSize: '11px', fontWeight: '800', border: '1px solid #e5e7eb', letterSpacing: '0.5px' }}>

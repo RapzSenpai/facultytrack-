@@ -276,6 +276,12 @@ body {
   padding: 0px;
 }
 
+/* Mobile-only elements (hidden by default on desktop/large screens) */
+.hero__badge--mobile,
+.hero__trust--mobile {
+  display: none;
+}
+
 /* ============================================================
    HOME — SHARED SECTION HELPERS
    ============================================================ */
@@ -876,6 +882,180 @@ body {
 }
 
 @media (max-width: 768px) {
+  /* Hero Mobile Redesign */
+  .hero {
+    min-height: calc(100svh - 65px);
+    background-size: cover;
+    background-position: center 60%;
+    align-items: center;
+  }
+
+  .hero__container {
+    padding: 28px 18px 28px;
+  }
+
+  .hero__grid {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+  }
+
+  /* Crest placed at top center */
+  .hero__right {
+    order: -1;
+    margin-bottom: 2px;
+    justify-content: center;
+  }
+
+  .hero__logoWrap {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    border: 2px solid rgba(255, 255, 255, 0.28);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(8px);
+  }
+
+  .hero__logo {
+    width: 82px;
+    height: 82px;
+    border-radius: 50%;
+  }
+
+  .hero__left {
+    order: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 520px;
+  }
+
+  /* Frosted College Pill Badge */
+  .hero__badge--mobile {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #f1f5f9;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    backdrop-filter: blur(8px);
+  }
+
+  .hero__title {
+    font-size: clamp(26px, 7.5vw, 34px);
+    line-height: 1.22;
+    text-wrap: balance;
+    margin: 0 0 12px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+
+  .hero__desc {
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.9);
+    margin: 0 auto 20px;
+    max-width: 440px;
+  }
+
+  /* Balanced Mobile Action Buttons */
+  .hero__actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+    max-width: 380px;
+    margin-bottom: 22px;
+  }
+
+  .hero__btn,
+  .hero__btn-ghost {
+    flex: 1;
+    min-width: 130px;
+    padding: 13px 18px;
+    font-size: 14.5px;
+    border-radius: 12px;
+    justify-content: center;
+    text-align: center;
+  }
+
+  /* Trust Indicators Row */
+  .hero__trust--mobile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px 8px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 500;
+  }
+
+  .hero__trust-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .hero__trust-dot {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 10px;
+  }
+
+  /* Mobile Section Cards */
+  .why-section {
+    padding: 56px 0 64px;
+  }
+
+  .why-header {
+    margin-bottom: 32px;
+  }
+
+  .why-card {
+    padding: 28px 20px 24px;
+    border-radius: 16px;
+  }
+
+  .why-card__icon {
+    width: 60px;
+    height: 60px;
+  }
+
+  .why-card__icon svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .why-card__icon-ring {
+    margin-bottom: 18px;
+  }
+
+  .how-section {
+    padding: 56px 0;
+  }
+
+  .section-header {
+    margin-bottom: 36px;
+  }
+
+  .how-card {
+    padding: 26px 20px 22px;
+    border-radius: 16px;
+  }
+
   .role-tab {
     font-size: 12px;
     padding: 12px 8px;
@@ -898,11 +1078,6 @@ body {
 }
 
 @media (max-width: 600px) {
-  .hero__actions {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
   .why-grid {
     grid-template-columns: 1fr;
   }
@@ -928,21 +1103,29 @@ body {
 
 @media (max-width: 480px) {
   .hero {
-    background-position: center 70%;
+    background-position: center 65%;
   }
 
   .hero__container {
-    padding: 40px 12px 32px;
-  }
-
-  .hero__title {
-    font-size: 34px;
+    padding: 24px 14px 24px;
   }
 
   .back-button {
     top: 15px;
     left: 15px;
     padding: 8px 12px;
+  }
+}
+
+@media (max-width: 370px) {
+  .hero__actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .hero__btn,
+  .hero__btn-ghost {
+    width: 100%;
   }
 }
 

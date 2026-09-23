@@ -27,6 +27,10 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
 
   const [assignedFaculty, setAssignedFaculty] = useState([]);
+<<<<<<< HEAD
+=======
+  const [submissionsData, setSubmissionsData] = useState(new Map());
+>>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
 
   const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
@@ -92,9 +96,17 @@ export default function StudentDashboard() {
         submissions.forEach((s) => {
           subMap.set(s.assignmentId, s);
         });
+<<<<<<< HEAD
 
         if (!active) {
           setStats({ total: 0, evaluated: 0, pending: 0, open: 0 });
+=======
+        setSubmissionsData(subMap);
+
+        if (!active) {
+          setStats({ total: 0, evaluated: 0, pending: 0, open: 0 });
+          setAssignedFaculty([]);
+>>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
           return;
         }
 
@@ -102,14 +114,18 @@ export default function StudentDashboard() {
           (a) => a.academicYear === active.year && a.semester === active.semester
         );
 
-        const normalize = (str) => (str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-        const isMatch = (val1, val2) => {
-          if (!val1 || !val2) return false;
-          const n1 = normalize(val1);
-          const n2 = normalize(val2);
-          return n1 === n2 || n1.includes(n2) || n2.includes(n1);
+        // Robust normalizers for section, year level, and department
+        const normalizeYear = (y) => {
+          if (!y) return "";
+          const str = String(y).toLowerCase().replace(/[^a-z0-9]/g, "");
+          if (str.includes("1") || str.includes("first")) return "1";
+          if (str.includes("2") || str.includes("second")) return "2";
+          if (str.includes("3") || str.includes("third")) return "3";
+          if (str.includes("4") || str.includes("fourth")) return "4";
+          return str;
         };
 
+<<<<<<< HEAD
         const sectionMatched = activeAssignments.filter(
           (a) =>
             isMatch(a.department, studentDept) &&
@@ -167,9 +183,75 @@ export default function StudentDashboard() {
           evaluated,
           pending: subjectList.length - evaluated,
           open: openNow,
+=======
+        const normalizeSection = (s) => {
+          if (!s) return "";
+          return String(s).toLowerCase().replace(/section/g, "").replace(/[^a-z0-9]/g, "");
+        };
+
+        const normalizeDept = (d) => {
+          if (!d) return "";
+          return String(d).toLowerCase().replace(/[^a-z0-9]/g, "");
+        };
+
+        // Automatic matching: directly match the student's department, year, and section
+        const matchedFaculty = activeAssignments
+          .filter((a) => {
+            const deptMatch = normalizeDept(a.department) === normalizeDept(studentDept);
+            const yearMatch = normalizeYear(a.yearLevel) === normalizeYear(studentYear);
+            const sectionMatch = normalizeSection(a.section) === normalizeSection(studentSection);
+            return deptMatch && yearMatch && sectionMatch;
+          })
+          .map((a) => {
+            const subData = subMap.get(a.id);
+            return {
+              assignmentId: a.id,
+              facultyId: a.facultyId,
+              name: a.facultyName || null,
+              subject: `${a.subjectCode} - ${a.subjectName}`,
+              subjectCode: a.subjectCode,
+              dept: a.department,
+              year: a.yearLevel,
+              section: a.section,
+              status: subData ? "submitted" : "pending",
+              submittedAt: subData?.submittedAt || null,
+            };
+          });
+
+        setAssignedFaculty(matchedFaculty);
+
+        const evaluatedCount = matchedFaculty.filter((f) => f.status === "submitted").length;
+        const openCount = matchedFaculty.filter((f) => f.status === "pending" && f.name).length;
+        setStats({
+          total: matchedFaculty.length,
+          evaluated: evaluatedCount,
+          pending: matchedFaculty.length - evaluatedCount,
+          open: openCount,
+        });
+
+        // Recent activity feed from submitted evaluations
+        const activities = [];
+        subMap.forEach((sub, assignmentId) => {
+          const match = assignments.find((a) => a.id === assignmentId);
+          const ts = sub.submittedAt;
+          const date = ts ? new Date(ts) : null;
+          activities.push({
+            type: "submitted",
+            label: "Submitted evaluation",
+            detail: match ? `${match.subjectCode || ""} (${match.subjectName || ""})` : "Evaluation",
+            date,
+          });
+        });
+
+        activities.sort((a, b) => {
+          if (!a.date && !b.date) return 0;
+          if (!a.date) return 1;
+          if (!b.date) return -1;
+          return b.date - a.date;
+>>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
         });
       } catch (err) {
-        console.error(err);
+        console.error("StudentDashboard fetch error:", err);
       } finally {
         setLoading(false);
       }
@@ -270,9 +352,15 @@ export default function StudentDashboard() {
           <div className="se-tableCard sdb-subjectsCard">
             <div className="se-tableHeader">
               <div>
+<<<<<<< HEAD
                 <h3 className="se-tableTitle">Your Subjects This Semester</h3>
                 <p className="se-tableHint">
                   Set by the administrator from your program and section.
+=======
+                <h3 className="se-tableTitle">Assigned Subjects & Teachers</h3>
+                <p className="se-tableHint">
+                  These are your assigned subjects and teachers for this semester.
+>>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
                 </p>
               </div>
             </div>
@@ -291,13 +379,17 @@ export default function StudentDashboard() {
                   {loading ? (
                     <tr>
                       <td colSpan="4" style={{ textAlign: "center", padding: "40px", color: "#9ca3af" }}>
-                        Loading...
+                        Loading assigned subjects...
                       </td>
                     </tr>
                   ) : assignedFaculty.length === 0 ? (
                     <tr>
                       <td colSpan="4" style={{ textAlign: "center", padding: "40px", color: "#9ca3af" }}>
+<<<<<<< HEAD
                         No subjects assigned yet. If something looks wrong, report it on the Evaluate page.
+=======
+                        No subjects assigned for your section ({dept} {yearLevel} - Section {section}) this semester.
+>>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
                       </td>
                     </tr>
                   ) : (
@@ -309,7 +401,11 @@ export default function StudentDashboard() {
                               {(item.name || "??").substring(0, 2).toUpperCase()}
                             </div>
                             <div className="sd-cellLines">
+<<<<<<< HEAD
                               <span className="sd-cellPrimary">{item.name || "— No faculty"}</span>
+=======
+                              <span className="sd-cellPrimary">{item.name || "— No faculty assigned"}</span>
+>>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
                               <span className="sd-cellSecondary">Faculty Member</span>
                             </div>
                           </div>
@@ -318,6 +414,7 @@ export default function StudentDashboard() {
                         <td>
                           <span className="se-sectionBadge">
                             {item.dept} {item.year} - {item.section}
+<<<<<<< HEAD
                             {item.isAdminAdjustment && (
                               <span className="se-addedBadge">Admin</span>
                             )}
@@ -330,6 +427,26 @@ export default function StudentDashboard() {
                             <span className="sd-statusBadge sd-statusBadge--closed" style={{ background: "#fef3c7", color: "#92400e" }}>
                               Pending
                             </span>
+=======
+                          </span>
+                        </td>
+                        <td className="sd-tableActions" style={{ justifyContent: "flex-end" }}>
+                          {item.status === "submitted" ? (
+                            <span className="sdb-assignedBadge" title="Already evaluated">Evaluated</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="se-editEnrollmentBtn"
+                              style={{ padding: "6px 14px", fontSize: "12px", height: "auto" }}
+                              onClick={() =>
+                                navigate(
+                                  `/student/evaluate?facultyId=${encodeURIComponent(item.facultyId || "")}&assignmentId=${encodeURIComponent(item.assignmentId || "")}`
+                                )
+                              }
+                            >
+                              Evaluate
+                            </button>
+>>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
                           )}
                         </td>
                       </tr>
@@ -342,9 +459,13 @@ export default function StudentDashboard() {
             <div className="se-enrollmentFooter">
               <p className="se-enrollmentNote">
                 <Info size={14} />
+<<<<<<< HEAD
                 Your subject list is managed by the administrator. To report a
                 wrong or missing subject, use <strong>Report an Issue</strong> on
                 the Evaluate Teacher page.
+=======
+                Click "Evaluate" or go to Evaluate Teacher to submit your evaluations.
+>>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
               </p>
               <button
                 type="button"

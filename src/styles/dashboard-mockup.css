@@ -627,6 +627,7 @@
   justify-content: center;
   font-size: 11px;
   font-weight: 800;
+  flex-shrink: 0;
 }
 
 .mockup-fac-rank.top {
@@ -641,6 +642,10 @@
   object-fit: cover;
   background: #e5e7eb;
   transition: 0.25s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .mockup-fac-item:hover .mockup-fac-avatar {
@@ -649,35 +654,42 @@
 
 .mockup-fac-name {
   flex: 1;
+  min-width: 0;
   font-size: 13px;
   font-weight: 700;
   color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .mockup-fac-dept {
-  width: 40px;
   font-size: 12px;
   color: #6b7280;
   font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .mockup-fac-rating {
-  width: 50px;
+  min-width: 44px;
   font-size: 12px;
   font-weight: 800;
   color: #16a34a;
   background: #dcfce7;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
   text-align: center;
+  flex-shrink: 0;
 }
 
 .mockup-fac-evals {
   font-size: 11px;
   color: #6b7280;
-  width: 45px;
   text-align: right;
   font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* Activity */

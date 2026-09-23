@@ -61,6 +61,11 @@ export default function AdminAcademicYear() {
 
   // 4. Save/Update Handler
   const handleSave = async () => {
+    if (!formData.year || !formData.semester) {
+      alert("Please fill in the Academic Year and Semester.");
+      return;
+    }
+
     const isEditing = !!editingAY;
 
     try {
@@ -71,12 +76,17 @@ export default function AdminAcademicYear() {
         result = await supabase.from('academic_years').insert(formData).select().single();
       }
 
-      if (!result.error) {
-        setShowModal(false);
-        await fetchAY(); // Refresh table
+      if (result.error) {
+        alert(`Failed to save: ${result.error.message || 'Unknown error. Check your permissions.'}`);
+        console.error("Save error:", result.error);
+        return;
       }
+
+      setShowModal(false);
+      await fetchAY(); // Refresh table
     } catch (err) {
       console.error("Save error:", err);
+      alert("Network error: Could not connect to the server.");
     }
   };
 
