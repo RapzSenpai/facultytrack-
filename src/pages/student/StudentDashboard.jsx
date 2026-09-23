@@ -13,27 +13,21 @@ import {
 } from "lucide-react";
 import StudentLayout from "./StudentLayout";
 
-// Phase 3 (Req 2 / D5): the subject list is admin-controlled.
-// Evaluable subjects = class_assignments for the student's
-// program/year/section in the active period, adjusted by the
-// admin's per-student list (admin/exception enrollments
-// replace the section match; exclusions remove from it).
-// All self-enrollment UI (Add Subject modals, confirm/remove
-// handlers) is removed — students report issues via the
-// correction form on the Evaluate page.
 export default function StudentDashboard() {
   const [stats, setStats] = useState({ total: 0, evaluated: 0, pending: 0, open: 0 });
   const [activeYear, setActiveYear] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [recentActivity, setRecentActivity] = useState([]);
 
   const [assignedFaculty, setAssignedFaculty] = useState([]);
-<<<<<<< HEAD
-=======
   const [submissionsData, setSubmissionsData] = useState(new Map());
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
 
   const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
+
+  const dept = userProfile?.department || userProfile?.dept || "—";
+  const yearLevel = userProfile?.yearLevel || userProfile?.year || "—";
+  const section = userProfile?.section || "—";
 
   useEffect(() => {
     if (!currentUser || !userProfile) return;
@@ -44,20 +38,10 @@ export default function StudentDashboard() {
 
     (async () => {
       try {
-        const [assignmentsRes, submissionsRes, yearsRes, enrRes] = await Promise.all([
+        const [assignmentsRes, submissionsRes, yearsRes] = await Promise.all([
           supabase.from("class_assignments").select("*"),
-          supabase
-            .from("evaluations")
-            .select("*")
-            .eq("student_id", currentUser.id),
+          supabase.from("evaluations").select("*").eq("student_id", currentUser.id),
           supabase.from("academic_years").select("*"),
-          // Admin-managed per-student list (exceptions/exclusions),
-          // readable only; students can no longer write enrollments.
-          supabase
-            .from("student_enrollments")
-            .select("confirmed_assignments, excluded_assignments, enrollment_kind, updated_at")
-            .eq("student_id", currentUser.id)
-            .maybeSingle(),
         ]);
 
         const assignments = (assignmentsRes.data || []).map((a) => ({
@@ -96,17 +80,11 @@ export default function StudentDashboard() {
         submissions.forEach((s) => {
           subMap.set(s.assignmentId, s);
         });
-<<<<<<< HEAD
-
-        if (!active) {
-          setStats({ total: 0, evaluated: 0, pending: 0, open: 0 });
-=======
         setSubmissionsData(subMap);
 
         if (!active) {
           setStats({ total: 0, evaluated: 0, pending: 0, open: 0 });
           setAssignedFaculty([]);
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
           return;
         }
 
@@ -125,65 +103,6 @@ export default function StudentDashboard() {
           return str;
         };
 
-<<<<<<< HEAD
-        const sectionMatched = activeAssignments.filter(
-          (a) =>
-            isMatch(a.department, studentDept) &&
-            isMatch(a.yearLevel, studentYear) &&
-            isMatch(a.section, studentSection)
-        );
-
-        const enr = enrRes?.data || null;
-        const confirmedIds = Array.isArray(enr?.confirmed_assignments)
-          ? new Set(enr.confirmed_assignments)
-          : null;
-        const excludedIds = Array.isArray(enr?.excluded_assignments)
-          ? new Set(enr.excluded_assignments)
-          : new Set();
-        const adminGoverned =
-          confirmedIds !== null &&
-          (enr.enrollment_kind === "admin" || enr.enrollment_kind === "exception");
-
-        // Evaluable list: admin/exception list replaces the section
-        // match; exclusions always remove. Legacy confirmed IDs
-        // (pre-Phase 3 confirmations) widen the section match.
-        const evaluable = adminGoverned
-          ? activeAssignments.filter(
-              (a) => confirmedIds.has(a.id) && !excludedIds.has(a.id)
-            )
-          : activeAssignments.filter(
-              (a) =>
-                !excludedIds.has(a.id) &&
-                (sectionMatched.some((m) => m.id === a.id) ||
-                  (confirmedIds !== null && confirmedIds.has(a.id)))
-            );
-
-        const subjectList = evaluable.map((a) => {
-          const subData = subMap.get(a.id);
-          return {
-            assignmentId: a.id,
-            facultyId: a.facultyId,
-            name: a.facultyName || null,
-            subject: `${a.subjectCode} - ${a.subjectName}`,
-            dept: a.department,
-            year: a.yearLevel,
-            section: a.section,
-            status: subData ? "submitted" : "pending",
-            submittedAt: subData?.submittedAt || null,
-            isAdminAdjustment: adminGoverned || excludedIds.has(a.id),
-          };
-        });
-
-        setAssignedFaculty(subjectList);
-
-        const evaluated = subjectList.filter((f) => f.status === "submitted").length;
-        const openNow = subjectList.filter((f) => f.status === "pending" && f.name).length;
-        setStats({
-          total: subjectList.length,
-          evaluated,
-          pending: subjectList.length - evaluated,
-          open: openNow,
-=======
         const normalizeSection = (s) => {
           if (!s) return "";
           return String(s).toLowerCase().replace(/section/g, "").replace(/[^a-z0-9]/g, "");
@@ -248,8 +167,8 @@ export default function StudentDashboard() {
           if (!a.date) return 1;
           if (!b.date) return -1;
           return b.date - a.date;
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
         });
+        setRecentActivity(activities.slice(0, 5));
       } catch (err) {
         console.error("StudentDashboard fetch error:", err);
       } finally {
@@ -352,15 +271,9 @@ export default function StudentDashboard() {
           <div className="se-tableCard sdb-subjectsCard">
             <div className="se-tableHeader">
               <div>
-<<<<<<< HEAD
-                <h3 className="se-tableTitle">Your Subjects This Semester</h3>
-                <p className="se-tableHint">
-                  Set by the administrator from your program and section.
-=======
                 <h3 className="se-tableTitle">Assigned Subjects & Teachers</h3>
                 <p className="se-tableHint">
                   These are your assigned subjects and teachers for this semester.
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
                 </p>
               </div>
             </div>
@@ -372,7 +285,7 @@ export default function StudentDashboard() {
                     <th>FACULTY NAME</th>
                     <th>SUBJECT</th>
                     <th>SECTION</th>
-                    <th style={{ textAlign: "right" }}>STATUS</th>
+                    <th style={{ textAlign: "right" }}>ACTION</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -385,11 +298,7 @@ export default function StudentDashboard() {
                   ) : assignedFaculty.length === 0 ? (
                     <tr>
                       <td colSpan="4" style={{ textAlign: "center", padding: "40px", color: "#9ca3af" }}>
-<<<<<<< HEAD
-                        No subjects assigned yet. If something looks wrong, report it on the Evaluate page.
-=======
                         No subjects assigned for your section ({dept} {yearLevel} - Section {section}) this semester.
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
                       </td>
                     </tr>
                   ) : (
@@ -401,11 +310,7 @@ export default function StudentDashboard() {
                               {(item.name || "??").substring(0, 2).toUpperCase()}
                             </div>
                             <div className="sd-cellLines">
-<<<<<<< HEAD
-                              <span className="sd-cellPrimary">{item.name || "— No faculty"}</span>
-=======
                               <span className="sd-cellPrimary">{item.name || "— No faculty assigned"}</span>
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
                               <span className="sd-cellSecondary">Faculty Member</span>
                             </div>
                           </div>
@@ -414,20 +319,6 @@ export default function StudentDashboard() {
                         <td>
                           <span className="se-sectionBadge">
                             {item.dept} {item.year} - {item.section}
-<<<<<<< HEAD
-                            {item.isAdminAdjustment && (
-                              <span className="se-addedBadge">Admin</span>
-                            )}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: "right" }}>
-                          {item.status === "submitted" ? (
-                            <span className="sdb-assignedBadge" title="Already evaluated">Evaluated</span>
-                          ) : (
-                            <span className="sd-statusBadge sd-statusBadge--closed" style={{ background: "#fef3c7", color: "#92400e" }}>
-                              Pending
-                            </span>
-=======
                           </span>
                         </td>
                         <td className="sd-tableActions" style={{ justifyContent: "flex-end" }}>
@@ -446,7 +337,6 @@ export default function StudentDashboard() {
                             >
                               Evaluate
                             </button>
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
                           )}
                         </td>
                       </tr>
@@ -459,13 +349,7 @@ export default function StudentDashboard() {
             <div className="se-enrollmentFooter">
               <p className="se-enrollmentNote">
                 <Info size={14} />
-<<<<<<< HEAD
-                Your subject list is managed by the administrator. To report a
-                wrong or missing subject, use <strong>Report an Issue</strong> on
-                the Evaluate Teacher page.
-=======
                 Click "Evaluate" or go to Evaluate Teacher to submit your evaluations.
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
               </p>
               <button
                 type="button"

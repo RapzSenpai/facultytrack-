@@ -1,25 +1,9 @@
 import { useState, useEffect } from "react";
-<<<<<<< HEAD
-import { Search, X, List, Calendar, CheckCircle, AlertCircle, Info, MessageSquare, AlertTriangle, ChevronRight } from "lucide-react";
-=======
 import { Search, X, List, Calendar, CheckCircle, AlertCircle, Info, MessageSquare } from "lucide-react";
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import StudentLayout from "./StudentLayout";
 
-<<<<<<< HEAD
-// Phase 3 (Req 2 / D5): the subject list is admin-controlled.
-// All self-enrollment UI (Add Subject modal, confirm/remove,
-// "Edit Subjects") is removed. Evaluable subjects =
-// section match adjusted by the admin's per-student list
-// (admin/exception enrollment replaces the match; exclusions
-// remove). Subject-list problems are reported in-app via
-// subject_correction_requests and resolved by an admin.
-export default function StudentEvaluation() {
-  const [mode, setMode] = useState("loading");
-
-=======
 // Institutional fallback criteria so questionnaire is never blank
 const FALLBACK_CRITERIA = [
   {
@@ -60,7 +44,6 @@ const FALLBACK_CRITERIA = [
 ];
 
 export default function StudentEvaluation() {
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFaculty, setSelectedFaculty] = useState(null);
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
@@ -76,10 +59,6 @@ export default function StudentEvaluation() {
   const [activeYear, setActiveYear] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const [correctionMessage, setCorrectionMessage] = useState("");
-  const [correctionRequests, setCorrectionRequests] = useState([]);
-  const [submittingCorrection, setSubmittingCorrection] = useState(false);
-
   const { currentUser, userProfile } = useAuth();
 
   useEffect(() => {
@@ -91,23 +70,12 @@ export default function StudentEvaluation() {
 
     (async () => {
       try {
-        const [assignmentsRes, submissionsRes, criteriaRes, questionsRes, yearsRes, enrRes, corrRes] = await Promise.all([
+        const [assignmentsRes, submissionsRes, criteriaRes, questionsRes, yearsRes] = await Promise.all([
           supabase.from("class_assignments").select("*"),
           supabase.from("evaluations").select("*").eq("student_id", currentUser.id),
           supabase.from("criteria").select("*"),
           supabase.from("questions").select("*"),
           supabase.from("academic_years").select("*"),
-          // Admin-managed per-student list (read-only for students).
-          supabase
-            .from("student_enrollments")
-            .select("confirmed_assignments, excluded_assignments, enrollment_kind")
-            .eq("student_id", currentUser.id)
-            .maybeSingle(),
-          supabase
-            .from("subject_correction_requests")
-            .select("*")
-            .eq("student_id", currentUser.id)
-            .order("created_at", { ascending: false }),
         ]);
 
         const assignments = (assignmentsRes.data || []).map((a) => ({
@@ -158,13 +126,7 @@ export default function StudentEvaluation() {
         const submitted = new Set(subMap.keys());
         setSubmittedIds(submitted);
 
-<<<<<<< HEAD
-        setCorrectionRequests(corrRes.data || []);
-
-        // Active criteria: use explicitly enabled criteria if any exist, otherwise fallback to all criteria
-=======
         // Active criteria: load active criteria with questions, or fallback to standard criteria
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
         const activeCriteriaList = criteria.some((c) => c.enabled)
           ? criteria.filter((c) => c.enabled)
           : criteria;
@@ -178,78 +140,13 @@ export default function StudentEvaluation() {
             .map((q) => ({ id: q.id, text: q.text })),
         })).filter((c) => c.items.length > 0);
 
-<<<<<<< HEAD
-        const activeAssignments = active
-          ? assignments.filter((a) => a.academicYear === active.year && a.semester === active.semester)
-          : [];
-
-        const normalize = (str) => (str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-        const isMatch = (val1, val2) => {
-          if (!val1 || !val2) return false;
-          const n1 = normalize(val1);
-          const n2 = normalize(val2);
-          return n1 === n2 || n1.includes(n2) || n2.includes(n1);
-        };
-
-        const sectionMatched = activeAssignments.filter(
-          (a) =>
-            isMatch(a.department, studentDept) &&
-            isMatch(a.yearLevel, studentYear) &&
-            isMatch(a.section, studentSection)
-        );
-=======
         setEvaluationCriteria(builtCriteria.length > 0 ? builtCriteria : FALLBACK_CRITERIA);
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
 
         if (!active) {
           setAssignedFaculty([]);
           return;
         }
 
-<<<<<<< HEAD
-        // Admin-managed per-student list: admin/exception kinds
-        // replace the section match; exclusions always remove.
-        // Legacy confirmed ids (pre-Phase 3 confirmations) widen
-        // the section match.
-        const enr = enrRes?.data || null;
-        const confirmedIds = Array.isArray(enr?.confirmed_assignments)
-          ? new Set(enr.confirmed_assignments)
-          : null;
-        const excludedIds = Array.isArray(enr?.excluded_assignments)
-          ? new Set(enr.excluded_assignments)
-          : new Set();
-        const adminGoverned =
-          confirmedIds !== null &&
-          (enr.enrollment_kind === "admin" || enr.enrollment_kind === "exception");
-
-        const evaluable = adminGoverned
-          ? activeAssignments.filter(
-              (a) => confirmedIds.has(a.id) && !excludedIds.has(a.id)
-            )
-          : activeAssignments.filter(
-              (a) =>
-                !excludedIds.has(a.id) &&
-                (sectionMatched.some((m) => m.id === a.id) ||
-                  (confirmedIds !== null && confirmedIds.has(a.id)))
-            );
-
-        setAssignedFaculty(evaluable.map((a) => {
-          const subData = subMap.get(a.id);
-          return {
-            assignmentId: a.id,
-            facultyId: a.facultyId,
-            name: a.facultyName,
-            subject: `${a.subjectCode} - ${a.subjectName}`,
-            dept: a.department,
-            year: a.yearLevel,
-            section: a.section,
-            status: subData ? "submitted" : "pending",
-            submittedAt: subData?.submittedAt,
-            isDefaultMatch: sectionMatched.some((m) => m.id === a.id),
-          };
-        }));
-        setMode("evaluation");
-=======
         const activeAssignments = assignments.filter(
           (a) => a.academicYear === active.year && a.semester === active.semester
         );
@@ -312,7 +209,6 @@ export default function StudentEvaluation() {
             setSearchQuery(target.name || "");
           }
         }
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
       } catch (err) {
         console.error("Evaluation page fetch error:", err);
       } finally {
@@ -338,27 +234,16 @@ export default function StudentEvaluation() {
     if (!activeYear) { alert("No active evaluation period is available."); return; }
     setSubmitting(true);
     try {
-      // Submission goes through the submit-evaluation Edge Function
-      // (the only write path for evaluations; RLS blocks direct inserts).
-      const { data, error } = await supabase.functions.invoke("submit-evaluation", {
-        body: {
+      const { data, error } = await supabase
+        .from("evaluations")
+        .insert({
+          student_id: currentUser.id,
+          faculty_id: selectedFaculty.facultyId,
           assignment_id: selectedFaculty.assignmentId,
+          academic_year: activeYear.year,
+          semester: activeYear.semester,
           ratings,
           comment,
-<<<<<<< HEAD
-        },
-      });
-      if (error) {
-        let message = error.message || "Submission failed. Please try again.";
-        try {
-          const body = await error.context.json();
-          if (body?.error) message = body.error;
-        } catch {
-          // keep the default message for non-JSON error bodies
-        }
-        throw new Error(message);
-      }
-=======
           submitted_at: new Date().toISOString(),
         })
         .select()
@@ -366,12 +251,11 @@ export default function StudentEvaluation() {
 
       if (error) throw new Error(error.message);
 
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
       const newSubData = new Map(submissionsData);
       newSubData.set(selectedFaculty.assignmentId, {
         ratings,
         comment,
-        submittedAt: data?.evaluation?.submitted_at || new Date().toISOString(),
+        submittedAt: data.submitted_at,
       });
       setSubmissionsData(newSubData);
 
@@ -379,7 +263,7 @@ export default function StudentEvaluation() {
       setSubmittedIds(newSubmittedIds);
       setAssignedFaculty((prev) =>
         prev.map((f) => f.assignmentId === selectedFaculty.assignmentId
-          ? { ...f, status: "submitted", submittedAt: data.evaluation?.submitted_at || new Date().toISOString() }
+          ? { ...f, status: "submitted", submittedAt: data.submitted_at }
           : f)
       );
 
@@ -396,41 +280,10 @@ export default function StudentEvaluation() {
     }
   };
 
-  const refreshCorrectionRequests = async () => {
-    const { data } = await supabase
-      .from("subject_correction_requests")
-      .select("*")
-      .eq("student_id", currentUser.id)
-      .order("created_at", { ascending: false });
-    setCorrectionRequests(data || []);
-  };
+  const dept = userProfile?.department || userProfile?.dept || "—";
+  const yearLevel = userProfile?.yearLevel || userProfile?.year || "—";
+  const section = userProfile?.section || "—";
 
-<<<<<<< HEAD
-  const handleSubmitCorrection = async () => {
-    const message = correctionMessage.trim();
-    if (!message) {
-      alert("Please describe the issue before sending.");
-      return;
-    }
-    setSubmittingCorrection(true);
-    try {
-      const { error } = await supabase.from("subject_correction_requests").insert({
-        student_id: currentUser.id,
-        message,
-      });
-      if (error) throw new Error(error.message);
-      setCorrectionMessage("");
-      await refreshCorrectionRequests();
-      alert("Report sent. The administrator will review your subject list.");
-    } catch (err) {
-      alert("Error: " + err.message);
-    } finally {
-      setSubmittingCorrection(false);
-    }
-  };
-
-=======
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
   const totalQuestions = evaluationCriteria.reduce((sum, c) => sum + c.items.length, 0);
   const answeredQuestions = Object.keys(ratings).length;
   const progressPercentage = totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0;
@@ -444,19 +297,7 @@ export default function StudentEvaluation() {
   const endDate = activeYear?.endDate ? new Date(activeYear.endDate + "T23:59:59") : null;
   const isEvaluationOpen = !loading && activeYear !== null && (!endDate || now <= endDate);
 
-<<<<<<< HEAD
-  if (mode === "loading" || loading) {
-    return (
-      <StudentLayout breadcrumb="Evaluate Teacher">
-        <div style={{ padding: "60px", textAlign: "center", color: "#6b7280" }}>Loading...</div>
-      </StudentLayout>
-    );
-  }
-
-  const uniqueFacultyNames = [...new Set(assignedFaculty.map((f) => f.name).filter(Boolean))].sort();
-=======
   const uniqueFacultyNames = [...new Set(assignedFaculty.map((f) => f.name))].sort();
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
   const filteredFacultyNames = uniqueFacultyNames.filter((name) =>
     name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -488,25 +329,6 @@ export default function StudentEvaluation() {
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   };
 
-<<<<<<< HEAD
-  const formatDateTime = (ts) => {
-    if (!ts) return "—";
-    const date = new Date(ts);
-    return date.toLocaleString("en-US", {
-      month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
-    });
-  };
-
-  const requestStatusBadge = (status) => {
-    if (status === "resolved") {
-      return <span className="sd-statusBadge sd-statusBadge--open" style={{ background: "#dcfce7", color: "#166534" }}>Resolved</span>;
-    }
-    if (status === "dismissed") {
-      return <span className="sd-statusBadge sd-statusBadge--closed" style={{ background: "#f3f4f6", color: "#6b7280" }}>Dismissed</span>;
-    }
-    return <span className="sd-statusBadge sd-statusBadge--closed" style={{ background: "#fef3c7", color: "#92400e" }}>Under review</span>;
-  };
-=======
   if (loading) {
     return (
       <StudentLayout breadcrumb="Evaluate Teacher">
@@ -514,7 +336,6 @@ export default function StudentEvaluation() {
       </StudentLayout>
     );
   }
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
 
   return (
     <StudentLayout breadcrumb="Evaluate Teacher">
@@ -573,7 +394,7 @@ export default function StudentEvaluation() {
             {" "}You have ~{hoursLeft} hour{hoursLeft !== 1 ? "s" : ""} left to submit.{" "}
             Deadline:{" "}
             <strong>
-              {endDate.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })},{""}
+              {endDate.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })},{" "}
               {endDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
             </strong>
           </span>
@@ -636,21 +457,11 @@ export default function StudentEvaluation() {
           <Info size={16} className="se-infoCalloutIcon" />
           <div>
             <p className="se-infoCalloutStrong">
-<<<<<<< HEAD
-              Your subject list is set by the administrator for your program and section.
-            </p>
-            <p className="se-infoCalloutText">
-              You have <strong>{assignedFaculty.length}</strong> subject(s) this semester.
-              Progress: <strong>{submittedCount}/{assignedFaculty.length}</strong> evaluated.
-              {" "}If a subject is wrong or missing, use <strong>Report an Issue</strong> below —
-              the administrator will correct your list.
-=======
               Showing faculty automatically matched to your curriculum section.
             </p>
             <p className="se-infoCalloutText">
               You have <strong>{assignedFaculty.length}</strong> subject(s) assigned for <strong>{dept} {yearLevel} - Section {section}</strong>.
               Progress: <strong>{submittedCount}/{assignedFaculty.length}</strong> completed.
->>>>>>> a01a1b4ae1b3e7bc70f7d5aa55a9ce4288e532fd
             </p>
           </div>
         </div>
@@ -713,7 +524,7 @@ export default function StudentEvaluation() {
                   {selectedFaculty
                     ? subjectsForFaculty.length === 0
                       ? "— No subjects available —"
-                      : "— Select a subject —"
+                      : "— Select a faculty member first —"
                     : "— Select a faculty member first —"}
                 </option>
                 {subjectsForFaculty.map((f) => (
@@ -815,71 +626,6 @@ export default function StudentEvaluation() {
           </div>
         </div>
       )}
-
-      <div className="se-tableCard">
-        <div className="se-tableHeader se-tableHeader-flex">
-          <div>
-            <h3 className="se-tableTitle">Report an Issue</h3>
-            <p className="se-tableHint">
-              Wrong, missing, or extra subject on your list? Tell the administrator here.
-            </p>
-          </div>
-        </div>
-
-        <div style={{ padding: "16px" }}>
-          <textarea
-            className="se-commentsTextarea"
-            style={{ width: "100%", boxSizing: "border-box" }}
-            placeholder="Example: 'I am enrolled in IT 311 with Prof. Santos but it is not on my list' or 'I am not taking COM 101 — please remove it'..."
-            rows="3"
-            value={correctionMessage}
-            onChange={(e) => setCorrectionMessage(e.target.value)}
-          />
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "10px" }}>
-            <button
-              type="button"
-              className="se-confirmBtn"
-              onClick={handleSubmitCorrection}
-              disabled={submittingCorrection || !correctionMessage.trim()}
-            >
-              <AlertTriangle size={14} style={{ marginRight: 6 }} />
-              {submittingCorrection ? "Sending..." : "Send Report"}
-            </button>
-          </div>
-
-          {correctionRequests.length > 0 && (
-            <div style={{ marginTop: "16px" }}>
-              <p className="se-tableHint" style={{ marginBottom: "8px" }}>
-                Your previous reports
-              </p>
-              <div className="se-tableWrap" style={{ border: "1px solid #e5e7eb", borderRadius: "8px" }}>
-                <table className="sd-table">
-                  <thead>
-                    <tr>
-                      <th>REPORT</th>
-                      <th>SENT</th>
-                      <th>STATUS</th>
-                      <th>ADMIN NOTE</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {correctionRequests.map((req) => (
-                      <tr key={req.id}>
-                        <td className="sd-engagement" style={{ maxWidth: "360px" }}>{req.message}</td>
-                        <td className="sd-engagement">{formatDateTime(req.created_at)}</td>
-                        <td>{requestStatusBadge(req.status)}</td>
-                        <td className="sd-engagement" style={{ maxWidth: "240px" }}>
-                          {req.resolution_note || "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
 
       {showModal && selectedFaculty && (
         <div className="se-modal" role="dialog" aria-modal="true">
