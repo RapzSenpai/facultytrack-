@@ -170,6 +170,24 @@ export default function Register() {
     try {
       setLoading(true);
 
+      // Friendly duplicate check before hitting Auth: a repeat signup
+      // with the same school ID dies inside the DB trigger as a bare
+      // 500 ("Database error saving new user"). resolve_school_id is
+      // the pre-auth lookup built exactly for this.
+      try {
+        const { data: existingEmail } = await supabase.rpc("resolve_school_id", {
+          p_school_id: form.schoolId.trim(),
+        });
+        if (existingEmail) {
+          setFieldErrors((prev) => ({ ...prev, schoolId: "An account with this school ID already exists." }));
+          setLoading(false);
+          return;
+        }
+      } catch {
+        // Lookup failure must never block registration; Auth + the
+        // trigger remain the source of truth.
+      }
+
       const fullName = `${form.firstName.trim()} ${form.lastName.trim()}${form.suffix !== "None" ? " " + form.suffix : ""}`;
 
       const { error: signUpError, data: signUpData } = await supabase.auth.signUp({

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Clock, CheckCircle2, RefreshCw, ArrowRight, Upload } from "lucide-react";
 import { supabase } from "../config/supabase";
@@ -26,6 +26,18 @@ export default function PendingApproval() {
   const [photoError, setPhotoError] = useState("");
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoDone, setPhotoDone] = useState(false);
+
+  // Register uploads the photo then navigates here, but the context
+  // profile is often fetched BEFORE that upload commits — leaving a
+  // stale null path and a bogus "still needed" card. One fresh fetch
+  // on arrival fixes it (guarded to run once per session).
+  const photoRefreshed = useRef(false);
+  useEffect(() => {
+    if (currentUser && !photoRefreshed.current) {
+      photoRefreshed.current = true;
+      refreshUserProfile();
+    }
+  }, [currentUser, refreshUserProfile]);
 
   useEffect(() => {
     if (!identifier) return;
