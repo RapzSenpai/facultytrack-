@@ -10,6 +10,9 @@ import {
   Users,
   ChevronRight,
   Info,
+  ArrowRight,
+  AlertCircle,
+  CheckCircle2,
 } from "lucide-react";
 import StudentLayout from "./StudentLayout";
 
@@ -358,12 +361,14 @@ export default function StudentDashboard() {
                         </td>
                         <td className="sd-tableActions" style={{ justifyContent: "flex-end" }}>
                           {item.status === "submitted" ? (
-                            <span className="sdb-assignedBadge" title="Already evaluated">Evaluated</span>
+                            <span className="sdb-assignedBadge" title="Already evaluated">
+                              <CheckCircle2 size={13} />
+                              <span>Evaluated</span>
+                            </span>
                           ) : (
                             <button
                               type="button"
-                              className="se-editEnrollmentBtn"
-                              style={{ padding: "6px 14px", fontSize: "12px", height: "auto" }}
+                              className="sdb-evaluatePillBtn"
                               onClick={() =>
                                 navigate(
                                   `/student/evaluate?facultyId=${encodeURIComponent(item.facultyId || "")}&assignmentId=${encodeURIComponent(item.assignmentId || "")}`
@@ -386,20 +391,22 @@ export default function StudentDashboard() {
                 <Info size={14} />
                 Click "Evaluate" or go to Evaluate Teacher to submit your evaluations.
               </p>
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <div className="sdb-footerActions">
                 <button
                   type="button"
-                  className="se-editEnrollmentBtn"
+                  className="sdb-reportIssueBtn"
                   onClick={() => setShowReportIssue(true)}
                 >
-                  Report Subject Issue
+                  <AlertCircle size={14} />
+                  <span>Report Subject Issue</span>
                 </button>
                 <button
                   type="button"
-                  className="se-editEnrollmentBtn"
+                  className="sdb-viewEvaluationsBtn"
                   onClick={() => navigate("/student/evaluate")}
                 >
-                  Go to Evaluate Teacher
+                  <span>Go to Evaluate Teacher</span>
+                  <ArrowRight size={14} />
                 </button>
               </div>
             </div>

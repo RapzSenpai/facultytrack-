@@ -549,11 +549,11 @@ export default function StudentEvaluation() {
       </div>
 
       {assignedFaculty.length > 0 && (
-        <div className="se-tableCard">
-          <div className="se-tableHeader se-tableHeader-flex">
+        <div className="se-tableCard sdb-subjectsCard">
+          <div className="se-tableHeader">
             <div>
-              <h3 className="se-tableTitle">Assigned Evaluations</h3>
-              <p className="se-tableHint">All subjects assigned to your section for evaluation.</p>
+              <h3 className="se-tableTitle">Assigned Subjects & Teachers</h3>
+              <p className="se-tableHint">These are your assigned subjects and teachers for this semester.</p>
             </div>
           </div>
           <div className="se-tableWrap">
@@ -563,8 +563,6 @@ export default function StudentEvaluation() {
                   <th>FACULTY NAME</th>
                   <th>SUBJECT</th>
                   <th>SECTION</th>
-                  <th>STATUS</th>
-                  <th>SUBMITTED DATE</th>
                   <th style={{ textAlign: "right" }}>ACTION</th>
                 </tr>
               </thead>
@@ -576,7 +574,10 @@ export default function StudentEvaluation() {
                         <div className="sd-avatar sd-avatar--blue">
                           {(item.name || "??").substring(0, 2).toUpperCase()}
                         </div>
-                        <span className="sd-cellPrimary">{item.name}</span>
+                        <div className="sd-cellLines">
+                          <span className="sd-cellPrimary">{item.name || "— No faculty assigned"}</span>
+                          <span className="sd-cellSecondary">Faculty Member</span>
+                        </div>
                       </div>
                     </td>
                     <td className="sd-engagement">{item.subject}</td>
@@ -585,22 +586,19 @@ export default function StudentEvaluation() {
                         {item.dept} {item.year} - {item.section}
                       </span>
                     </td>
-                    <td>
-                      {item.status === "submitted" ? (
-                        <span className="sd-statusBadge sd-statusBadge--open" style={{ background: "#dcfce7", color: "#166534" }}>Submitted</span>
-                      ) : (
-                        <span className="sd-statusBadge sd-statusBadge--closed" style={{ background: "#fef3c7", color: "#92400e" }}>Pending</span>
-                      )}
-                    </td>
-                    <td className="sd-engagement">{item.status === "submitted" ? formatDate(item.submittedAt) : "—"}</td>
                     <td className="sd-tableActions" style={{ justifyContent: "flex-end" }}>
                       {item.status === "submitted" ? (
-                        <span className="sdb-assignedBadge" title="Evaluation finalized">✓ Evaluated</span>
+                        <span
+                          className="sdb-assignedBadge"
+                          title={item.submittedAt ? `Evaluated on ${formatDate(item.submittedAt)}` : "Evaluation finalized"}
+                        >
+                          <CheckCircle size={13} />
+                          <span>Evaluated</span>
+                        </span>
                       ) : (
                         <button
                           type="button"
-                          className="se-confirmBtn"
-                          style={{ padding: "6px 14px", fontSize: "12px" }}
+                          className="sdb-evaluatePillBtn"
                           onClick={() => handleEvaluate(item)}
                           disabled={!isEvaluationOpen}
                         >
@@ -621,12 +619,16 @@ export default function StudentEvaluation() {
           <div className="se-modalOverlay" onClick={() => setShowModal(false)} />
           <div className="se-modalContent">
             <div className="se-modalHeader">
-              <div>
+              <div className="se-modalHeaderTitles">
                 <h3 className="se-modalTitle">Faculty Evaluation Form</h3>
-                <p className="se-modalSubtitle">{selectedFaculty.name} — {selectedFaculty.subject}</p>
+                <p className="se-modalSubtitle">
+                  <span className="se-modalSubtitleTeacher">{selectedFaculty.name}</span>
+                  <span className="se-modalSubtitleDivider">—</span>
+                  <span className="se-modalSubtitleSubject">{selectedFaculty.subject}</span>
+                </p>
               </div>
-              <button type="button" className="se-modalClose" onClick={() => setShowModal(false)}>
-                <X size={22} />
+              <button type="button" className="se-modalClose" onClick={() => setShowModal(false)} aria-label="Close modal">
+                <X size={20} />
               </button>
             </div>
 

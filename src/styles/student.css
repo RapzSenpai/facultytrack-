@@ -1386,13 +1386,28 @@
 }
 
 .se-modalSubtitle {
-  margin: 2px 0 0;
-  font-size: 12px;
+  margin: 3px 0 0;
+  font-size: 12.5px;
   color: #94a3b8;
   font-weight: 400;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.se-modalSubtitleTeacher {
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.se-modalSubtitleDivider {
+  color: #64748b;
+  margin: 0 4px;
+}
+
+.se-modalSubtitleSubject {
+  color: #94a3b8;
 }
 
 .se-modalClose {
@@ -2153,6 +2168,17 @@
 }
 
 /* Responsive */
+@keyframes se-mobileSlideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0.8;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
 @media (max-width: 900px) {
   .se-searchBox {
     min-width: 100%;
@@ -2160,11 +2186,7 @@
   }
 
   .se-modalContent {
-    max-height: 94vh;
-  }
-
-  .se-scale {
-    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    max-height: 92vh;
   }
 
   .se-criteriaItem {
@@ -2175,22 +2197,14 @@
 
   .se-ratingButtons {
     justify-content: space-between;
-    padding-top: 12px;
+    padding-top: 10px;
     gap: 6px;
   }
 
   .se-ratingBtn {
-    width: 42px;
-    height: 42px;
-    font-size: 14px;
-  }
-
-  .se-modalFooter {
-    flex-direction: column-reverse;
-  }
-
-  .se-modalBtn {
-    width: 100%;
+    width: 44px;
+    height: 44px;
+    font-size: 15px;
   }
 
   .se-criteriaCard {
@@ -2199,58 +2213,277 @@
 }
 
 @media (max-width: 640px) {
-  .se-modalHeader {
-    padding: 16px;
+  .se-modal {
+    padding: 0;
+    align-items: flex-end;
   }
 
-  .se-modalBody {
-    padding: 16px;
+  .se-modalOverlay {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .se-modalContent {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 94vh !important;
+    height: auto !important;
+    border-radius: 20px 20px 0 0 !important;
+    margin: 0 !important;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.3);
+    animation: se-mobileSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .se-modalHeader {
+    padding: 14px 16px;
+    border-radius: 20px 20px 0 0;
+    gap: 12px;
+  }
+
+  .se-modalTitle {
+    font-size: 16px;
+    font-weight: 700;
+    white-space: normal;
+    line-height: 1.25;
+  }
+
+  .se-modalSubtitle {
+    font-size: 11.5px;
+    line-height: 1.35;
+    margin-top: 3px;
+  }
+
+  .se-modalClose {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
   }
 
   .se-progressSection {
-    padding: 14px 16px;
+    padding: 10px 16px;
   }
 
-  .se-ratingBtn {
-    width: 38px;
-    height: 38px;
-    font-size: 13px;
+  .se-progressInfo {
+    margin-bottom: 6px;
+    gap: 8px;
+  }
+
+  .se-progressLabel {
+    font-size: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  .se-progressBadge {
+    padding: 1.5px 7px;
+    font-size: 11px;
+  }
+
+  .se-progressText {
+    font-size: 11px;
+  }
+
+  .se-progressBar {
+    height: 6px;
+  }
+
+  .se-modalBody {
+    padding: 14px 14px 20px;
+    flex: 1 1 auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Rating Scale Guide on Mobile */
+  .se-instructions {
+    padding: 10px 12px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+  }
+
+  .se-instructionsHeader {
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+
+  .se-scale {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 4px !important;
+  }
+
+  .se-scaleItem {
+    padding: 6px 2px 7px !important;
+    gap: 3px !important;
+    border-radius: 8px !important;
+  }
+
+  .se-scaleNum {
+    width: 22px !important;
+    height: 22px !important;
+    font-size: 11.5px !important;
+    border-radius: 6px !important;
+  }
+
+  .se-scaleLabel {
+    font-size: 9px !important;
+    font-weight: 700 !important;
+    line-height: 1.15 !important;
+    text-align: center !important;
+    word-break: break-word !important;
+    letter-spacing: -0.2px;
+  }
+
+  /* Criteria and Question Items on Mobile */
+  .se-criteriaCard {
+    border-radius: 12px;
+    margin-bottom: 12px;
+    border: 1px solid #e2e8f0;
   }
 
   .se-criteriaCardHeader {
-    padding: 14px 16px;
+    padding: 12px 14px;
+    gap: 10px;
   }
 
   .se-criteriaIconWrap {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
   }
 
   .se-criteriaTitle {
-    font-size: 15px;
+    font-size: 14px;
+    line-height: 1.3;
   }
 
   .se-criteriaSubtitle {
     font-size: 11px;
+    margin-top: 3px;
+  }
+
+  .se-completeBadge {
+    padding: 2px 7px;
+    font-size: 10px;
   }
 
   .se-criteriaItems {
-    padding: 12px 16px 16px;
+    padding: 10px 12px 14px;
+    gap: 8px;
+    background: #fafbfc;
   }
 
   .se-criteriaItem {
     padding: 12px;
-    margin-bottom: 10px;
-  }
-
-  .se-criteriaNumber {
-    width: 28px;
-    height: 28px;
-    font-size: 13px;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
   }
 
   .se-criteriaText {
     font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .se-ratingButtons {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 6px !important;
+    padding-top: 2px;
+  }
+
+  .se-ratingBtn {
+    width: 100% !important;
+    height: 44px !important;
+    border-radius: 9px !important;
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Comments on Mobile */
+  .se-commentsCard {
+    padding: 14px;
+    margin-top: 12px;
+    border-radius: 12px;
+  }
+
+  .se-commentsLabel {
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .se-commentsTextarea {
+    font-size: 14px;
+    padding: 10px 12px;
+    min-height: 76px;
+    border-radius: 8px;
+  }
+
+  /* Modal Footer on Mobile */
+  .se-modalFooter {
+    padding: 12px 16px;
+    padding-bottom: max(14px, env(safe-area-inset-bottom, 14px));
+    flex-direction: column;
+    gap: 8px;
+    background: #ffffff;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .se-modalBtn {
+    width: 100% !important;
+    height: 44px !important;
+    font-size: 14px !important;
+    border-radius: 10px !important;
+  }
+
+  .se-modalBtn--submit {
+    order: 1;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .se-modalBtn--cancel {
+    order: 2;
+    height: 38px !important;
+    border: none !important;
+    background: transparent !important;
+    color: #64748b !important;
+  }
+
+  .se-modalBtn--cancel:hover {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+  }
+
+  /* Centered Alert Dialog on Mobile */
+  .se-modal[role="alertdialog"] {
+    align-items: center !important;
+    padding: 16px !important;
+    z-index: 1050;
+  }
+
+  .se-modal[role="alertdialog"] .se-modalContent {
+    border-radius: 16px !important;
+    max-height: 80vh !important;
+    width: 90% !important;
+    margin: auto !important;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35) !important;
+    animation: se-slideUp 0.25s ease !important;
+  }
+
+  .se-modal[role="alertdialog"] .se-modalFooter {
+    flex-direction: row !important;
+    padding-bottom: 14px !important;
+  }
+
+  .se-modal[role="alertdialog"] .se-modalBtn {
+    flex: 1 !important;
   }
 }
 
@@ -2308,13 +2541,15 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: #374151;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 3px 10px;
+  font-size: 11.5px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 9999px;
+  padding: 3px 12px;
   font-weight: 600;
+  letter-spacing: 0.2px;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.05);
 }
 
 .se-addedBadge {
@@ -2448,6 +2683,8 @@
   padding: 20px 24px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
   margin-bottom: 20px;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .se-stepHeader {
@@ -3387,15 +3624,177 @@
   font-style: italic;
 }
 
+/* Table row hover & smooth interaction */
+.sdb-subjectsCard .sd-table tbody tr,
+.se-tableCard .sd-table tbody tr {
+  transition: background-color 0.18s ease;
+}
+
+.sdb-subjectsCard .sd-table tbody tr:hover,
+.se-tableCard .sd-table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+/* Subtle modern tag for section */
+.sdb-subjectsCard .se-sectionBadge,
+.se-tableCard .se-sectionBadge {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  font-weight: 600;
+  border-radius: 9999px;
+  padding: 3px 12px;
+  font-size: 11.5px;
+  letter-spacing: 0.2px;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.05);
+}
+
+/* Evaluate Action Pill Button (Vibrant Accent Gradient) */
+.sdb-evaluatePillBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 18px;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sdb-evaluatePillBtn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+}
+
+.sdb-evaluatePillBtn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.2);
+}
+
+.sdb-evaluatePillBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Evaluated Completed Status Pill */
 .sdb-assignedBadge {
   display: inline-flex;
   align-items: center;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: #dcfce7;
-  color: #166534;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
   font-size: 11.5px;
   font-weight: 700;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.08);
+}
+
+/* Footer Container & Action Buttons */
+.sdb-footerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Secondary Action: Report Subject Issue */
+.sdb-reportIssueBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 15px;
+  background: #ffffff;
+  color: #475569;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 9999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+}
+
+.sdb-reportIssueBtn svg {
+  color: #64748b;
+  transition: color 0.18s ease;
+}
+
+.sdb-reportIssueBtn:hover {
+  border-color: #94a3b8;
+  color: #0f172a;
+  background: #f1f5f9;
+  transform: translateY(-1px);
+}
+
+.sdb-reportIssueBtn:hover svg {
+  color: #ef4444;
+}
+
+/* Primary Action: Go to Evaluate Teacher */
+.sdb-viewEvaluationsBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 18px;
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 9999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.22);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sdb-viewEvaluationsBtn svg {
+  transition: transform 0.2s ease;
+}
+
+.sdb-viewEvaluationsBtn:hover {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%);
+  transform: translateY(-1.5px);
+  box-shadow: 0 5px 15px rgba(37, 99, 235, 0.35);
+}
+
+.sdb-viewEvaluationsBtn:hover svg {
+  transform: translateX(3px);
+}
+
+.sdb-viewEvaluationsBtn:active {
+  transform: translateY(0);
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 640px) {
+  .se-enrollmentFooter {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .sdb-footerActions {
+    flex-direction: column;
+    width: 100%;
+  }
+  .sdb-reportIssueBtn,
+  .sdb-viewEvaluationsBtn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 .sdb-needsFacultyBadge {
@@ -4119,6 +4518,8 @@
   gap: 24px;
   margin-bottom: 20px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .se-progressSummaryLeft {
@@ -4447,23 +4848,46 @@
 }
 
 @media (max-width: 768px) {
-
-  /* Step 1 Form Inputs */
-  .se-step1-inputs {
-    grid-template-columns: 1fr;
-    /* Stack vertically */
-    gap: 16px;
+  /* Box sizing & Card Containment */
+  .se-progressSummaryCardHorizontal,
+  .se-stepCard,
+  .se-tableCard,
+  .sdb-subjectsCard {
+    box-sizing: border-box;
+    max-width: 100%;
+    border-radius: 10px;
   }
 
   /* Evaluation Progress Card */
   .se-progressSummaryCardHorizontal {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 20px;
+    align-items: stretch;
+    padding: 18px;
+    gap: 16px;
+  }
+
+  .se-progressSummaryLeft {
+    width: 100%;
   }
 
   .se-progressSummaryRight {
     width: 100%;
+  }
+
+  .se-progressSummaryBarWrapper {
+    width: 100%;
+    gap: 12px;
+  }
+
+  /* Step 1 Card & Inputs */
+  .se-stepCard {
+    padding: 18px;
+  }
+
+  .se-step1-inputs {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-top: 16px;
   }
 
   /* Step Header Flex */
@@ -4473,10 +4897,21 @@
     gap: 12px;
   }
 
-  .se-stepHeader-flex>button,
-  .se-stepHeader-flex>div {
+  .se-stepHeader-flex > button,
+  .se-stepHeader-flex > div {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  /* Info callout */
+  .se-infoCallout {
+    padding: 14px;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .se-infoCalloutText {
+    word-break: break-word;
   }
 
   /* Table Header Flex */
@@ -4491,8 +4926,85 @@
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 640px) {
+  /* Step 1 Callout & Buttons */
+  .se-stepCard .se-beginBtn {
+    width: 100%;
+    justify-content: center;
+    padding: 12px 18px;
+    font-size: 13.5px;
+  }
 
+  /* Urgency / Closed Banners */
+  .se-urgencyBanner,
+  .se-closedBanner {
+    padding: 12px 14px;
+    font-size: 13px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* Subjects Card Table Header & Cells */
+  .sdb-subjectsCard .se-tableHeader {
+    padding: 16px 14px 0;
+    margin-bottom: 12px;
+  }
+
+  .se-tableTitle {
+    font-size: 15px;
+  }
+
+  .se-tableHint {
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  .sd-table thead th {
+    padding: 10px 12px;
+    font-size: 10.5px;
+  }
+
+  .sd-table tbody td {
+    padding: 12px 12px;
+    font-size: 13px;
+  }
+
+  .sd-avatarCell {
+    min-width: 140px;
+    gap: 8px;
+  }
+
+  .sd-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 11px;
+  }
+
+  .sd-cellPrimary {
+    font-size: 13px;
+  }
+
+  .sd-cellSecondary {
+    font-size: 11px;
+  }
+
+  .se-sectionBadge {
+    font-size: 11px;
+    padding: 2px 8px;
+  }
+
+  .sdb-evaluatePillBtn {
+    font-size: 11.5px;
+    padding: 6px 14px;
+  }
+
+  .sdb-assignedBadge {
+    font-size: 11px;
+    padding: 4px 10px;
+  }
+}
+
+@media (max-width: 480px) {
   /* Stepper extreme mobile */
   .se-stepper {
     flex-direction: column;
@@ -4509,7 +5021,87 @@
 
   .se-step-desc {
     display: block;
-    /* Bring back desc if vertical */
+  }
+
+  /* Compact Cards for Small Phones */
+  .se-progressSummaryCardHorizontal {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .se-progressSummaryTitle {
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+
+  .se-progressSummaryCurrent {
+    font-size: 26px;
+  }
+
+  .se-progressSummaryTotal {
+    font-size: 14px;
+  }
+
+  .se-progressSummaryText {
+    font-size: 12px;
+  }
+
+  .se-progressSummaryEncouragement {
+    font-size: 12px;
+  }
+
+  .se-stepCard {
+    padding: 14px;
+  }
+
+  .se-stepHeader {
+    gap: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+  }
+
+  .se-stepTitle {
+    font-size: 15px;
+  }
+
+  .se-stepBadge {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  .se-infoCallout {
+    padding: 12px;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .se-infoCalloutStrong {
+    font-size: 13px;
+    margin-bottom: 2px;
+  }
+
+  .se-infoCalloutText {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .se-fieldGroup {
+    margin-bottom: 14px;
+  }
+
+  .se-fieldLabel {
+    font-size: 10.5px;
+    margin-bottom: 6px;
+  }
+
+  .se-searchWrap .se-search {
+    padding: 10px 14px 10px 38px;
+    font-size: 13.5px;
+  }
+
+  .se-subjectSelect {
+    padding: 10px 14px;
+    font-size: 13.5px;
   }
 }
 
@@ -4694,77 +5286,11 @@
   .sd-table {
     min-width: 620px;
   }
-
-  .se-modalContent {
-    width: 96% !important;
-    max-height: 92vh !important;
-    border-radius: 16px;
-  }
-
-  .se-scale {
-    grid-template-columns: repeat(5, 1fr);
-    gap: 6px;
-  }
-
-  .se-scaleDesc {
-    display: none;
-  }
-
-  .se-criteriaItem {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-
-  .se-ratingButtons {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 6px;
-  }
-
-  .se-ratingBtn {
-    width: 100%;
-    height: 46px;
-    min-width: 0;
-  }
-
-  .se-modalFooter {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-
-  .se-modalFooterButtons {
-    display: flex;
-    flex-direction: column-reverse;
-    width: 100%;
-    gap: 8px;
-  }
-
-  .se-modalBtn {
-    width: 100%;
-    height: 44px;
-  }
 }
 
 @media (max-width: 480px) {
   .sdb-metrics {
     grid-template-columns: 1fr;
-  }
-
-  .se-modalContent {
-    width: 100% !important;
-    max-height: 94vh !important;
-    border-radius: 14px;
-  }
-
-  .se-modalHeader {
-    padding: 12px 14px;
-  }
-
-  .se-modalBody {
-    padding: 12px 14px;
   }
 
   .se-successCard {
