@@ -131,6 +131,25 @@ export default function Register() {
     return errors;
   };
 
+  const persistPendingIdPhoto = (file) => {
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      localStorage.setItem(
+        "pendingIdPhoto",
+        JSON.stringify({
+          dataUrl: reader.result,
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          createdAt: Date.now(),
+        }),
+      );
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleIdPhotoChange = (e) => {
     const file = e.target.files[0];
     setIdPhoto(file || null);
@@ -181,11 +200,13 @@ export default function Register() {
       if (idPhoto) {
         try {
           await uploadSchoolIdPhoto(signUpData.user.id, idPhoto);
+          localStorage.removeItem("pendingIdPhoto");
         } catch (uploadErr) {
           if (signUpData.session) {
             throw new Error("Account created, but the ID photo failed to upload: " + uploadErr.message);
           }
           photoPending = true;
+          persistPendingIdPhoto(idPhoto);
         }
       }
 

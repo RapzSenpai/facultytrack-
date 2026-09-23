@@ -1,6 +1,9 @@
 -- ============================================================
--- FacultyTrack: Migration 014 — Unified Curriculum & Sections
--- File: supabase/migrations/014_unified_curriculum_and_sections.sql
+-- FacultyTrack: Migration 021 — Unified Curriculum & Sections
+-- File: supabase/migrations/021_unified_curriculum_and_sections.sql
+-- (Renumbered from 014: a second 014 existed and duplicate
+-- versions break `supabase db push` ordering. Content unchanged
+-- apart from the pgcrypto guard below.)
 --
 -- Unifies academic structure into a clean hierarchy:
 --   Department / Program (e.g., BSIT)
@@ -9,8 +12,10 @@
 --           └── Subjects (cataloged by program, year level & semester)
 -- ============================================================
 
--- Enable UUID generation extension if not present
+-- Enable UUID generation extensions if not present
+-- (uuid-ossp for uuid_generate_v4, pgcrypto for gen_random_uuid)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ------------------------------------------------------------
 -- 1. SECTIONS TABLE

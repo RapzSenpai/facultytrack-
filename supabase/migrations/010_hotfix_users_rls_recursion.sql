@@ -1,4 +1,9 @@
-BEGIN;
+-- NOTE (Fix 021-plan): no explicit BEGIN/COMMIT here — `supabase db
+-- push` runs each migration in its own transaction; nested
+-- transaction control breaks the push. OWNER/GRANT statements
+-- below were also removed: hosted DBs reject OWNER TO postgres,
+-- and default function grants suffice (admin gates live inside
+-- the definer bodies).
 
 CREATE OR REPLACE FUNCTION public.is_faculty()
 RETURNS boolean
@@ -43,18 +48,6 @@ AS $$
   );
 $$;
 
-ALTER FUNCTION public.is_faculty() OWNER TO postgres;
-ALTER FUNCTION public.current_user_department() OWNER TO postgres;
-ALTER FUNCTION public.is_admin() OWNER TO postgres;
-
-REVOKE ALL ON FUNCTION public.is_faculty() FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.current_user_department() FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC, anon;
-
-GRANT EXECUTE ON FUNCTION public.is_faculty() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.current_user_department() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
-
 DROP POLICY IF EXISTS "Users can view own profile" ON public.users;
 CREATE POLICY "Users can view own profile"
   ON public.users FOR SELECT
@@ -82,5 +75,3 @@ CREATE POLICY "Faculty can view own and co-faculty profiles"
       AND department = public.current_user_department()
     )
   );
-
-COMMIT;

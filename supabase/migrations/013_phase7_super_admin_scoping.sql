@@ -42,8 +42,20 @@ END
 $$;
 
 ALTER TABLE public.users
-  ADD CONSTRAINT users_role_check
-  CHECK (role IN ('admin', 'super_admin', 'faculty', 'student'));
+  DROP CONSTRAINT IF EXISTS users_role_check;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'users_role_check'
+      AND conrelid = 'public.users'::regclass
+  ) THEN
+    ALTER TABLE public.users
+      ADD CONSTRAINT users_role_check
+      CHECK (role IN ('admin', 'super_admin', 'faculty', 'student'));
+  END IF;
+END
+$$;
 
 -- ------------------------------------------------------------
 -- 2. HELPERS — MUST be created before the policies below:

@@ -71,12 +71,57 @@ export default function PendingApproval() {
 
   const isApproved = status === "active";
 
+  const restorePendingPhotoFromStorage = async () => {
+    try {
+      const raw = localStorage.getItem("pendingIdPhoto");
+      if (!raw) return null;
+
+      const parsed = JSON.parse(raw);
+      if (!parsed?.dataUrl) return null;
+
+      const blob = await fetch(parsed.dataUrl).then((res) => res.blob());
+      return new File([blob], parsed.name || "school-id-photo", { type: parsed.type || "image/jpeg" });
+    } catch {
+      localStorage.removeItem("pendingIdPhoto");
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const resumePendingPhotoUpload = async () => {
+      if (!currentUser || !userProfile) return;
+      if (userProfile.status !== "pending") return;
+      if (userProfile.schoolIdPhotoPath) return;
+
+      const shouldResume = Boolean(location.state?.photoPending || localStorage.getItem("pendingIdPhoto"));
+      if (!shouldResume) return;
+
+      try {
+        const savedFile = await restorePendingPhotoFromStorage();
+        if (!savedFile) return;
+
+        setPhotoUploading(true);
+        await uploadSchoolIdPhoto(currentUser.id, savedFile);
+        localStorage.removeItem("pendingIdPhoto");
+        await refreshUserProfile();
+        setPhotoDone(true);
+      } catch (err) {
+        setPhotoError(err.message || "Upload failed. Please try again.");
+      } finally {
+        setPhotoUploading(false);
+      }
+    };
+
+    resumePendingPhotoUpload();
+  }, [currentUser, userProfile, refreshUserProfile, location.state]);
+
   const handlePhotoUpload = async () => {
     setPhotoError(validateIdPhoto(photoFile));
     if (!photoFile || validateIdPhoto(photoFile)) return;
     setPhotoUploading(true);
     try {
       await uploadSchoolIdPhoto(currentUser.id, photoFile);
+      localStorage.removeItem("pendingIdPhoto");
       setPhotoDone(true);
       setPhotoFile(null);
       await supabase.auth.signOut();

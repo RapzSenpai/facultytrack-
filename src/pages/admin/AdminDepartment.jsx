@@ -269,7 +269,7 @@ export default function AdminDepartment() {
           "The 'department' column is missing from the 'subjects' table in your Supabase database.\n\n" +
           "To fix this:\n" +
           "1. Open your Supabase Dashboard -> SQL Editor\n" +
-          "2. Paste the contents of 'supabase/migrations/014_unified_curriculum_and_sections.sql'\n" +
+          "2. Paste the contents of 'supabase/migrations/021_unified_curriculum_and_sections.sql'\n" +
           "3. Click RUN, then refresh this page."
         );
       } else {
@@ -344,7 +344,7 @@ export default function AdminDepartment() {
           "The 'sections' table is missing from your Supabase database.\n\n" +
           "To fix this:\n" +
           "1. Open your Supabase Dashboard -> SQL Editor\n" +
-          "2. Paste the contents of 'supabase/migrations/014_unified_curriculum_and_sections.sql'\n" +
+          "2. Paste the contents of 'supabase/migrations/021_unified_curriculum_and_sections.sql'\n" +
           "3. Click RUN, then refresh this page."
         );
       } else {
@@ -467,7 +467,7 @@ export default function AdminDepartment() {
             </p>
             <ol style={{ margin: "0 0 0 18px", padding: 0, fontSize: "13px", lineHeight: "1.6", color: "#78350f" }}>
               <li>Open your <strong>Supabase Dashboard</strong> ➔ Click <strong>SQL Editor</strong>.</li>
-              <li>Open the migration file <code>supabase/migrations/014_unified_curriculum_and_sections.sql</code>.</li>
+              <li>Open the migration file <code>supabase/migrations/021_unified_curriculum_and_sections.sql</code>.</li>
               <li>Paste the SQL script into the editor and click <strong>Run</strong>.</li>
             </ol>
           </div>

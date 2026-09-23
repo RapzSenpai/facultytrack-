@@ -27,9 +27,19 @@ UPDATE public.evaluations SET moderation_status = 'flag'
 UPDATE public.evaluations SET moderation_status = 'block'
   WHERE moderation_status = 'blocked';
 
-ALTER TABLE public.evaluations
-  ADD CONSTRAINT evaluations_moderation_status_check
-  CHECK (moderation_status IN ('allow', 'flag', 'block'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'evaluations_moderation_status_check'
+      AND conrelid = 'public.evaluations'::regclass
+  ) THEN
+    ALTER TABLE public.evaluations
+      ADD CONSTRAINT evaluations_moderation_status_check
+      CHECK (moderation_status IN ('allow', 'flag', 'block'));
+  END IF;
+END
+$$;
 
 -- ------------------------------------------------------------
 -- POST-MIGRATION VERIFICATION (run manually in SQL editor)

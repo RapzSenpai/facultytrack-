@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { useAuth } from "../../context/AuthContext";
 import { Check, X, Search, AlertCircle, IdCard } from "lucide-react";
 import { logAdminAction } from "../../utils/audit";
 
 export default function AdminApprovals() {
+    const { currentUser, userProfile } = useAuth();
     const [activeTab, setActiveTab] = useState("faculty");
     const [searchQuery, setSearchQuery] = useState("");
     const [loading, setLoading] = useState(false);
@@ -46,6 +48,65 @@ export default function AdminApprovals() {
         }
     };
 
+    const isProgramAdminForUser = async (targetUser) => {
+        if (!currentUser || userProfile?.role === 'super_admin') return true;
+        if (userProfile?.role !== 'admin') return false;
+
+        const { data: assignments, error: assignmentError } = await supabase
+            .from('admin_program_assignments')
+            .select('department_id')
+            .eq('admin_id', currentUser.id);
+
+        if (assignmentError) throw assignmentError;
+
+        const assignedIds = new Set((assignments || []).map((row) => row.department_id));
+        if (!assignedIds.size) return false;
+
+        if (targetUser?.department_id && assignedIds.has(targetUser.department_id)) {
+            return true;
+        }
+
+        const targetDepartment = String(targetUser?.department || '').trim();
+        if (!targetDepartment) return false;
+
+        const { data: departmentRows, error: departmentError } = await supabase
+            .from('departments')
+            .select('id, name')
+            .in('id', Array.from(assignedIds));
+
+        if (departmentError) throw departmentError;
+
+        return (departmentRows || []).some((dept) =>
+            dept.name && dept.name.trim().toLowerCase() === targetDepartment.toLowerCase()
+        );
+    };
+
+    const ensureAdminCanManageUser = async (uid) => {
+        let target = [...pendingFaculty, ...pendingStudents].find((u) => (u.uid || u.id) === uid);
+
+        if (!target) {
+            const { data, error } = await supabase
+                .from('users')
+                .select('id, department, department_id, role, status')
+                .eq('id', uid)
+                .maybeSingle();
+
+            if (error) throw error;
+            if (!data) {
+                throw new Error('This account no longer exists.');
+            }
+            target = data;
+        }
+
+        const allowed = await isProgramAdminForUser(target);
+
+        if (!allowed) {
+            throw new Error('This account belongs to a different program than your assigned scope.');
+        }
+
+        return target;
+    };
+
     useEffect(() => {
         fetchApprovals();
     }, []);
@@ -53,16 +114,15 @@ export default function AdminApprovals() {
     const handleApprove = async (uid) => {
         if (window.confirm("Approve this account?")) {
             try {
-                // NOTE: PostgREST returns success with ZERO rows when RLS
-                // filters the target (e.g. other-program user) — that is
-                // not an error object, so verify a row actually changed.
+                await ensureAdminCanManageUser(uid);
+
                 const { data, error } = await supabase.from('users').update({
                     status: 'active',
                     approved_at: new Date().toISOString(),
                 }).eq('id', uid).select('id');
                 if (error) throw error;
                 if (!data || data.length === 0) {
-                    throw new Error("Nothing was updated — you may not have permission for this user's program, or the account no longer exists.");
+                    throw new Error("Nothing was updated — the account may no longer exist or is outside your program scope.");
                 }
                 logAdminAction("account.approve", "users", uid, {});
                 setToastMsg("Account approved successfully! User can now log in.");
@@ -78,10 +138,8 @@ export default function AdminApprovals() {
     const handleReject = async (uid) => {
         if (window.confirm("Reject this account? This will permanently delete the user account.")) {
             try {
-                // Remove the ID photo (D12: photos live only as long as the
-                // account; rejection deletes both). Storage errors don't
-                // block the account deletion itself.
-                const target = [...pendingFaculty, ...pendingStudents].find(u => (u.uid || u.id) === uid);
+                const target = await ensureAdminCanManageUser(uid);
+
                 if (target?.schoolIdPhotoPath) {
                     const { error: photoErr } = await supabase.storage
                         .from('school-id-photos')
@@ -95,7 +153,7 @@ export default function AdminApprovals() {
                     const { data: delData, error: delError } = await supabase.from('users').delete().eq('id', uid).select('id');
                     if (delError) throw new Error(`Reject failed (server call: ${rpcMsg}; fallback: ${delError.message})`);
                     if (!delData || delData.length === 0) {
-                        throw new Error(`Account not removed (server call: ${rpcMsg}). Likely cause: missing migration 020 or other-program account.`);
+                        throw new Error(`Account not removed (server call: ${rpcMsg}). This account is outside your program scope or the DB migration is incomplete.`);
                     }
                 }
                 logAdminAction("account.reject", "users", uid, {});
