@@ -99,6 +99,27 @@ export default function FacultyDashboard() {
   const activeReleased = activeStatus ? activeStatus.released : false;
   const activeGradesSubmitted = activeStatus ? activeStatus.grades_submitted : false;
 
+  // Phase 6 [D6]: neutral escalation notice — booleans only, from
+  // the SECURITY DEFINER RPC. Never any comment content.
+  const [escalation, setEscalation] = useState(null);
+  useEffect(() => {
+    if (!activeYear) return;
+    let cancelled = false;
+    supabase.rpc("get_faculty_escalation_status", {
+      p_year: activeYear.year,
+      p_semester: activeYear.semester,
+    })
+      .then(({ data }) => {
+        if (!cancelled) setEscalation(Array.isArray(data) && data.length > 0 ? data[0] : null);
+      })
+      .catch(() => {
+        if (!cancelled) setEscalation(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeYear]);
+
   return (
     <FacultyLayout breadcrumb="Dashboard">
       <section className="fd-content">
@@ -117,6 +138,35 @@ export default function FacultyDashboard() {
               : "Academic Year: —"}
           </div>
         </div>
+
+        {/* Phase 6 [D6]: neutral escalation banner — no comment
+            content, ever. Copy stays non-specific by design. */}
+        {escalation?.has_escalation && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: "10px",
+              padding: "14px 18px",
+              marginBottom: "20px",
+              color: "#991b1b",
+              fontSize: "14px",
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <span>
+              {escalation.all_resolved
+                ? "A concern raised through the evaluation system has been reviewed and resolved by the administrator. No action is needed from you."
+                : "A concern raised through the evaluation system is being reviewed by the administrator. You do not need to take any action."}
+            </span>
+          </div>
+        )}
 
         {/* Phase 5 [D4]: pending-release notice for the active period. */}
         {activeYear && !activeReleased && (

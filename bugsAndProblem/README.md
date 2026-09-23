@@ -18,6 +18,8 @@ Newest entries go at the **bottom** of the table. Related context: `renovation.m
 | 010 | [student-profile-classification-self-edit](010-student-profile-classification-self-edit.md) | DB / RLS + UI (`users`) | Phase 3 (008) |
 | 011 | [faculty-could-read-student-identity](011-faculty-could-read-student-identity.md) | DB / anonymity (Req 11) | Phase 4 (009) |
 | 012 | [users-rls-infinite-recursion](012-users-rls-infinite-recursion.md) | DB / RLS — login 500 for all roles | Hotfix (migration 010) |
+| 013 | [create-or-replace-view-column-order](013-create-or-replace-view-column-order.md) | DB / views — 42P16 on migration 012 | Phase 6 (012 §5b) |
+| 014 | [policy-references-function-before-definition](014-policy-references-function-before-definition.md) | DB / migrations — 42883 ordering on migration 013 | Phase 7 (013 reorder) |
 
 ## Convention for new entries
 

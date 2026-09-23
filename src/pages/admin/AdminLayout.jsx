@@ -19,6 +19,10 @@ import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import logo from "../../assets/logo.jpg";
 
+// Phase 7 [Req 10]: the Program Assignments page is super-admin-only;
+// RLS enforces the same rule server-side.
+const isSuperAdmin = (userProfile) => userProfile?.role === "super_admin";
+
 const navSections = [
   {
     id: "main",
@@ -33,6 +37,7 @@ const navSections = [
       { key: "faculty", label: "Faculty", path: "/admin/faculty", icon: Users },
       { key: "approvals", label: "Approvals", path: "/admin/approvals", icon: ShieldCheck },
       { key: "student", label: "Student", path: "/admin/student", icon: UserCircle2 },
+      { key: "program-assignments", label: "Program Assignments", path: "/admin/program-assignments", icon: UserCircle2, superOnly: true },
     ],
   },
   {
@@ -45,6 +50,7 @@ const navSections = [
       { key: "academic-year", label: "Academic Year", path: "/admin/academic-year", icon: CalendarDays },
       { key: "subject-corrections", label: "Subject Corrections", path: "/admin/subject-corrections", icon: ClipboardCheck },
       { key: "release-management", label: "Release Management", path: "/admin/release-management", icon: ClipboardCheck },
+      { key: "moderation", label: "Moderation & Priority", path: "/admin/moderation", icon: ClipboardCheck },
       { key: "questionnaire", label: "Questionnaire", path: "/admin/questionnaire", icon: FileText },
       { key: "report", label: "Evaluation Report", path: "/admin/report", icon: FileText },
     ],
@@ -59,6 +65,7 @@ export default function AdminLayout({ title, children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, userProfile } = useAuth();
+  const superAdmin = isSuperAdmin(userProfile);
 
   useEffect(() => {
     const fetchPending = async () => {
@@ -136,7 +143,7 @@ export default function AdminLayout({ title, children }) {
           <div key={section.id}>
             {section.label && <div className="ad-menuLabel">{section.label}</div>}
             <nav className="ad-nav">
-              {section.items.map((item) => {
+              {section.items.filter((item) => !item.superOnly || superAdmin).map((item) => {
                 const Icon = item.icon;
                 return (
                   <button

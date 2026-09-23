@@ -119,8 +119,8 @@ Conventions used everywhere: `[CLIENT]` = decided by client · `[REQ]` = origina
 | 3 | Remove Add Subject (Req 2 / D5) | **IN PROGRESS (code complete)** — awaiting 008 application + function redeploy + smoke tests |
 | 4 | Student anonymity refactor (Req 11) | **DONE** (009 applied + verified) |
 | 5 | Result release gating (Req 7 / D2–D4) | **IN PROGRESS (code complete)** — awaiting 011 application + smoke tests |
-| 6 | Moderation + priority (Req 3, 8 / D6, D7) | Not started |
-| 7 | Super Admin + program scoping + exports (Req 9, 10 / D8–D11) | Not started |
+| 6 | Moderation + priority (Req 3, 8 / D6, D7) | **IN PROGRESS (code complete)** — awaiting 012 + function deploy + smoke tests |
+| 7 | Super Admin + program scoping + exports (Req 9, 10 / D8–D11) | **IN PROGRESS (code complete)** — awaiting 013 + super-admin provisioning + smoke tests |
 | 8 | AI chatbox + summaries + role separation (Req 4, 5, 6) | Not started |
 
 ---
@@ -324,27 +324,110 @@ bottom of the migration file).### Phase 5 — Result Release Gating (Req 7 / D2�
    admin sets a future date + approve → hidden until the date passes → visible after;
    passed date without approval stays hidden.
 
-### Phase 6 — Moderation + Priority (Req 3, 8 / D6, D7) — planned
+### Phase 6 — Moderation + Priority (Req 3, 8 / D6, D7) — code complete, 🚧 pending apply/deploy/smoke
 
-- `evaluations` columns: `moderation_status`, `moderation_labels JSONB`, `original_comment`
-  (faculty-invisible), `is_priority`, `priority_source`. New `blocked_words` table + admin CRUD.
-- Replace the moderation stub in `submit-evaluation`: tier 1 wordlist → tier 2 AI classifier
-  (allow/flag/block + severity). Legit criticism must pass; borderline flags. AI down →
-  wordlist-only + `unreviewed` backlog re-scan. High severity → auto-priority.
-- `priority_reviews` (evaluation_id, status new/acknowledged/resolved/dismissed, assigned_to,
-  resolution_note) + admin queues UI. Student "Priority" pill + OK/Cancel dialog; rate limit
-  (max 3/period) [REC].
-- Faculty escalation notice: RPC returning a **boolean per period only** [D6] + neutral banner.
+**Delivered:**
+- `supabase/migrations/012_phase6_moderation_priority.sql` (re-runnable, verification at
+  the bottom):
+  - `evaluations` + `moderation_status` (allow/flagged/blocked), `moderation_labels JSONB`,
+    `original_comment` (faculty-invisible), `is_priority`, `priority_source`
+    (student/ai/admin).
+  - `blocked_words` (word UNIQUE, severity block/flag) + admin-only RLS.
+  - `priority_reviews` (unique per evaluation; new/acknowledged/resolved/dismissed,
+    source, assigned_to, resolution_note) + admin-only RLS [D7].
+  - `get_faculty_escalation_status(year, semester)` — SECURITY DEFINER RPC returning
+    **two booleans only** [D6]: has_escalation / all_resolved. No text ever.
+  - `faculty_evaluations_anon` rebuilt: `comment` is NULL unless `moderation_status='allow'`
+    AND the period is released — flagged/blocked comments NEVER reach faculty;
+    `original_comment` is never selected.
+  - `admin_evaluations_anon` rebuilt with moderation columns + `original_comment`
+    (admins triage; identity restrictions unchanged).
+  - "Admin can moderate evaluations" UPDATE policy (evaluations had no admin UPDATE before).
+- `supabase/functions/submit-evaluation` (deploy REQUIRED — replaces the stub):
+  - Tier 1: admin wordlist (whole-word, block beats flag).
+  - Tier 2: OpenAI classifier (`OPENAI_API_KEY` in function secrets — never VITE_*),
+    prompt tuned so professional criticism is ALWAYS allowed; block only for
+    profanity/slurs/threats/harassment; flag = borderline.
+  - AI down/not configured → wordlist-only verdict + `unreviewed` label (admin backlog).
+  - `block` → 422 with a re-edit message; original kept only in `original_comment`.
+  - High AI severity → auto-priority (`priority_source='ai'`).
+  - Student Priority [Req 8]: `priority: true` in payload, rate-limited max 3/period [REC].
+  - Response now returns `{ evaluation: { id, submitted_at, moderation_status } }`.
+- `StudentEvaluation.jsx`: **also fixed here — the file had regressed to a direct
+  evaluations INSERT (dead against the migrated DB); now calls the Edge Function again.**
+  Priority pill + OK/Cancel confirm dialog; flagged/priority-aware success messages.
+- `FacultyDashboard.jsx`: neutral escalation banner [D6] via the RPC — "a concern is
+  being reviewed / has been resolved", never any content.
+- `AdminModeration.jsx` (route `/admin/moderation`, nav "Moderation & Priority"):
+  Priority queue (acknowledge/resolve/dismiss + comment context), flagged-comments
+  triage (Allow / Withhold, `unreviewed` warning), blocked-words CRUD.
+- `src/App.jsx` + `AdminLayout.jsx`: route + nav.
 
-### Phase 7 — Super Admin + Program Scoping + Exports (Req 9, 10 / D8–D11) — planned
+**Remaining for Phase 6 completion (user steps):**
+1. ~~Apply `012_phase6_moderation_priority.sql`~~ DONE (after the 42P16 view fix —
+   see `bugsAndProblem/013`). Confirm via the verification queries at the bottom of 012.
+2. ~~Deploy the function~~ DONE — `submit-evaluation` redeployed.
+3. ~~AI tier~~ DONE — classifier runs a candidate chain:
+   `openai/gpt-oss-safeguard-20b` → `openai/gpt-oss-20b` on Groq (`GROQ_API_KEY`),
+   `gpt-4o-mini` on OpenAI (`OPENAI_API_KEY`) if set. (llama-3.1-8b-instant was
+   deprecated by Groq in June 2026; the safeguard model is purpose-built for
+   moderation and was live-tested: criticism → allow, profanity → block/high.)
+   Key set via `supabase secrets set`; lives only in function secrets. Without
+   any key the system degrades to wordlist-only + `unreviewed` backlog by design.
+4. Smoke tests (README §Phase 6): blocked word → 422; flagged → admin triage;
+   Priority pill + dialog → admin queue → resolve → faculty banner says resolved;
+   rate limit at 3; faculty never see flagged/blocked comments after release.
 
-- Role CHECK + `super_admin`; `admin_program_assignments` (admin_id ↔ department_id);
-  helpers `is_super_admin()`, `is_admin_for_program(dept)` (same guarded pattern as 006/007).
-- Re-scope every program-scoped policy + page per D9 (assigned admin = own program only;
-  unassigned = no program data; super admin = all). Provisioning UI (first super admin via SQL).
-- `export-report` Edge Function: statistics only [D13] (averages, counts, distributions — no
-  comment text, no AI summaries, no identity); Admin (scoped) + Super Admin [D11]; every export
-  audit-logged.
+### Phase 7 — Super Admin + Program Scoping + Exports (Req 9, 10 / D8–D11) — code complete, 🚧 pending apply/provision/smoke
+
+**Delivered:**
+- `supabase/migrations/013_phase7_super_admin_scoping.sql` (re-runnable, verification +
+  provisioning snippet at the bottom):
+  - `users.role` CHECK extended: 'admin' | 'super_admin' | 'faculty' | 'student' [Req 10].
+  - `admin_program_assignments` (admin_id ↔ department_id, UNIQUE pair) — Program Head =
+    admin with ≥1 assignment [D8]. RLS: all admins read; super admin writes.
+  - Helpers (SECURITY DEFINER): `is_super_admin()`, `is_program_admin_for(department_id)`,
+    `is_program_admin_for_name(department_text)`, `admin_assigned_department_ids()`.
+  - **Backfill: every existing admin assigned to ALL existing programs** so today's
+    behavior is preserved on day one; the super admin narrows later by deleting rows.
+  - D9 policy rewrites (guarded, names preserved): users SELECT/UPDATE/DELETE,
+    class_assignments CRUD, departments writes, student_enrollments,
+    subject_correction_requests, grade_submissions, evaluation_releases (global rows =
+    super-admin-only), evaluations moderate/delete — all scoped to the caller's
+    assigned programs; unassigned admin = no program data; super admin = all.
+  - `admin_evaluations_anon` rebuilt (DROP+CREATE per bug 013 lesson): admin branch
+    program-scoped, super admin sees everything; identity rules unchanged.
+  - `reveal_student_identity(evaluation_id)` — super-admin-only, audit-logged identity
+    reveal (completes the §4.6 promise from Phase 4).
+  - NOTE: `is_admin()` deliberately still means role='admin' ONLY. Policies that must
+    include super_admin list it explicitly; policies using is_admin() were rewritten in
+    this migration.
+- `supabase/functions/export-report/index.ts` (DEPLOYED): stats-only export [D13] —
+  per-faculty averages, forms, rating distributions + summary; NEVER selects
+  comment/student identity; program-scoped [D9] (no assignments → 403); every call
+  audit-logged [D11].
+- Client:
+  - `ProtectedRoute` + `Login.jsx`: super_admin passes admin gates and logs in on the
+    Admin tab → /admin/dashboard.
+  - `AdminProgramAssignments.jsx` (route `/admin/program-assignments`, nav under SYSTEM
+    USERS, super-admin-only client-side + RLS): per-admin program checkboxes, save =
+    insert new + delete removed.
+  - `AdminReport.jsx`: "Export CSV" button (admin + super admin [D11]) calling
+    export-report; builds CSV from the stats payload (Faculty, Program, Forms,
+    Average, Performance, 1★–5★, summary row).
+  - `AdminLayout.jsx`: superOnly nav filtering.
+
+**Remaining for Phase 7 completion (user steps, in order):**
+1. Apply `013_phase7_super_admin_scoping.sql` in the SQL editor.
+2. Provision the FIRST super admin (required — nobody can manage assignments otherwise):
+   ```sql
+   UPDATE public.users SET role = 'super_admin' WHERE email = '<your-email>';
+   ```
+   (That account then logs in via the ADMIN tab.)
+3. Smoke tests (README §Phase 7): scoped admin sees only their programs;
+   unassigned admin sees no program data; super admin manages assignments + exports;
+   scoped admin export contains only their faculty; every export lands in audit_log;
+   reveal RPC is super-admin-only and audit-logged.
 
 ### Phase 8 — AI Chatbox + Summaries + Role Separation (Req 4, 5, 6) — planned
 
@@ -368,9 +451,14 @@ Storage bucket `school-id-photos` (private, 5 MB, jpeg/png/webp),
 RPCs: `delete_user_account`, `resolve_school_id`, `check_account_status`, `log_id_photo_view`,
 helpers: `is_admin()`, trigger `handle_new_user` (roles clamped to student/faculty).
 
-**Planned:** Phase 6: `priority_reviews`, `blocked_words`, moderation/priority
-columns on `evaluations` · Phase 7: `admin_program_assignments`, `is_super_admin()`,
-`is_admin_for_program()` · Phase 8: none (functions only).
+**Planned:** Phase 8: none (functions only).
+
+**Added in 013:** `admin_program_assignments`; helpers `is_super_admin()`,
+`is_program_admin_for()`, `is_program_admin_for_name()`, `admin_assigned_department_ids()`;
+RPC `reveal_student_identity()`; role value `super_admin`.
+
+**Added in 012:** `blocked_words`, `priority_reviews`; `evaluations` moderation/priority
+columns; RPC `get_faculty_escalation_status()`.
 
 **Views:** `faculty_evaluations_anon` (009, rebuilt release-aware in 011),
 `admin_evaluations_anon` (009), `faculty_release_status` (011).

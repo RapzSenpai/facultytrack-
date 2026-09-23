@@ -9,7 +9,11 @@
 // exclusions. With admin/exception enrollment kinds the row
 // fully governs (match − excluded). Students no longer write
 // enrollments themselves (migration 008 §5.5).
-// Moderation: STUBBED to allow (Phase 6 replaces this).
+// Phase 6 moderation (Req 3): tier-1 admin wordlist, tier-2 AI
+// classifier (OpenAI, key in Edge Function secrets — never in
+// VITE_*). allow/flag/block; AI down => wordlist-only verdict +
+// unreviewed backlog note. High severity auto-priority (Req 8).
+// Student can mark the evaluation Priority [Req 8] (rate-limited).
 // Records an audit_log entry for every submission.
 // ============================================================
 
@@ -21,6 +25,9 @@ const CORS_HEADERS = {
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+// Student Priority rate limit [REC]: max 3 per student per period.
+const MAX_PRIORITY_PER_PERIOD = 3;
 
 function json(payload: unknown, status: number): Response {
   return new Response(JSON.stringify(payload), {
@@ -41,6 +48,133 @@ function isMatch(a: unknown, b: unknown): boolean {
   const n1 = normalize(a);
   const n2 = normalize(b);
   return n1 === n2 || n1.includes(n2) || n2.includes(n1);
+}
+
+// ------------------------------------------------------------
+// Tier 1: wordlist. Whole-word, case-insensitive substring match
+// against blocked_words. 'block' beats 'flag'.
+// ------------------------------------------------------------
+function wordlistVerdict(
+  text: string,
+  words: { word: string; severity: string }[],
+): { status: "allow" | "flag" | "block"; labels: string[] } {
+  const lower = text.toLowerCase();
+  const labels: string[] = [];
+  let status: "allow" | "flag" | "block" = "allow";
+  for (const { word, severity } of words) {
+    const w = word.toLowerCase().trim();
+    if (!w) continue;
+    const pattern = new RegExp(
+      `(^|[^a-z])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z]|$)`,
+      "i",
+    );
+    if (pattern.test(lower)) {
+      labels.push(`${severity}:${w}`);
+      if (severity === "block") status = "block";
+      else if (status === "allow") status = "flag";
+    }
+  }
+  return { status, labels };
+}
+
+// ------------------------------------------------------------
+// Tier 2: AI classifier. Only runs when wordlist says allow/flag.
+// Returns allow/flag/block + severity + normalized labels.
+// NEVER blocks legit criticism: the prompt demands allow for
+// professional negative feedback; 'block' only for genuine
+// profanity/harassment/threats. Any API/parse failure degrades
+// to the wordlist verdict (availability over perfection).
+// Provider: GROQ_API_KEY (OpenAI-compatible endpoint, Llama models)
+// first, OPENAI_API_KEY fallback — keys live ONLY in function
+// secrets, never in VITE_*.
+// ------------------------------------------------------------
+type AiVerdict = {
+  status: "allow" | "flag" | "block";
+  severity: "low" | "medium" | "high";
+  labels: string[];
+  aiAvailable: boolean;
+};
+
+async function aiClassify(text: string): Promise<AiVerdict | null> {
+  // Candidate chain, first success wins. llama-3.1-8b-instant was
+  // deprecated by Groq (announced June 2026); the current text
+  // models there are OpenAI's open-weight gpt-oss family, and
+  // gpt-oss-safeguard-20b is a purpose-built safety classifier —
+  // ideal for this job. Live-tested: returns clean JSON with
+  // reasoning kept in a separate field our parser ignores.
+  const candidates: { url: string; key: string; model: string }[] = [];
+  const groqKey = Deno.env.get("GROQ_API_KEY");
+  const openaiKey = Deno.env.get("OPENAI_API_KEY");
+  if (groqKey) {
+    candidates.push(
+      { url: "https://api.groq.com/openai/v1/chat/completions", key: groqKey, model: "openai/gpt-oss-safeguard-20b" },
+      { url: "https://api.groq.com/openai/v1/chat/completions", key: groqKey, model: "openai/gpt-oss-20b" },
+    );
+  }
+  if (openaiKey) {
+    candidates.push(
+      { url: "https://api.openai.com/v1/chat/completions", key: openaiKey, model: "gpt-4o-mini" },
+    );
+  }
+  if (candidates.length === 0) return null; // not configured -> wordlist-only
+  const prompt = `You are a content moderator for university teacher evaluations.
+Decide if this student comment is acceptable to show to the teacher.
+
+Rules:
+- "allow": any professional criticism, complaint, or negative feedback about teaching. This MUST be allowed.
+- "flag": borderline rudeness, sarcasm, mild insults, personal remarks that are not profanity.
+- "block": genuine profanity, slurs, sexual content, threats, or harassment.
+
+Reply ONLY with compact JSON:
+{"status":"allow|flag|block","severity":"low|medium|high","labels":["<short label>", ...]}
+
+Comment:
+"""
+${text.slice(0, 2000)}
+"""`;
+  for (const candidate of candidates) {
+    try {
+      const res = await fetch(candidate.url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${candidate.key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: candidate.model,
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0,
+          max_tokens: 512,
+        }),
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (typeof content !== "string") continue;
+      const match = content.match(/\{[\s\S]*\}/);
+      if (!match) continue;
+      const parsed = JSON.parse(match[0]);
+      const status = ["allow", "flag", "block"].includes(parsed.status)
+        ? parsed.status
+        : null;
+      const severity = ["low", "medium", "high"].includes(parsed.severity)
+        ? parsed.severity
+        : "low";
+      if (!status) continue;
+      return {
+        status,
+        severity,
+        labels: Array.isArray(parsed.labels)
+          ? parsed.labels.filter((l: unknown) => typeof l === "string").slice(0, 5)
+          : [],
+        aiAvailable: true,
+      };
+    } catch (_err) {
+      continue; // model/endpoint failed — try the next candidate
+    }
+  }
+  return null; // every candidate failed -> wordlist-only verdict
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -89,6 +223,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const assignmentId = body?.assignment_id;
     const ratings = body?.ratings;
     const comment = typeof body?.comment === "string" ? body.comment : "";
+    const priority = body?.priority === true;
 
     if (typeof assignmentId !== "string" || assignmentId.length === 0) {
       return json({ error: "assignment_id is required." }, 400);
@@ -197,9 +332,83 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return json({ error: "You have already evaluated this subject." }, 409);
     }
 
-    // Moderation (Phase 6): currently a stub — every comment is
-    // allowed and nothing is stored yet. Do not extend here.
-    const moderationStatus = "allow";
+    // --------------------------------------------------------
+    // Phase 6: Priority rate limit [REC] — max 3 per period.
+    // Counts only THIS student's priority rows in the period;
+    // service-role read, no identity exposure anywhere.
+    // --------------------------------------------------------
+    if (priority) {
+      const { count } = await admin
+        .from("evaluations")
+        .select("id", { count: "exact", head: true })
+        .eq("student_id", userId)
+        .eq("academic_year", active.year)
+        .eq("semester", active.semester)
+        .eq("is_priority", true);
+      if ((count ?? 0) >= MAX_PRIORITY_PER_PERIOD) {
+        return json(
+          { error: "You have reached the priority limit for this period." },
+          429,
+        );
+      }
+    }
+
+    // --------------------------------------------------------
+    // Phase 6 moderation pipeline (Req 3).
+    // --------------------------------------------------------
+    let moderationStatus: "allow" | "flag" | "block" = "allow";
+    let moderationLabels: Record<string, unknown> = {};
+    let autoPriority = false;
+
+    if (comment.trim().length > 0) {
+      // Tier 1: admin wordlist.
+      const { data: words } = await admin
+        .from("blocked_words")
+        .select("word, severity");
+      const t1 = wordlistVerdict(comment, words ?? []);
+
+      // Tier 2: AI classifier (skipped when tier-1 already blocked).
+      const t2 = t1.status === "block" ? null : await aiClassify(comment);
+
+      if (t2) {
+        // AI verdict participates; block wins, then flag.
+        if (t2.status === "block" || t1.status === "block") {
+          moderationStatus = "block";
+        } else if (t2.status === "flag" || t1.status === "flag") {
+          moderationStatus = "flag";
+        }
+        autoPriority = t2.severity === "high";
+        moderationLabels = {
+          tier1: t1.labels,
+          tier2: { status: t2.status, severity: t2.severity, labels: t2.labels },
+        };
+      } else {
+        // AI unavailable (not configured, down, or unparseable):
+        // wordlist-only verdict. A tier-1 flag is marked unreviewed
+        // so admins can re-scan the backlog when AI returns.
+        moderationStatus = t1.status;
+        moderationLabels =
+          t1.status === "allow" ? {} : { tier1: t1.labels, unreviewed: true };
+      }
+    }
+
+    if (moderationStatus === "block") {
+      return json(
+        {
+          error:
+            "Your comment was blocked by content moderation. Please remove offensive language and try again. Legit criticism is always welcome.",
+        },
+        422,
+      );
+    }
+
+    const isPriority = priority || autoPriority;
+    const prioritySource = priority ? "student" : autoPriority ? "ai" : null;
+
+    // Blocked submissions never reach the insert (422 above); this
+    // mask is defence-in depth in case that flow changes later.
+    const storedComment =
+      moderationStatus === "block" ? "[comment withheld by moderation]" : comment;
 
     const { data: inserted, error: insertErr } = await admin
       .from("evaluations")
@@ -210,10 +419,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
         academic_year: active.year,
         semester: active.semester,
         ratings,
-        comment,
+        comment: storedComment,
         submitted_at: new Date().toISOString(),
+        moderation_status: moderationStatus,
+        moderation_labels: moderationLabels,
+        original_comment: comment.trim().length > 0 ? comment : null,
+        is_priority: isPriority,
+        priority_source: prioritySource,
       })
-      .select("id, submitted_at")
+      .select("id, submitted_at, moderation_status")
       .single();
 
     if (insertErr) {
@@ -221,6 +435,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
         return json({ error: "You have already evaluated this subject." }, 409);
       }
       return json({ error: "Could not save the evaluation." }, 500);
+    }
+
+    // Priority queue row [D7] — one per evaluation (unique index).
+    if (isPriority) {
+      await admin.from("priority_reviews").insert({
+        evaluation_id: inserted.id,
+        source: prioritySource,
+        status: "new",
+      });
     }
 
     await admin.from("audit_log").insert({
@@ -236,10 +459,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
         semester: active.semester,
         comment_included: comment.trim().length > 0,
         moderation_status: moderationStatus,
+        priority: isPriority,
+        priority_source: prioritySource,
       },
     });
 
-    return json({ evaluation: inserted }, 200);
+    return json(
+      {
+        evaluation: {
+          id: inserted.id,
+          submitted_at: inserted.submitted_at,
+          moderation_status: inserted.moderation_status,
+        },
+      },
+      200,
+    );
   } catch (err) {
     return json(
       { error: err instanceof Error ? err.message : "Unexpected error." },

@@ -159,13 +159,17 @@ export default function Login() {
         return;
       }
 
-      if (userData.role !== activeTab) {
+      // Phase 7: super_admin logs in through the Admin tab [Req 10].
+      const superOnAdminTab = activeTab === "admin" && userData.role === "super_admin";
+      if (userData.role !== activeTab && !superOnAdminTab) {
         await supabase.auth.signOut();
         setError(`This account is not registered as a ${activeTab}. Please switch to the correct login.`);
         return;
       }
 
-      navigate(`/${userData.role}/dashboard`);
+      navigate(
+        userData.role === "super_admin" ? "/admin/dashboard" : `/${userData.role}/dashboard`,
+      );
     } catch (err) {
       console.error("Login error:", err);
       setError(err.message || "Invalid credentials. Please check your details and try again.");

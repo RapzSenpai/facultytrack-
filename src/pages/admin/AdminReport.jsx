@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { useAuth } from "../../context/AuthContext";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -52,6 +53,9 @@ const tierColors = {
 };
 
 export default function AdminReport() {
+  const { userProfile } = useAuth();
+  const canExport = userProfile?.role === "admin" || userProfile?.role === "super_admin"; // D11
+  const [exporting, setExporting] = useState(false);
   const [evaluations, setEvaluations] = useState([]);
   const [facultyUsers, setFacultyUsers] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -191,6 +195,57 @@ export default function AdminReport() {
 
   const handleSearch = () => { };
 
+  // Phase 7 [D11/D13]: stats-only export via the export-report Edge
+  // Function. The function returns numbers + labels only — comments,
+  // AI summaries and identities are excluded server-side (D13).
+  const handleExport = async () => {
+    if (!filterAY || !filterSem) {
+      alert("Pick a specific academic year and semester before exporting.");
+      return;
+    }
+    setExporting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("export-report", {
+        body: { academic_year: filterAY, semester: filterSem },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      // Build a CSV from the stats payload.
+      const rows = [["Faculty", "Program", "Forms", "Average Rating", "Performance", "1★", "2★", "3★", "4★", "5★"]];
+      for (const f of data.report.faculties) {
+        rows.push([
+          f.faculty_name,
+          f.department || "—",
+          String(f.forms_received),
+          f.average_rating === null ? "—" : String(f.average_rating),
+          f.performance_label || "—",
+          String(f.rating_distribution["1"] ?? 0),
+          String(f.rating_distribution["2"] ?? 0),
+          String(f.rating_distribution["3"] ?? 0),
+          String(f.rating_distribution["4"] ?? 0),
+          String(f.rating_distribution["5"] ?? 0),
+        ]);
+      }
+      rows.push([]);
+      rows.push(["SUMMARY", "", String(data.report.summary.forms_total), data.report.summary.overall_average ?? "—", "", "", "", "", "", ""]);
+      const csv = rows
+        .map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+        .join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `facultytrack-report-${filterAY}-${filterSem}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Export failed: " + (err.message || "unknown error"));
+    } finally {
+      setExporting(false);
+  }
+  };
+
   // ── PDF Export ──────────────────────────────────────────────
   const handleExportPDF = () => {
     if (reportData.length === 0) {
@@ -276,7 +331,7 @@ export default function AdminReport() {
         </table>
         ${commentsSection ? `<div class="section-title">Student Comments</div>${commentsSection}` : ""}
         <div class="footer">FacultyTrack Faculty Evaluation System &mdash; Confidential</div>
-        <script>window.onload = () => { window.print(); }<\/script>
+        <script>window.onload = () => { window.print(); }</script>
       </body>
       </html>
     `;
@@ -335,6 +390,17 @@ export default function AdminReport() {
                 .map(f => <option key={f.id} value={f.id}>{f.fullName}</option>)}
             </select>
             <button className="ad-btnSearch" onClick={handleSearch}>Search</button>
+            {canExport && (
+              <button
+                className="ad-btnSearch"
+                onClick={handleExport}
+                disabled={exporting}
+                title="Statistics-only export (D13): numbers, no comments, no identities"
+                style={{ opacity: exporting ? 0.6 : 1 }}
+              >
+                {exporting ? "Exporting..." : "Export CSV"}
+              </button>
+            )}
           </div>
         </div>
 

@@ -1,5 +1,56 @@
 # Edge Functions — Deploy Notes
 
+## Phase 7 (migration 013 + export-report — super admin & scoping)
+
+`export-report` is deployed. After applying `013_phase7_super_admin_scoping.sql`,
+provision the first super admin (see the snippet at the bottom of the migration):
+
+```sql
+UPDATE public.users SET role = 'super_admin' WHERE email = '<your-email>';
+```
+
+Smoke tests:
+- Scoped admin (some programs assigned): Faculty/Student/Class Assignment/Report
+  pages show ONLY their programs' rows; export contains only their faculty.
+- Unassigned admin: program pages are empty [D9 strict].
+- Super admin: sees everything; manages Program Assignments (/admin/program-assignments);
+  changes take effect on the scoped admin's next page load (RLS filters live).
+- Export CSV (AdminReport): scoped admin + super admin get a stats-only CSV;
+  every export writes a `report.export` row to audit_log. Comments/identities
+  never appear [D13].
+- Reveal RPC: `reveal_student_identity(...)` works for super admin only and
+  audit-logs each call; scoped admins get an error.
+
+## Phase 6 (migration 012 + submit-evaluation redeploy — moderation & priority)
+
+**Deploy order:**
+1. Apply `012_phase6_moderation_priority.sql` in the SQL editor.
+2. Redeploy the function (REQUIRED — replaces the moderation stub):
+   ```
+   supabase functions deploy submit-evaluation
+   ```
+3. Optional AI tier (DONE for this project): the classifier walks a
+   candidate chain — `openai/gpt-oss-safeguard-20b` → `openai/gpt-oss-20b`
+   on Groq (`GROQ_API_KEY`), then `gpt-4o-mini` on OpenAI (`OPENAI_API_KEY`)
+   if set. llama-3.1-8b-instant was deprecated by Groq (June 2026).
+   Keys live ONLY in function secrets — never in VITE_*. Without any key
+   the function still works: wordlist-only verdicts + `unreviewed` labels.
+
+Smoke tests:
+- Add a `block` word (e.g. a profanity) in Admin → Moderation & Priority;
+  submit a comment containing it → rejected with the re-edit message (422),
+  nothing stored.
+- Add a `flag` word; submit a comment with it → submission succeeds, row
+  appears in Flagged Comments with the original text; Allow/Withhold works.
+- Priority pill: OK/Cancel dialog → after submit, row in Priority Queue;
+  Acknowledge → Resolve → faculty banner switches to "resolved" copy [D6].
+- Rate limit: 3 priority submissions per student per period → 4th is rejected [REC].
+- AI auto-priority: with GROQ_API_KEY set, a severe comment creates a
+  priority review with source `ai`. Live-tested with the safeguard model:
+  legit criticism → allow/low; profanity → block/high.
+- Anonymity: faculty view must show comment NULL for flagged rows and no
+  flagged/blocked row content anywhere, even after release.
+
 ## Phase 5 (migration 011 — result release gating)
 
 No Edge Function changes. Apply `011_phase5_release_gating.sql`, then release the

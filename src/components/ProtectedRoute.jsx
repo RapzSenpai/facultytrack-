@@ -19,7 +19,9 @@ export default function ProtectedRoute({ children, role }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (role && userProfile && userProfile.role && userProfile.role !== role) {
+  // Phase 7: super_admin passes every admin gate [Req 10].
+  const effectiveRole = userProfile?.role === "super_admin" ? "admin" : userProfile?.role;
+  if (role && effectiveRole && effectiveRole !== role) {
     return <Navigate to="/login" replace />;
   }
 

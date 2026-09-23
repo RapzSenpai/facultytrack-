@@ -58,6 +58,9 @@ export default function StudentEvaluation() {
   const [evaluationCriteria, setEvaluationCriteria] = useState([]);
   const [activeYear, setActiveYear] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Phase 6 [Req 8]: Priority pill + OK/Cancel dialog.
+  const [isPriority, setIsPriority] = useState(false);
+  const [showPriorityDialog, setShowPriorityDialog] = useState(false);
 
   const { currentUser, userProfile } = useAuth();
 
@@ -222,40 +225,58 @@ export default function StudentEvaluation() {
     setSelectedSubjectId(faculty.assignmentId);
     setRatings({});
     setComment("");
+    setIsPriority(false);
     setShowModal(true);
+  };
+
+  // [Req 8] Toggling Priority opens an OK/Cancel confirm dialog,
+  // not an alert — the student must confirm before it applies.
+  const handlePriorityToggle = () => {
+    if (isPriority) {
+      setIsPriority(false);
+      return;
+    }
+    setShowPriorityDialog(true);
+  };
+
+  const confirmPriority = () => {
+    setShowPriorityDialog(false);
+    setIsPriority(true);
   };
 
   const handleRatingChange = (questionId, value) => {
     setRatings((prev) => ({ ...prev, [questionId]: value }));
   };
 
+  // Phase 6: submissions go through the submit-evaluation Edge
+  // Function — the ONLY write path for evaluations (migration 006
+  // closed direct INSERT; RLS rejects it). moderation_status comes
+  // back so the student knows if their comment was flagged/blocked.
   const handleSubmitEvaluation = async () => {
     if (!selectedFaculty || !currentUser) return;
     if (!activeYear) { alert("No active evaluation period is available."); return; }
     setSubmitting(true);
     try {
-      const { data, error } = await supabase
-        .from("evaluations")
-        .insert({
-          student_id: currentUser.id,
-          faculty_id: selectedFaculty.facultyId,
+      const { data, error } = await supabase.functions.invoke("submit-evaluation", {
+        body: {
           assignment_id: selectedFaculty.assignmentId,
-          academic_year: activeYear.year,
-          semester: activeYear.semester,
           ratings,
           comment,
-          submitted_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+          priority: isPriority,
+        },
+      });
 
       if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      const submittedAt = data?.evaluation?.submitted_at;
+      const moderationStatus = data?.evaluation?.moderation_status || "allow";
 
       const newSubData = new Map(submissionsData);
       newSubData.set(selectedFaculty.assignmentId, {
         ratings,
         comment,
-        submittedAt: data.submitted_at,
+        submittedAt,
       });
       setSubmissionsData(newSubData);
 
@@ -263,7 +284,7 @@ export default function StudentEvaluation() {
       setSubmittedIds(newSubmittedIds);
       setAssignedFaculty((prev) =>
         prev.map((f) => f.assignmentId === selectedFaculty.assignmentId
-          ? { ...f, status: "submitted", submittedAt: data.submitted_at }
+          ? { ...f, status: "submitted", submittedAt }
           : f)
       );
 
@@ -272,7 +293,15 @@ export default function StudentEvaluation() {
       setSelectedSubjectId("");
       setRatings({});
       setComment("");
-      alert(`Evaluation for ${selectedFaculty.name} submitted successfully!`);
+      setIsPriority(false);
+
+      if (moderationStatus === "flagged") {
+        alert(`Evaluation for ${selectedFaculty.name} submitted. Your comment was flagged for review and will be checked by the administrator before release.`);
+      } else if (isPriority) {
+        alert(`Priority evaluation for ${selectedFaculty.name} submitted. The administrator will review it.`);
+      } else {
+        alert(`Evaluation for ${selectedFaculty.name} submitted successfully!`);
+      }
     } catch (error) {
       alert("Error: " + error.message);
     } finally {
@@ -736,8 +765,70 @@ export default function StudentEvaluation() {
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                 />
+
+                {/* Phase 6 [Req 8]: Priority pill + OK/Cancel dialog. */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginTop: "12px", flexWrap: "wrap" }}>
+                  <div style={{ fontSize: "12.5px", color: "#6b7280" }}>
+                    Mark <strong>Priority</strong> if this concern is serious and needs admin attention. The teacher is notified that a concern was escalated — never the comment itself.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handlePriorityToggle}
+                    style={{
+                      padding: "6px 16px",
+                      borderRadius: "999px",
+                      border: isPriority ? "none" : "1.5px solid #f59e0b",
+                      background: isPriority ? "#f59e0b" : "#fff",
+                      color: isPriority ? "#fff" : "#b45309",
+                      fontWeight: 800,
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {isPriority ? "★ PRIORITY ON" : "☆ Mark as Priority"}
+                  </button>
+                </div>
               </div>
             </div>
+
+            {/* Phase 6 [Req 8]: Priority OK/Cancel dialog. */}
+            {showPriorityDialog && (
+              <div className="se-modal" role="alertdialog" aria-modal="true">
+                <div className="se-modalOverlay" onClick={() => setShowPriorityDialog(false)} />
+                <div className="se-modalContent" style={{ maxWidth: "440px" }}>
+                  <div className="se-modalHeader">
+                    <div>
+                      <h3 className="se-modalTitle">Mark as Priority?</h3>
+                    </div>
+                    <button type="button" className="se-modalClose" onClick={() => setShowPriorityDialog(false)}>
+                      <X size={22} />
+                    </button>
+                  </div>
+                  <div className="se-modalBody" style={{ fontSize: "14px", color: "#374151", lineHeight: 1.6 }}>
+                    <p style={{ margin: "0 0 10px" }}>
+                      This evaluation will be flagged as a <strong>priority concern</strong> and sent to the administrator for review.
+                    </p>
+                    <p style={{ margin: 0 }}>
+                      The teacher will only be told that a concern was escalated — your comment stays confidential.
+                    </p>
+                  </div>
+                  <div className="se-modalFooter">
+                    <button type="button" className="se-modalBtn se-modalBtn--cancel" onClick={() => setShowPriorityDialog(false)}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="se-modalBtn se-modalBtn--submit"
+                      style={{ background: "#f59e0b" }}
+                      onClick={confirmPriority}
+                    >
+                      OK, Mark as Priority
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="se-modalFooter">
               <button type="button" className="se-modalBtn se-modalBtn--cancel" onClick={() => setShowModal(false)}>
