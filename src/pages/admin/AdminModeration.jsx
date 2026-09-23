@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { logAdminAction } from "../../utils/audit";
 
 // Phase 6 [D7]: priority cases are handled by Admin. This page is
 // the queue + the moderation triage surface + blocked-words CRUD.
@@ -16,8 +17,8 @@ const STATUS_COLORS = {
 
 const MOD_COLORS = {
   allow: "#16a34a",
-  flagged: "#d97706",
-  blocked: "#dc2626",
+  flag: "#d97706",
+  block: "#dc2626",
 };
 
 export default function AdminModeration() {
@@ -63,22 +64,25 @@ export default function AdminModeration() {
 
   const openReviews = reviews.filter((r) => r.status === "new" || r.status === "acknowledged");
 
-  const flaggedEvals = evaluations.filter((e) => e.moderation_status === "flagged");
+  const flaggedEvals = evaluations.filter((e) => e.moderation_status === "flag");
 
   const updateReview = async (review, patch) => {
     setBusyId(review.id);
     try {
       const { data: userData } = await supabase.auth.getUser();
+      const terminal = patch.status === "resolved" || patch.status === "dismissed";
+      // Sparse update: only send resolved_* when transitioning to a
+      // terminal state (never overwrite with undefined).
+      const update = terminal
+        ? { ...patch, resolved_by: userData?.user?.id, resolved_at: new Date().toISOString() }
+        : { status: patch.status };
       const { error } = await supabase
         .from("priority_reviews")
-        .update({
-          ...patch,
-          resolved_by: patch.status === "resolved" || patch.status === "dismissed" ? userData?.user?.id : undefined,
-          resolved_at: patch.status === "resolved" || patch.status === "dismissed" ? new Date().toISOString() : undefined,
-        })
+        .update(update)
         .eq("id", review.id);
       if (error) throw error;
-      setReviews((prev) => prev.map((r) => (r.id === review.id ? { ...r, ...patch } : r)));
+      setReviews((prev) => prev.map((r) => (r.id === review.id ? { ...r, ...update } : r)));
+      logAdminAction("priority_review.update", "priority_reviews", review.id, { status: patch.status });
     } catch (err) {
       console.error("Failed to update review:", err);
       alert("Could not update the review. Please try again.");
@@ -98,6 +102,7 @@ export default function AdminModeration() {
       setEvaluations((prev) =>
         prev.map((e) => (e.id === evaluation.id ? { ...e, moderation_status: status } : e)),
       );
+      logAdminAction("evaluation.moderate", "evaluations", evaluation.id, { moderation_status: status });
     } catch (err) {
       console.error("Failed to reclassify:", err);
       alert("Could not update the moderation status. Please try again.");
@@ -126,6 +131,7 @@ export default function AdminModeration() {
       }
       setWords((prev) => [...prev, data].sort((a, b) => a.word.localeCompare(b.word)));
       setNewWord("");
+      logAdminAction("blocked_words.add", "blocked_words", data.id, { word, severity: newSeverity });
     } catch (err) {
       console.error("Failed to add word:", err);
       alert("Could not add the word. Please try again.");
@@ -139,6 +145,7 @@ export default function AdminModeration() {
       const { error } = await supabase.from("blocked_words").delete().eq("id", word.id);
       if (error) throw error;
       setWords((prev) => prev.filter((w) => w.id !== word.id));
+      logAdminAction("blocked_words.remove", "blocked_words", word.id, { word: word.word });
     } catch (err) {
       console.error("Failed to remove word:", err);
       alert("Could not remove the word. Please try again.");

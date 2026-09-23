@@ -22,7 +22,17 @@ export default function ProtectedRoute({ children, role }) {
   // Phase 7: super_admin passes every admin gate [Req 10].
   const effectiveRole = userProfile?.role === "super_admin" ? "admin" : userProfile?.role;
   if (role && effectiveRole && effectiveRole !== role) {
-    return <Navigate to="/login" replace />;
+    // Authenticated but wrong section: send users home to their own
+    // dashboard instead of /login (which would loop back here).
+    const home =
+      effectiveRole === "student"
+        ? "/student/dashboard"
+        : effectiveRole === "faculty"
+          ? "/faculty/dashboard"
+          : effectiveRole === "admin"
+            ? "/admin/dashboard"
+            : "/";
+    return <Navigate to={home} replace />;
   }
 
   return children;

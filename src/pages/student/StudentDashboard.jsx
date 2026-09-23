@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
+import { isAssignmentMatch } from "../../utils/assignmentMatch";
 import {
   Calendar,
   Check,
   Clock,
   Users,
-  Bell,
   ChevronRight,
   Info,
 } from "lucide-react";
@@ -21,6 +21,13 @@ export default function StudentDashboard() {
 
   const [assignedFaculty, setAssignedFaculty] = useState([]);
   const [submissionsData, setSubmissionsData] = useState(new Map());
+
+  // Phase 3 [Req 2 / D5]: in-app subject-list correction requests.
+  const [showReportIssue, setShowReportIssue] = useState(false);
+  const [reportMessage, setReportMessage] = useState("");
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportError, setReportError] = useState("");
+  const [myRequests, setMyRequests] = useState([]);
 
   const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
@@ -38,10 +45,13 @@ export default function StudentDashboard() {
 
     (async () => {
       try {
-        const [assignmentsRes, submissionsRes, yearsRes] = await Promise.all([
+        const [assignmentsRes, submissionsRes, yearsRes, enrollmentRes] = await Promise.all([
           supabase.from("class_assignments").select("*"),
           supabase.from("evaluations").select("*").eq("student_id", currentUser.id),
           supabase.from("academic_years").select("*"),
+          supabase.from("student_enrollments")
+            .select("confirmed_assignments, excluded_assignments, enrollment_kind, academic_year, semester")
+            .eq("student_id", currentUser.id),
         ]);
 
         const assignments = (assignmentsRes.data || []).map((a) => ({
@@ -92,34 +102,27 @@ export default function StudentDashboard() {
           (a) => a.academicYear === active.year && a.semester === active.semester
         );
 
-        // Robust normalizers for section, year level, and department
-        const normalizeYear = (y) => {
-          if (!y) return "";
-          const str = String(y).toLowerCase().replace(/[^a-z0-9]/g, "");
-          if (str.includes("1") || str.includes("first")) return "1";
-          if (str.includes("2") || str.includes("second")) return "2";
-          if (str.includes("3") || str.includes("third")) return "3";
-          if (str.includes("4") || str.includes("fourth")) return "4";
-          return str;
-        };
-
-        const normalizeSection = (s) => {
-          if (!s) return "";
-          return String(s).toLowerCase().replace(/section/g, "").replace(/[^a-z0-9]/g, "");
-        };
-
-        const normalizeDept = (d) => {
-          if (!d) return "";
-          return String(d).toLowerCase().replace(/[^a-z0-9]/g, "");
-        };
+        // Admin per-student overrides (Phase 3): same semantics as
+        // the submit-evaluation Edge Function — an admin/exception
+        // list governs fully, otherwise section match ∪ confirmed
+        // minus excluded.
+        const enrollment = (enrollmentRes.data || []).find(
+          (r) => r.academic_year === active.year && r.semester === active.semester
+        ) || null;
+        const confirmedSet = new Set(enrollment?.confirmed_assignments || []);
+        const excludedSet = new Set(enrollment?.excluded_assignments || []);
+        const isAdminList =
+          enrollment?.enrollment_kind === "admin" ||
+          enrollment?.enrollment_kind === "exception";
 
         // Automatic matching: directly match the student's department, year, and section
+        // (exact normalized equality — mirrors the server gate).
         const matchedFaculty = activeAssignments
           .filter((a) => {
-            const deptMatch = normalizeDept(a.department) === normalizeDept(studentDept);
-            const yearMatch = normalizeYear(a.yearLevel) === normalizeYear(studentYear);
-            const sectionMatch = normalizeSection(a.section) === normalizeSection(studentSection);
-            return deptMatch && yearMatch && sectionMatch;
+            if (excludedSet.has(a.id)) return false;
+            if (isAdminList) return confirmedSet.has(a.id);
+            if (confirmedSet.has(a.id)) return true;
+            return isAssignmentMatch(a, studentDept, studentYear, studentSection);
           })
           .map((a) => {
             const subData = subMap.get(a.id);
@@ -179,6 +182,45 @@ export default function StudentDashboard() {
 
   const displayName = userProfile?.fullName || "Student";
   const firstName = displayName.split(" ")[0];
+
+  const loadMyRequests = async () => {
+    if (!currentUser) return;
+    const { data } = await supabase
+      .from("subject_correction_requests")
+      .select("id, message, status, resolution_note, created_at")
+      .eq("student_id", currentUser.id)
+      .order("created_at", { ascending: false });
+    setMyRequests(data || []);
+  };
+
+  useEffect(() => {
+    loadMyRequests();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
+
+  const submitCorrectionRequest = async () => {
+    const message = reportMessage.trim();
+    if (!message) {
+      setReportError("Please describe the issue with your subject list.");
+      return;
+    }
+    setReportBusy(true);
+    setReportError("");
+    try {
+      const { error } = await supabase.from("subject_correction_requests").insert({
+        student_id: currentUser.id,
+        message,
+      });
+      if (error) throw error;
+      setReportMessage("");
+      setShowReportIssue(false);
+      await loadMyRequests();
+    } catch (err) {
+      setReportError(err.message || "Could not submit your request. Please try again.");
+    } finally {
+      setReportBusy(false);
+    }
+  };
 
   const now = new Date();
   const hour = now.getHours();
@@ -242,13 +284,6 @@ export default function StudentDashboard() {
             onClick={() => navigate("/student/evaluate")}
           >
             Evaluate Now <ChevronRight size={16} />
-          </button>
-          <button
-            type="button"
-            className="sdb-bellBtn"
-            aria-label="Notifications"
-          >
-            <Bell size={18} />
           </button>
         </div>
       </div>
@@ -351,13 +386,22 @@ export default function StudentDashboard() {
                 <Info size={14} />
                 Click "Evaluate" or go to Evaluate Teacher to submit your evaluations.
               </p>
-              <button
-                type="button"
-                className="se-editEnrollmentBtn"
-                onClick={() => navigate("/student/evaluate")}
-              >
-                Go to Evaluate Teacher
-              </button>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="se-editEnrollmentBtn"
+                  onClick={() => setShowReportIssue(true)}
+                >
+                  Report Subject Issue
+                </button>
+                <button
+                  type="button"
+                  className="se-editEnrollmentBtn"
+                  onClick={() => navigate("/student/evaluate")}
+                >
+                  Go to Evaluate Teacher
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -421,6 +465,77 @@ export default function StudentDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Phase 3: report a wrong subject list; admin resolves it. */}
+      {showReportIssue && (
+        <div className="se-modal" role="dialog" aria-modal="true">
+          <div className="se-modalOverlay" onClick={() => setShowReportIssue(false)} />
+          <div className="se-modalContent" style={{ maxWidth: "520px" }}>
+            <div className="se-modalHeader">
+              <div>
+                <h3 className="se-modalTitle">Report Subject Issue</h3>
+                <p className="se-modalSubtitle" style={{ margin: "4px 0 0", fontSize: "13px", color: "#6b7280" }}>
+                  Wrong subject or teacher on your list? Tell your admin — they will correct it.
+                </p>
+              </div>
+              <button type="button" className="se-modalClose" onClick={() => setShowReportIssue(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="se-modalBody">
+              <textarea
+                value={reportMessage}
+                onChange={(e) => setReportMessage(e.target.value)}
+                rows={4}
+                maxLength={1000}
+                placeholder="Example: I am in BSIT 2-A but I see subjects for BSIT 2-B…"
+                style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "14px", resize: "vertical" }}
+              />
+              {reportError && (
+                <p style={{ color: "#dc2626", fontSize: "13px", margin: "8px 0 0" }}>{reportError}</p>
+              )}
+              {myRequests.length > 0 && (
+                <div style={{ marginTop: "16px" }}>
+                  <h4 style={{ fontSize: "13px", fontWeight: 700, color: "#374151", marginBottom: "8px" }}>
+                    My reports
+                  </h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "220px", overflowY: "auto" }}>
+                    {myRequests.map((r) => (
+                      <div key={r.id} style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px 12px", fontSize: "13px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
+                          <span style={{ fontWeight: 600, textTransform: "capitalize", color: r.status === "new" ? "#d97706" : r.status === "resolved" ? "#16a34a" : "#6b7280" }}>
+                            {r.status}
+                          </span>
+                          <span style={{ color: "#9ca3af", fontSize: "12px" }}>
+                            {r.created_at ? new Date(r.created_at).toLocaleDateString() : ""}
+                          </span>
+                        </div>
+                        <p style={{ margin: "6px 0 0", color: "#374151" }}>{r.message}</p>
+                        {r.resolution_note && (
+                          <p style={{ margin: "6px 0 0", color: "#16a34a" }}>Admin: {r.resolution_note}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="se-modalFooter">
+              <button type="button" className="se-modalBtn se-modalBtn--cancel" onClick={() => setShowReportIssue(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="se-modalBtn se-modalBtn--submit"
+                onClick={submitCorrectionRequest}
+                disabled={reportBusy}
+              >
+                {reportBusy ? "Sending..." : "Send Report"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </StudentLayout>
   );
 }

@@ -1,5 +1,39 @@
 # Edge Functions — Deploy Notes
 
+## Phase 8 (no migration — summarize-comments + admin-analyst)
+
+No SQL to apply. Deploy the two new functions and release the frontend build:
+
+```
+supabase functions deploy summarize-comments
+supabase functions deploy admin-analyst
+```
+
+Both reuse `GROQ_API_KEY` (already set) — the candidate chain is
+`openai/gpt-oss-safeguard-20b` → `openai/gpt-oss-20b` on Groq, then
+`gpt-4o-mini` on OpenAI if that key is ever added. No key → 503 with a
+clean fallback message (wordlist/moderation flows are unaffected).
+
+Smoke tests:
+- Faculty → Evaluation Results → "AI Summary" button → modal shows the
+  "AI-generated summary" label, the count, and (for < 5 comments) the
+  small-sample caveat; summary covers the selected period only [D1].
+- Faculty cannot summarize someone else: invoke the function with a
+  foreign faculty_id → 403.
+- Unreleased period → 403 "not been released yet" (faculty and admin both).
+- Admin → AI Analyst (/admin/ai-analyst): suggestion chips produce
+  answers that cite the digest numbers; asking about comment content gets
+  the "separate feature, aggregate numbers only" reply; asking about a
+  program outside scope gets a refusal grounded in the scope banner.
+- Scoped admin: scope banner lists only their programs; unassigned admin
+  → 403 "no program assignments"; super admin sees ALL programs.
+- Audit: `SELECT action, created_at FROM audit_log ORDER BY created_at
+  DESC LIMIT 5;` shows `ai.summary` / `ai.analyst` rows (with question +
+  answer preview for the analyst; counts only for summaries).
+- Rate limit: 31st analyst question within an hour → 429.
+- Role separation [Req 6]: students have NO AI surface (no summary UI, no
+  analyst route; both functions reject non-faculty/non-admin callers).
+
 ## Phase 7 (migration 013 + export-report — super admin & scoping)
 
 `export-report` is deployed. After applying `013_phase7_super_admin_scoping.sql`,

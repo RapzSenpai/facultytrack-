@@ -100,16 +100,19 @@ export default function AdminDashboard() {
           setActiveYear(active);
         }
 
-        // Calculate evaluations specific to this period
+        // Calculate evaluations specific to this period.
+        // Anonymity note: admin_evaluations_anon carries student_token
+        // (MD5), not users.id — so the student-exists check must NOT
+        // compare against studentsMapped ids (it can never match).
+        // Faculty existence is still verified; participants are
+        // counted as distinct tokens.
         const periodEvalsRaw = active
           ? evaluationsMapped.filter(e => {
             if (e.academicYear !== active.year || e.semester !== active.semester) return false;
             // Ensure the evaluated faculty still exists in the system
             const f = facultyMapped.find(fac => fac.id === e.facultyId);
             if (!f) return false;
-            // Ensure the student who submitted it still exists
-            const s = studentsMapped.find(st => st.id === e.studentId);
-            return !!s;
+            return true;
           })
           : [];
 
@@ -329,7 +332,7 @@ export default function AdminDashboard() {
                   <h3 className="mockup-panel-title">Recent Registrations</h3>
                   <p className="mockup-panel-subtitle">Latest faculty and student accounts.</p>
                 </div>
-                <a href="#" className="mockup-panel-action">View all →</a>
+                <Link to="/admin/approvals" className="mockup-panel-action">View all →</Link>
               </div>
               <div className="mockup-table-wrapper">
                 <table className="mockup-table">
@@ -367,7 +370,7 @@ export default function AdminDashboard() {
                   <h3 className="mockup-panel-title">Evaluation Summary</h3>
                   <p className="mockup-panel-subtitle">Overview of the ongoing semester.</p>
                 </div>
-                <a href="#" className="mockup-panel-action">View details →</a>
+                <Link to="/admin/report" className="mockup-panel-action">View details →</Link>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '100%' }}>
                 <div className="mockup-donut-container" style={{ width: '120px' }}>
@@ -453,7 +456,7 @@ export default function AdminDashboard() {
                   <h3 className="mockup-panel-title">Participation by Program</h3>
                   <p className="mockup-panel-subtitle">Evaluation participation rate per program.</p>
                 </div>
-                <a href="#" className="mockup-panel-action">View all →</a>
+                <Link to="/admin/report" className="mockup-panel-action">View all →</Link>
               </div>
               <div>
                 {loading ? (

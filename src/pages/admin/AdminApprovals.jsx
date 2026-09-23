@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { Check, X, Search, AlertCircle, IdCard } from "lucide-react";
+import { logAdminAction } from "../../utils/audit";
 
 export default function AdminApprovals() {
     const [activeTab, setActiveTab] = useState("faculty");
@@ -11,15 +12,20 @@ export default function AdminApprovals() {
     const [pendingFaculty, setPendingFaculty] = useState([]);
     const [pendingStudents, setPendingStudents] = useState([]);
     const [toastMsg, setToastMsg] = useState("");
+    const [fetchError, setFetchError] = useState("");
     const [photoViewer, setPhotoViewer] = useState({ open: false, url: "", name: "" });
 
     const fetchApprovals = async () => {
         setLoading(true);
+        setFetchError("");
         try {
             const [fRes, sRes] = await Promise.all([
                 supabase.from('users').select('*').eq('role', 'faculty'),
                 supabase.from('users').select('*').eq('role', 'student'),
             ]);
+            if (fRes.error || sRes.error) {
+                throw new Error((fRes.error || sRes.error).message);
+            }
             const mapUser = (u) => ({
                 ...u,
                 fullName: u.full_name,
@@ -34,6 +40,7 @@ export default function AdminApprovals() {
             setPendingStudents(sData.filter(u => u.status === 'pending'));
         } catch (err) {
             console.error("Fetch error:", err);
+            setFetchError("Could not load pending accounts: " + (err.message || "permission denied."));
         } finally {
             setLoading(false);
         }
@@ -51,12 +58,13 @@ export default function AdminApprovals() {
                     approved_at: new Date().toISOString(),
                 }).eq('id', uid);
                 if (error) throw error;
+                logAdminAction("account.approve", "users", uid, {});
                 setToastMsg("Account approved successfully! User can now log in.");
                 fetchApprovals();
                 setTimeout(() => setToastMsg(""), 3500);
             } catch (err) {
                 console.error("Approve error:", err);
-                alert("Network error: could not reach the server.");
+                alert("Could not approve the account: " + (err.message || "permission denied."));
             }
         }
     };
@@ -80,6 +88,7 @@ export default function AdminApprovals() {
                     const { error: delError } = await supabase.from('users').delete().eq('id', uid);
                     if (delError) throw delError;
                 }
+                logAdminAction("account.reject", "users", uid, {});
                 setToastMsg("Account rejected and removed successfully.");
                 fetchApprovals();
                 setTimeout(() => setToastMsg(""), 3500);
@@ -92,16 +101,17 @@ export default function AdminApprovals() {
 
     const activeList = activeTab === "faculty" ? pendingFaculty : pendingStudents;
 
-    // Short-TTL signed URL, audit-logged via RPC before every view.
+    // Short-TTL signed URL. The audit RPC runs AFTER the URL is
+    // successfully created, so a failed view never logs as viewed.
     const handleViewPhoto = async (user) => {
         if (!user.schoolIdPhotoPath) return;
         try {
-            const { error: logErr } = await supabase.rpc('log_id_photo_view', { p_path: user.schoolIdPhotoPath });
-            if (logErr) throw logErr;
             const { data, error } = await supabase.storage
                 .from('school-id-photos')
                 .createSignedUrl(user.schoolIdPhotoPath, 60);
             if (error) throw error;
+            const { error: logErr } = await supabase.rpc('log_id_photo_view', { p_path: user.schoolIdPhotoPath });
+            if (logErr) console.warn("Photo view audit failed:", logErr.message);
             setPhotoViewer({ open: true, url: data.signedUrl, name: user.fullName });
         } catch (err) {
             console.error("Photo view error:", err);
@@ -136,6 +146,12 @@ export default function AdminApprovals() {
                     <div style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '12px 18px', borderRadius: '10px', fontWeight: '700', fontSize: '13.5px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <Check size={18} />
                         <span>{toastMsg}</span>
+                    </div>
+                )}
+
+                {fetchError && (
+                    <div style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', padding: '12px 18px', borderRadius: '10px', fontWeight: '600', fontSize: '13.5px', marginBottom: '20px' }}>
+                        {fetchError}
                     </div>
                 )}
 

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { useAuth } from "../../context/AuthContext";
 import { is_period_released } from "../../utils/periodRelease";
+import { logAdminAction } from "../../utils/audit";
 
 const STATUS_COLORS = {
   released: "#16a34a",
@@ -10,23 +12,29 @@ const STATUS_COLORS = {
 };
 
 export default function AdminReleaseManagement() {
+  const { currentUser, userProfile } = useAuth();
+  const isSuper = userProfile?.role === "super_admin";
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [faculty, setFaculty] = useState([]);
   const [releases, setReleases] = useState([]);
   const [years, setYears] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [myDeptIds, setMyDeptIds] = useState([]);
   const [filterYear, setFilterYear] = useState("");
   const [filterSem, setFilterSem] = useState("");
+  const [filterDept, setFilterDept] = useState("");
   const [drafts, setDrafts] = useState({});
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [fRes, rRes, yRes] = await Promise.all([
+        const [fRes, rRes, yRes, dRes] = await Promise.all([
           supabase.from("users").select("id, full_name, department").eq("role", "faculty").order("full_name"),
           supabase.from("evaluation_releases").select("*"),
           supabase.from("academic_years").select("*").order("start_date"),
+          supabase.from("departments").select("id, name").order("name"),
         ]);
         if (cancelled) return;
         const f = fRes.data || [];
@@ -35,6 +43,15 @@ export default function AdminReleaseManagement() {
         setFaculty(f);
         setReleases(r);
         setYears(y);
+        setDepartments(dRes.data || []);
+
+        if (currentUser && !isSuper) {
+          const { data: mine } = await supabase
+            .from("admin_program_assignments")
+            .select("department_id")
+            .eq("admin_id", currentUser.id);
+          if (!cancelled) setMyDeptIds((mine || []).map((a) => a.department_id));
+        }
 
         const active = y.find((row) => (row.status || "").toLowerCase().trim() === "on-going") || y[0];
         if (active) {
@@ -49,7 +66,8 @@ export default function AdminReleaseManagement() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
 
   const periodOptions = useMemo(() => {
     const seen = new Set();
@@ -64,9 +82,19 @@ export default function AdminReleaseManagement() {
     return out;
   }, [years]);
 
-  const periodKey = `${filterYear}__${filterSem}`;
+  // Scope [D9/D10]: super admin manages the global row
+  // (department NULL); a scoped admin manages rows for their own
+  // assigned program(s) only — global rows are super-only per RLS.
+  const myDeptNames = useMemo(
+    () => departments.filter((d) => myDeptIds.includes(d.id)).map((d) => d.name),
+    [departments, myDeptIds],
+  );
+  const scopeDept = isSuper ? null : (myDeptNames.includes(filterDept) ? filterDept : (myDeptNames[0] || ""));
+
+  const periodKey = `${filterYear}__${filterSem}__${scopeDept ?? "global"}`;
+  const periodSelectorValue = `${filterYear}__${filterSem}`;
   const releaseRow = releases.find(
-    (r) => r.academic_year === filterYear && r.semester === filterSem && (r.department ?? null) === null,
+    (r) => r.academic_year === filterYear && r.semester === filterSem && (r.department ?? null) === (scopeDept ?? null),
   );
 
   // [D2] Per-faculty grade status for the selected period — read from
@@ -97,7 +125,6 @@ export default function AdminReleaseManagement() {
 
   const submittedCount = faculty.filter((f) => gradeMap.has(f.id)).length;
 
-  const today = new Date().toISOString().slice(0, 10);
   const derivedStatus = (row) =>
     is_period_released(row) ? "released" : row.approved || row.release_date ? "scheduled" : "draft";
 
@@ -113,6 +140,10 @@ export default function AdminReleaseManagement() {
   };
 
   const handleSave = async () => {
+    if (!isSuper && !scopeDept) {
+      alert("Your account has no program assignment yet. Ask a super admin to assign you a program first.");
+      return;
+    }
     setSaving(true);
     try {
       const approvedBy = currentDraft.approved
@@ -121,7 +152,7 @@ export default function AdminReleaseManagement() {
       const payload = {
         academic_year: filterYear,
         semester: filterSem,
-        department: null,
+        department: scopeDept,
         approved: currentDraft.approved || false,
         approved_by: approvedBy,
         approved_at: currentDraft.approved ? new Date().toISOString() : null,
@@ -143,6 +174,10 @@ export default function AdminReleaseManagement() {
       }
       const { data: refreshed } = await supabase.from("evaluation_releases").select("*");
       setReleases(refreshed || []);
+      logAdminAction("release.save", "evaluation_releases", `${filterYear}:${filterSem}:${scopeDept ?? "global"}`, {
+        approved: currentDraft.approved || false,
+        release_date: currentDraft.release_date || null,
+      });
       setDrafts((prev) => {
         const next = { ...prev };
         delete next[periodKey];
@@ -180,7 +215,7 @@ export default function AdminReleaseManagement() {
             {/* Period picker + release controls */}
             <div className="ad-filterCard">
               <div className="ad-filterGroup" style={{ gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}>
-                <select className="ad-filterSelect" value={periodKey} onChange={(e) => {
+                <select className="ad-filterSelect" value={periodSelectorValue} onChange={(e) => {
                   const [year, sem] = e.target.value.split("__");
                   setFilterYear(year);
                   setFilterSem(sem);
@@ -192,21 +227,39 @@ export default function AdminReleaseManagement() {
                   ))}
                 </select>
                 <div
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: "8px 16px",
-                    borderRadius: "999px",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    color: STATUS_COLORS[releaseRow ? effectiveStatus : "draft"],
-                    background: `${STATUS_COLORS[releaseRow ? effectiveStatus : "draft"]}15`,
-                  }}
-                >
-                  {(releaseRow ? effectiveStatus : "draft").toUpperCase()}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "8px 16px",
+                      borderRadius: "999px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      color: STATUS_COLORS[releaseRow ? effectiveStatus : "draft"],
+                      background: `${STATUS_COLORS[releaseRow ? effectiveStatus : "draft"]}15`,
+                    }}
+                  >
+                    {(releaseRow ? effectiveStatus : "draft").toUpperCase()}
+                  </div>
+                  {!isSuper && (
+                    <select
+                      className="ad-filterSelect"
+                      value={scopeDept}
+                      onChange={(e) => setFilterDept(e.target.value)}
+                      title="Your assigned program"
+                    >
+                      {myDeptNames.length === 0 && <option value="">No program assigned</option>}
+                      {myDeptNames.map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
-              </div>
+                {!isSuper && myDeptNames.length === 0 && (
+                  <div style={{ marginTop: "12px", fontSize: "13px", color: "#b45309" }}>
+                    Your account has no program assignment yet — release controls stay disabled until a super admin assigns you a program.
+                  </div>
+                )}
 
               <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "flex-end", marginTop: "16px" }}>
                 <div>
@@ -215,7 +268,6 @@ export default function AdminReleaseManagement() {
                     type="date"
                     className="ad-filterSelect"
                     value={currentDraft.release_date || ""}
-                    min={today}
                     onChange={(e) => setDraft({ release_date: e.target.value })}
                   />
                 </div>
@@ -230,7 +282,7 @@ export default function AdminReleaseManagement() {
                 <button
                   type="button"
                   className="ad-btnSearch"
-                  disabled={saving || !filterYear}
+                  disabled={saving || !filterYear || (!isSuper && !scopeDept)}
                   onClick={handleSave}
                   style={{ opacity: saving ? 0.6 : 1 }}
                 >
@@ -239,6 +291,8 @@ export default function AdminReleaseManagement() {
               </div>
 
               <div style={{ marginTop: "12px", fontSize: "13px", color: "#6b7280" }}>
+                Scope: <strong>{isSuper ? "All programs (global)" : (scopeDept || "—")}</strong>
+                {" · "}
                 {releaseRow
                   ? `Saved: ${releaseRow.approved ? "approved" : "not approved"}, release date ${releaseRow.release_date || "—"}`
                   : "No release row saved for this period yet."}

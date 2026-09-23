@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { logAdminAction } from "../../utils/audit";
 import {
   AlertTriangle,
   Check,
@@ -120,12 +121,21 @@ export default function AdminSubjectCorrections() {
       if (error) throw new Error(error.message);
       setResolving(null);
       setResolutionNote("");
+      logAdminAction("correction.resolve", "subject_correction_requests", resolving.id, { status });
       fetchData();
     } catch (err) {
       alert("Error: " + err.message);
     } finally {
       setResolvingBusy(false);
     }
+  };
+
+  const normalizeValue = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const isMatch = (a, b) => {
+    if (!a || !b) return false;
+    const n1 = normalizeValue(a);
+    const n2 = normalizeValue(b);
+    return n1 !== "" && n1 === n2;
   };
 
   // ---------------- Per-student subject adjustment ----------------
@@ -147,14 +157,6 @@ export default function AdminSubjectCorrections() {
         .eq("academic_year", year)
         .eq("semester", semester)
         .maybeSingle();
-
-      const normalize = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-      const isMatch = (a, b) => {
-        if (!a || !b) return false;
-        const n1 = normalize(a);
-        const n2 = normalize(b);
-        return n1 === n2 || n1.includes(n2) || n2.includes(n1);
-      };
 
       const rows = assignments || [];
       setActiveAssignments(rows);
@@ -272,14 +274,17 @@ export default function AdminSubjectCorrections() {
         .eq("semester", adjustSemester);
       if (error) throw new Error(error.message);
       setExistingKind("auto");
+      logAdminAction("enrollment.override_clear", "student_enrollments", adjusting.id, {
+        academic_year: adjustYear,
+        semester: adjustSemester,
+      });
       setSelectedIds(
         new Set(
           activeAssignments
-            .filter(
-              (a) =>
-                (a.department || "").toLowerCase() === (adjusting.department || "").toLowerCase() &&
-                (a.year_level || "").toLowerCase() === (adjusting.year_level || "").toLowerCase() &&
-                (a.section || "").toLowerCase() === (adjusting.section || "").toLowerCase()
+            .filter((a) =>
+              isMatch(a.department, adjusting.department) &&
+              isMatch(a.year_level, adjusting.year_level) &&
+              isMatch(a.section, adjusting.section)
             )
             .map((a) => a.id)
         )
@@ -312,6 +317,10 @@ export default function AdminSubjectCorrections() {
       if (error) throw new Error(error.message);
       setExistingKind("admin");
       setAdjustMsg("Saved — the student now evaluates exactly the subjects selected above.");
+      logAdminAction("enrollment.override", "student_enrollments", adjusting.id, {
+        academic_year: adjustYear,
+        semester: adjustSemester,
+      });
     } catch (err) {
       alert("Error: " + err.message);
     } finally {

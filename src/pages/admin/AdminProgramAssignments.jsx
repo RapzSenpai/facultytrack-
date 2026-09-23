@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import AdminLayout from "./AdminLayout";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
+import { logAdminAction } from "../../utils/audit";
 
 // Phase 7 [D8/D9]: Program Head = Admin with a program assignment.
 // Only the super admin manages assignments here; RLS enforces the
@@ -89,6 +90,10 @@ export default function AdminProgramAssignments() {
         ...prev.filter((a) => a.admin_id !== selectedAdmin),
         ...[...checked].map((department_id) => ({ admin_id: selectedAdmin, department_id })),
       ]);
+      logAdminAction("program_assignments.save", "admin_program_assignments", selectedAdmin, {
+        added: toAdd.length,
+        removed: toRemove.length,
+      });
     } catch (err) {
       console.error("Failed to save assignments:", err);
       alert("Could not save the program assignments. Please try again.");

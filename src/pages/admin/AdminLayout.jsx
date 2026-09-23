@@ -14,6 +14,7 @@ import {
   LogOut,
   ChevronRight,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
@@ -53,6 +54,7 @@ const navSections = [
       { key: "moderation", label: "Moderation & Priority", path: "/admin/moderation", icon: ClipboardCheck },
       { key: "questionnaire", label: "Questionnaire", path: "/admin/questionnaire", icon: FileText },
       { key: "report", label: "Evaluation Report", path: "/admin/report", icon: FileText },
+      { key: "ai-analyst", label: "AI Analyst", path: "/admin/ai-analyst", icon: Sparkles },
     ],
   },
 ];

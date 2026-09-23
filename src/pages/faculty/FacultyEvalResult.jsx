@@ -133,6 +133,13 @@ export default function FacultyEvalResult() {
   const [loading, setLoading] = useState(true);
   // Phase 5 [D4]: periods with evaluations but no release yet.
   const [pendingStatuses, setPendingStatuses] = useState([]);
+  // Phase 8 (Req 5/6): on-demand AI summary of this period's
+  // anonymized comments (scope = this teacher, all subjects, one
+  // period [D1]). The Edge Function re-checks scope + release.
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryData, setSummaryData] = useState(null);
+  const [summaryError, setSummaryError] = useState(null);
   const { currentUser, userProfile } = useAuth();
 
   // Close period dropdown on outside click
@@ -202,6 +209,46 @@ export default function FacultyEvalResult() {
 
   const displayName = userProfile?.fullName || "Faculty";
   const evaluationData = selectedPeriod ? evaluationPeriods[selectedPeriod] : null;
+
+  const runSummary = async () => {
+    if (!currentUser || !selectedPeriod) return;
+    const [academicYear, semester] = selectedPeriod.split("__");
+    setSummaryLoading(true);
+    setSummaryError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("summarize-comments", {
+        body: {
+          faculty_id: currentUser.id,
+          academic_year: academicYear,
+          semester,
+          subject_code: "",
+        },
+      });
+      if (error) {
+        let msg = "AI summary is temporarily unavailable.";
+        try {
+          const errBody = await error.context.json();
+          if (errBody?.error) msg = errBody.error;
+        } catch {
+          /* keep default message */
+        }
+        setSummaryError(msg);
+      } else if (data) {
+        setSummaryData(data);
+      }
+    } catch {
+      setSummaryError("Could not reach the summary service.");
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  const openSummary = () => {
+    setSummaryData(null);
+    setSummaryError(null);
+    setSummaryOpen(true);
+    runSummary();
+  };
 
   // No evaluations state — Phase 5 distinguishes "nothing at all"
   // from "results exist but are pending admin release" [D4].
@@ -495,10 +542,20 @@ export default function FacultyEvalResult() {
 
             {/* Student Comments & Basic Insights */}
             <div className="fd-remarksCard">
-              <div className="fd-remarksHeader" style={{ borderLeftColor: "#3b82f6" }}>
+              <div className="fd-remarksHeader" style={{ borderLeftColor: "#3b82f6", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
                 <h3 className="fd-remarksTitle" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   Student Feedback & Insights
                 </h3>
+                <button
+                  type="button"
+                  onClick={openSummary}
+                  disabled={summaryLoading}
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "#0f172a", color: "#fff", border: "none", borderRadius: "8px", padding: "8px 14px", fontSize: "12.5px", fontWeight: 700, cursor: summaryLoading ? "wait" : "pointer", whiteSpace: "nowrap" }}
+                  title="AI-generated summary of anonymized comments for this period"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.9 5.7a2 2 0 0 0 1.3 1.3L21 11l-5.8 2a2 2 0 0 0-1.3 1.3L12 20l-1.9-5.7a2 2 0 0 0-1.3-1.3L3 11l5.8-2a2 2 0 0 0 1.3-1.3L12 2z" /></svg>
+                  AI Summary
+                </button>
               </div>
               
               <div className="fd-remarksContent" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -563,6 +620,78 @@ export default function FacultyEvalResult() {
           </>
         )}
       </section>
+
+      {/* Phase 8 (Req 5/6): AI summary modal — labeled AI-generated,
+          shows the small-sample caveat, never shows identity (there
+          is none: scope is anonymized comments only). */}
+      {summaryOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => { if (!summaryLoading) setSummaryOpen(false); }}
+          style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1050, padding: "20px" }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "#fff", borderRadius: "12px", maxWidth: "640px", width: "100%", maxHeight: "80vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 22px", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0, background: "#fff", borderRadius: "12px 12px 0 0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ background: "#eef2ff", color: "#4f46e5", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.5px", padding: "4px 10px", borderRadius: "999px" }}>
+                  AI-generated summary
+                </span>
+                {evaluationData && (
+                  <span style={{ fontSize: "12px", color: "#6b7280" }}>{evaluationData.periodShort}</span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSummaryOpen(false)}
+                style={{ background: "none", border: "none", fontSize: "20px", lineHeight: 1, color: "#6b7280", cursor: "pointer" }}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ padding: "20px 22px" }}>
+              {summaryLoading && (
+                <div style={{ textAlign: "center", padding: "36px 12px", color: "#6b7280", fontSize: "14px" }}>
+                  Generating AI summary of your anonymized comments…
+                </div>
+              )}
+
+              {!summaryLoading && summaryError && (
+                <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", borderRadius: "8px", padding: "14px 16px", fontSize: "13.5px" }}>
+                  {summaryError}
+                  <div style={{ marginTop: "12px" }}>
+                    <button type="button" onClick={runSummary} style={{ background: "#0f172a", color: "#fff", border: "none", borderRadius: "6px", padding: "7px 14px", fontSize: "12.5px", fontWeight: 700, cursor: "pointer" }}>
+                      Try again
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!summaryLoading && summaryData && (
+                <>
+                  {summaryData.caveat && (
+                    <div style={{ background: "#fffbeb", border: "1px solid #fde68a", color: "#92400e", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", marginBottom: "14px" }}>
+                      ⚠ {summaryData.caveat}
+                    </div>
+                  )}
+                  <div style={{ fontSize: "14.5px", color: "#1f2937", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
+                    {summaryData.summary}
+                  </div>
+                  <div style={{ marginTop: "16px", paddingTop: "12px", borderTop: "1px solid #f1f5f9", fontSize: "12px", color: "#9ca3af" }}>
+                    Based on {summaryData.comment_count} anonymized, moderation-approved comment(s) for this period.
+                    {" "}AI-generated content — may contain mistakes. No student identity exists in this data.
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </FacultyLayout>
   );
 }

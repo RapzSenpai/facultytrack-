@@ -121,7 +121,7 @@ Conventions used everywhere: `[CLIENT]` = decided by client · `[REQ]` = origina
 | 5 | Result release gating (Req 7 / D2–D4) | **IN PROGRESS (code complete)** — awaiting 011 application + smoke tests |
 | 6 | Moderation + priority (Req 3, 8 / D6, D7) | **IN PROGRESS (code complete)** — awaiting 012 + function deploy + smoke tests |
 | 7 | Super Admin + program scoping + exports (Req 9, 10 / D8–D11) | **IN PROGRESS (code complete)** — awaiting 013 + super-admin provisioning + smoke tests |
-| 8 | AI chatbox + summaries + role separation (Req 4, 5, 6) | Not started |
+| 8 | AI chatbox + summaries + role separation (Req 4, 5, 6) | **IN PROGRESS (code complete)** — awaiting function deploys + frontend release + smoke tests |
 
 ---
 
@@ -429,14 +429,56 @@ bottom of the migration file).### Phase 5 — Result Release Gating (Req 7 / D2�
    scoped admin export contains only their faculty; every export lands in audit_log;
    reveal RPC is super-admin-only and audit-logged.
 
-### Phase 8 — AI Chatbox + Summaries + Role Separation (Req 4, 5, 6) — planned
+### Phase 8 — AI Chatbox + Summaries + Role Separation (Req 4, 5, 6) — code complete, 🚧 pending deploy/smoke
 
-- `summarize-comments` Edge Function: on demand, scope = teacher/subject/period [D1];
-  identity-scrubbed; small-class caveat shown.
-- `admin-analyst` Edge Function: tool-calling over a FIXED query set (program averages,
-  lowest-rated, weak criteria, flagged/priority counts, participation gaps, trends); scope
-  enforced in SQL from the caller's assignment; answers require evidence + "AI-generated" label;
-  chat transcripts to `audit_log`. Never sees `student_id`.
+**Delivered:**
+- `supabase/functions/summarize-comments` (Edge Function, no migration needed):
+  - Scope [D1] = one teacher + per subject + per period; caller passes
+    faculty_id/academic_year/semester (+ optional subject_code, '' = all subjects
+    of the period); the function re-resolves scope from the DB — the client cannot
+    widen it.
+  - Access [Req 6]: faculty → own evaluations only; admin/super_admin → anyone,
+    but only RELEASED periods (same rule as §4.7).
+  - Only `moderation_status='allow'` comments feed the summary — flagged/blocked
+    text NEVER reaches AI output (D6 spirit). No student_id/student_token is ever
+    selected; the prompt additionally forbids identity inference.
+  - Small-class caveat: < 5 comments → returned `caveat` shown in the modal.
+  - Every call audit-logged (`ai.summary`, counts only, no comment content).
+  - AI down → 503 with fallback guidance; raw anonymized comments remain on the page.
+- `supabase/functions/admin-analyst` (Edge Function, no migration needed):
+  - Tool-free fixed query set [Req 4]: the function computes a FIXED aggregate
+    digest server-side — program averages, lowest-rated faculty (bottom 10), weak
+    criteria, moderation/priority counts, participation gaps (classes/faculty
+    without evaluations), per-period trends. The model only ever sees that digest —
+    it cannot query anything else.
+  - Scope [D9] from the caller's `admin_program_assignments` (super admin = all;
+    unassigned admin → 403); ratings aggregates cover RELEASED periods only.
+  - NO identity selection anywhere: no student_id/token, no comments, no summary
+    text. Faculty names ARE included (faculty are not anonymous; students are).
+  - Every Q&A audit-logged (`ai.analyst`, question + answer preview + scope).
+  - Soft rate limit: 30 questions/hour/caller (audit-log based).
+- `src/pages/faculty/FacultyEvalResult.jsx`: "AI Summary" button in the feedback
+  card header + modal ("AI-generated summary" label, small-sample caveat, count
+  disclosure, retry on AI unavailability). Per-period scope [D1].
+- `src/pages/admin/AdminAIAnalyst.jsx` (route `/admin/ai-analyst`, nav "AI Analyst"
+  under MANAGE EVALUATION, admin + super admin): chat UI with suggestion chips,
+  thinking state, persistent "AI-generated" label per answer, scope banner (which
+  programs the AI may see), audit-log disclosure in the header.
+- Role separation [Req 6] now complete: student none · faculty summaries +
+  escalation notice · admin scoped analysis · super admin all + audit.
+
+**Remaining for Phase 8 completion (user steps, in order):**
+1. Deploy the two new functions:
+   ```
+   supabase functions deploy summarize-comments
+   supabase functions deploy admin-analyst
+   ```
+2. Release the new frontend build.
+3. Smoke tests (README §Phase 8): faculty summary for own period + small-sample
+   caveat + faculty cannot pass another faculty_id; admin analyst answers cite
+   numbers, refuses what the digest cannot answer; scoped admin sees only their
+   programs in the scope banner; unassigned admin gets 403; audit rows appear
+   (`ai.summary` / `ai.analyst`); student has NO AI surface anywhere.
 
 ---
 
@@ -465,8 +507,8 @@ columns; RPC `get_faculty_escalation_status()`.
 **Rule helpers:** `is_period_released()` (011, §4.7), `is_admin()` / `is_faculty()` /
 `current_user_department()` (005/010).
 
-**Edge Functions:** `submit-evaluation` (live) · planned: `summarize-comments`,
-`admin-analyst`, `export-report`.
+**Edge Functions:** `submit-evaluation` (live) · `export-report` (live, Phase 7) ·
+`summarize-comments` + `admin-analyst` (Phase 8, written — deploy pending).
 
 ---
 

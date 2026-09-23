@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { Search, X, List, Calendar, CheckCircle, AlertCircle, Info, MessageSquare } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
+import { parseFunctionError } from "../../utils/audit";
+import { isAssignmentMatch } from "../../utils/assignmentMatch";
 import StudentLayout from "./StudentLayout";
 
 // Institutional fallback criteria so questionnaire is never blank
@@ -73,12 +75,15 @@ export default function StudentEvaluation() {
 
     (async () => {
       try {
-        const [assignmentsRes, submissionsRes, criteriaRes, questionsRes, yearsRes] = await Promise.all([
+        const [assignmentsRes, submissionsRes, criteriaRes, questionsRes, yearsRes, enrollmentRes] = await Promise.all([
           supabase.from("class_assignments").select("*"),
           supabase.from("evaluations").select("*").eq("student_id", currentUser.id),
           supabase.from("criteria").select("*"),
           supabase.from("questions").select("*"),
           supabase.from("academic_years").select("*"),
+          supabase.from("student_enrollments")
+            .select("confirmed_assignments, excluded_assignments, enrollment_kind, academic_year, semester")
+            .eq("student_id", currentUser.id),
         ]);
 
         const assignments = (assignmentsRes.data || []).map((a) => ({
@@ -154,34 +159,27 @@ export default function StudentEvaluation() {
           (a) => a.academicYear === active.year && a.semester === active.semester
         );
 
-        // Robust normalizers
-        const normalizeYear = (y) => {
-          if (!y) return "";
-          const str = String(y).toLowerCase().replace(/[^a-z0-9]/g, "");
-          if (str.includes("1") || str.includes("first")) return "1";
-          if (str.includes("2") || str.includes("second")) return "2";
-          if (str.includes("3") || str.includes("third")) return "3";
-          if (str.includes("4") || str.includes("fourth")) return "4";
-          return str;
-        };
+        // Admin per-student overrides (Phase 3): same semantics as
+        // the submit-evaluation Edge Function — an admin/exception
+        // list governs fully, otherwise section match ∪ confirmed
+        // minus excluded.
+        const enrollment = (enrollmentRes.data || []).find(
+          (r) => r.academic_year === active.year && r.semester === active.semester
+        ) || null;
+        const confirmedSet = new Set(enrollment?.confirmed_assignments || []);
+        const excludedSet = new Set(enrollment?.excluded_assignments || []);
+        const isAdminList =
+          enrollment?.enrollment_kind === "admin" ||
+          enrollment?.enrollment_kind === "exception";
 
-        const normalizeSection = (s) => {
-          if (!s) return "";
-          return String(s).toLowerCase().replace(/section/g, "").replace(/[^a-z0-9]/g, "");
-        };
-
-        const normalizeDept = (d) => {
-          if (!d) return "";
-          return String(d).toLowerCase().replace(/[^a-z0-9]/g, "");
-        };
-
-        // Automatic matching
+        // Automatic matching (exact normalized equality — mirrors
+        // the server gate).
         const matchedFaculty = activeAssignments
           .filter((a) => {
-            const deptMatch = normalizeDept(a.department) === normalizeDept(studentDept);
-            const yearMatch = normalizeYear(a.yearLevel) === normalizeYear(studentYear);
-            const sectionMatch = normalizeSection(a.section) === normalizeSection(studentSection);
-            return deptMatch && yearMatch && sectionMatch;
+            if (excludedSet.has(a.id)) return false;
+            if (isAdminList) return confirmedSet.has(a.id);
+            if (confirmedSet.has(a.id)) return true;
+            return isAssignmentMatch(a, studentDept, studentYear, studentSection);
           })
           .map((a) => {
             const subData = subMap.get(a.id);
@@ -210,6 +208,18 @@ export default function StudentEvaluation() {
             setSelectedFaculty(target);
             setSelectedSubjectId(target.assignmentId);
             setSearchQuery(target.name || "");
+          }
+        } else {
+          const initialFacultyId = searchParams.get("facultyId");
+          if (initialFacultyId) {
+            const target = matchedFaculty.find(
+              (f) => f.facultyId === initialFacultyId && f.status !== "submitted"
+            );
+            if (target) {
+              setSelectedFaculty(target);
+              setSelectedSubjectId(target.assignmentId);
+              setSearchQuery(target.name || "");
+            }
           }
         }
       } catch (err) {
@@ -266,7 +276,7 @@ export default function StudentEvaluation() {
         },
       });
 
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(await parseFunctionError(error, "Submission failed."));
       if (data?.error) throw new Error(data.error);
 
       const submittedAt = data?.evaluation?.submitted_at;
@@ -295,7 +305,7 @@ export default function StudentEvaluation() {
       setComment("");
       setIsPriority(false);
 
-      if (moderationStatus === "flagged") {
+      if (moderationStatus === "flag") {
         alert(`Evaluation for ${selectedFaculty.name} submitted. Your comment was flagged for review and will be checked by the administrator before release.`);
       } else if (isPriority) {
         alert(`Priority evaluation for ${selectedFaculty.name} submitted. The administrator will review it.`);

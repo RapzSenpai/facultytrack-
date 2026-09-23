@@ -39,15 +39,43 @@ function json(payload: unknown, status: number): Response {
 // Mirror of the client-side matching logic in
 // StudentEvaluation.jsx / StudentDashboard.jsx so the server-side
 // authorized-list check behaves identically to today's UI flow.
+// Field-specific normalizers (year -> digit, section strips the
+// word "section") match the client exactly; generic substring
+// matching is NOT used (section "1" must not match "10A).
 function normalize(s: unknown): string {
   return (s ?? "").toString().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function normalizeYear(y: unknown): string {
+  if (!y) return "";
+  const str = normalize(y);
+  if (str.includes("1") || str.includes("first")) return "1";
+  if (str.includes("2") || str.includes("second")) return "2";
+  if (str.includes("3") || str.includes("third")) return "3";
+  if (str.includes("4") || str.includes("fourth")) return "4";
+  return str;
+}
+
+function normalizeSection(s: unknown): string {
+  if (!s) return "";
+  return s.toString().toLowerCase().replace(/section/g, "").replace(/[^a-z0-9]/g, "");
 }
 
 function isMatch(a: unknown, b: unknown): boolean {
   if (!a || !b) return false;
   const n1 = normalize(a);
   const n2 = normalize(b);
-  return n1 === n2 || n1.includes(n2) || n2.includes(n1);
+  // Exact normalized equality only: substring matching (e.g. section
+  // "1" matching "10A") over-authorizes subjects. Genuine mismatches
+  // go through the in-app correction-request flow instead.
+  return n1 !== "" && n1 === n2;
+}
+
+function isFieldMatch(kind: "dept" | "year" | "section", a: unknown, b: unknown): boolean {
+  if (!a || !b) return false;
+  const n1 = kind === "year" ? normalizeYear(a) : kind === "section" ? normalizeSection(a) : normalize(a);
+  const n2 = kind === "year" ? normalizeYear(b) : kind === "section" ? normalizeSection(b) : normalize(b);
+  return n1 !== "" && n1 === n2;
 }
 
 // ------------------------------------------------------------
@@ -242,6 +270,22 @@ Deno.serve(async (req: Request): Promise<Response> => {
         return json({ error: "Each rating must be an integer from 1 to 5." }, 400);
       }
     }
+    // Rating keys must be real question ids — arbitrary keys would
+    // pollute per-criteria aggregates downstream. Fail-open when no
+    // questionnaire is configured yet: the client falls back to its
+    // built-in criteria set (FALLBACK_CRITERIA) in that state.
+    const { data: questionRows, error: qErr } = await admin
+      .from("questions")
+      .select("id");
+    if (qErr) return json({ error: "Could not validate the questionnaire." }, 500);
+    if ((questionRows ?? []).length > 0) {
+      const validIds = new Set((questionRows ?? []).map((q: { id: string }) => q.id));
+      for (const key of Object.keys(ratings)) {
+        if (!validIds.has(key)) {
+          return json({ error: "Unknown question in ratings." }, 400);
+        }
+      }
+    }
 
     // Active period: on-going row, and inside its end date.
     const { data: years, error: yearsErr } = await admin
@@ -296,9 +340,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .maybeSingle();
 
     const selfMatched =
-      isMatch(assignment.department, profile.department) &&
-      isMatch(assignment.year_level, profile.year_level) &&
-      isMatch(assignment.section, profile.section);
+      isFieldMatch("dept", assignment.department, profile.department) &&
+      isFieldMatch("year", assignment.year_level, profile.year_level) &&
+      isFieldMatch("section", assignment.section, profile.section);
 
     const confirmed = enrollment?.confirmed_assignments;
     const excluded = enrollment?.excluded_assignments;

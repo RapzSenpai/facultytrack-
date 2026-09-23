@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
+import { parseFunctionError } from "../../utils/audit";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -27,6 +28,13 @@ const getPerformanceColor = (r) => {
   if (n >= 3.0) return "#f59e0b";
   return "#ef4444";
 };
+
+const escapeHtml = (value) => String(value ?? "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/\"/g, "&quot;")
+  .replace(/'/g, "&#39;");
 
 // SVG Icons
 const BarChartIcon = () => (
@@ -68,6 +76,7 @@ export default function AdminReport() {
   const [filterDept, setFilterDept] = useState("");
   const [departmentsList, setDepartmentsList] = useState([]);
   const [academicYearsList, setAcademicYearsList] = useState([]);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -141,7 +150,6 @@ export default function AdminReport() {
 
       const uniqueStudents = new Set(assignmentEvals.map(e => e.studentId)).size;
       const allScores = assignmentEvals.flatMap(e => Object.values(e.ratings || {}).map(Number));
-      const comments = assignmentEvals.map(e => e.comment).filter(c => c && c.trim().length > 0);
 
       return {
         id: assignment.id,
@@ -153,7 +161,6 @@ export default function AdminReport() {
         students: uniqueStudents,
         formCount: assignmentEvals.length,
         rating: avg(allScores),
-        comments,
       };
     })
     .filter(r => !filterFaculty || r.facultyId === filterFaculty)
@@ -193,8 +200,6 @@ export default function AdminReport() {
 
   const hasChartData = deptData.length > 0 || pieData.length > 0;
 
-  const handleSearch = () => { };
-
   // Phase 7 [D11/D13]: stats-only export via the export-report Edge
   // Function. The function returns numbers + labels only — comments,
   // AI summaries and identities are excluded server-side (D13).
@@ -208,7 +213,7 @@ export default function AdminReport() {
       const { data, error } = await supabase.functions.invoke("export-report", {
         body: { academic_year: filterAY, semester: filterSem },
       });
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(await parseFunctionError(error, "Export failed."));
       if (data?.error) throw new Error(data.error);
 
       // Build a CSV from the stats payload.
@@ -246,99 +251,129 @@ export default function AdminReport() {
   }
   };
 
-  // ── PDF Export ──────────────────────────────────────────────
-  const handleExportPDF = () => {
-    if (reportData.length === 0) {
-      alert("No data to export. Please adjust your filters.");
+  // ── PDF Export (D13: statistics only) ──────────────────────
+  // Goes through the export-report Edge Function so program scope
+  // is enforced server-side and every export is audit-logged.
+  // The payload contains numbers + labels only — no comments,
+  // no AI summaries, no identities — so the PDF cannot leak them.
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const handleExportPDF = async () => {
+    if (!filterAY || !filterSem) {
+      alert("Pick a specific academic year and semester before exporting.");
       return;
     }
 
-    const ayLabel  = filterAY  || "All Academic Years";
-    const semLabel = filterSem || "All Semesters";
-    const deptLabel = filterDept || "All Programs";
-    const now = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
-
-    const ratingColor = (r) => {
-      const n = Number(r);
-      if (isNaN(n)) return "#6b7280";
-      if (n >= 4.5) return "#16a34a";
-      if (n >= 4.0) return "#2563eb";
-      if (n >= 3.0) return "#d97706";
-      return "#dc2626";
-    };
-
-    const rows = reportData.map((r, i) => `
-      <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'}">
-        <td>${i + 1}</td>
-        <td><strong>${r.faculty}</strong></td>
-        <td>${r.department}</td>
-        <td>${r.subject}</td>
-        <td>${r.section}</td>
-        <td style="text-align:center">${r.students}</td>
-        <td style="text-align:center">${r.formCount}</td>
-        <td style="text-align:center;font-weight:700;color:${ratingColor(r.rating)}">${r.rating !== "—" ? r.rating : "—"}</td>
-        <td style="color:${ratingColor(r.rating)};font-weight:600">${getPerformanceLabel(r.rating)}</td>
-      </tr>
-    `).join("");
-
-    const commentsSection = reportData
-      .filter(r => r.comments.length > 0)
-      .map(r => `
-        <div style="margin-bottom:16px;page-break-inside:avoid">
-          <div style="font-weight:700;color:#1e3a8a;margin-bottom:6px;font-size:13px">${r.faculty} — ${r.subject} (${r.section})</div>
-          ${r.comments.map(c => `<div style="background:#f8fafc;border-left:3px solid #3b82f6;padding:8px 12px;margin-bottom:6px;font-size:12px;color:#374151;border-radius:4px">"${c}"</div>`).join("")}
-        </div>
-      `).join("");
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8"/>
-        <title>Evaluation Report — ${ayLabel} ${semLabel}</title>
-        <style>
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; font-size: 13px; padding: 32px; }
-          .header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #1e3a8a; padding-bottom: 16px; }
-          .header h1 { font-size: 20px; color: #1e3a8a; font-weight: 800; letter-spacing: -0.5px; }
-          .header h2 { font-size: 14px; color: #374151; font-weight: 600; margin-top: 4px; }
-          .meta { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 12px; color: #6b7280; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 28px; font-size: 12px; }
-          th { background: #1e3a8a; color: #fff; padding: 9px 10px; text-align: left; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; }
-          td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
-          .section-title { font-size: 14px; font-weight: 700; color: #1e3a8a; margin: 24px 0 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
-          .footer { margin-top: 32px; text-align: center; font-size: 11px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 12px; }
-          @media print { body { padding: 20px; } }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>FacultyTrack — Faculty Evaluation Report</h1>
-          <h2>${ayLabel} &bull; ${semLabel} &bull; ${deptLabel}</h2>
-        </div>
-        <div class="meta">
-          <span>Generated: ${now}</span>
-          <span>Total Records: ${reportData.length}</span>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th><th>Faculty Name</th><th>Program</th><th>Subject</th>
-              <th>Section</th><th>Students</th><th>Forms</th><th>Avg Rating</th><th>Performance</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-        ${commentsSection ? `<div class="section-title">Student Comments</div>${commentsSection}` : ""}
-        <div class="footer">FacultyTrack Faculty Evaluation System &mdash; Confidential</div>
-        <script>window.onload = () => { window.print(); }</script>
-      </body>
-      </html>
-    `;
-
     const win = window.open("", "_blank", "width=900,height=700");
-    win.document.write(html);
-    win.document.close();
+    if (!win) {
+      alert("Popup blocked. Allow popups for this site to export the PDF.");
+      return;
+    }
+
+    setExportingPdf(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("export-report", {
+        body: { academic_year: filterAY, semester: filterSem },
+      });
+      if (error) {
+        const parsed = await error.context?.json?.().catch(() => null);
+        throw new Error(parsed?.error || error.message);
+      }
+      if (data?.error) throw new Error(data.error);
+
+      const faculties = data.report?.faculties || [];
+      if (faculties.length === 0) {
+        win.close();
+        alert("No data to export for the selected period.");
+        return;
+      }
+
+      const ayLabel = filterAY;
+      const semLabel = filterSem;
+      const now = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
+
+      const ratingColor = (r) => {
+        const n = Number(r);
+        if (isNaN(n) || r === null) return "#6b7280";
+        if (n >= 4.5) return "#16a34a";
+        if (n >= 4.0) return "#2563eb";
+        if (n >= 3.0) return "#d97706";
+        return "#dc2626";
+      };
+
+      const rows = faculties.map((f, i) => {
+        const rating = f.average_rating === null ? "—" : Number(f.average_rating).toFixed(2);
+        const dist = f.rating_distribution || {};
+        const distStr = `5:${dist["5"] ?? 0} 4:${dist["4"] ?? 0} 3:${dist["3"] ?? 0} 2:${dist["2"] ?? 0} 1:${dist["1"] ?? 0}`;
+        const subjects = (f.subjects || []).map((subject) => escapeHtml(subject)).join(", ") || "—";
+        return `
+        <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'}">
+          <td>${i + 1}</td>
+          <td><strong>${escapeHtml(f.faculty_name)}</strong></td>
+          <td>${escapeHtml(f.department || "—")}</td>
+          <td>${subjects}</td>
+          <td style="text-align:center">${escapeHtml(f.forms_received)}</td>
+          <td style="text-align:center;font-weight:700;color:${ratingColor(f.average_rating)}">${escapeHtml(rating)}</td>
+          <td style="color:${ratingColor(f.average_rating)};font-weight:600">${escapeHtml(f.performance_label || "—")}</td>
+          <td style="font-size:11px;color:#4b5563">${escapeHtml(distStr)}</td>
+        </tr>
+      `;
+      }).join("");
+
+      const summary = data.report?.summary || {};
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8"/>
+          <title>Evaluation Report — ${escapeHtml(ayLabel)} ${escapeHtml(semLabel)}</title>
+          <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; font-size: 13px; padding: 32px; }
+            .header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #1e3a8a; padding-bottom: 16px; }
+            .header h1 { font-size: 20px; color: #1e3a8a; font-weight: 800; letter-spacing: -0.5px; }
+            .header h2 { font-size: 14px; color: #374151; font-weight: 600; margin-top: 4px; }
+            .meta { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 12px; color: #6b7280; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 28px; font-size: 12px; }
+            th { background: #1e3a8a; color: #fff; padding: 9px 10px; text-align: left; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; }
+            td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
+            .note { font-size: 11px; color: #6b7280; font-style: italic; margin-bottom: 20px; }
+            .footer { margin-top: 32px; text-align: center; font-size: 11px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+            @media print { body { padding: 20px; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>FacultyTrack — Faculty Evaluation Report</h1>
+            <h2>${escapeHtml(ayLabel)} &bull; ${escapeHtml(semLabel)}</h2>
+          </div>
+          <div class="meta">
+            <span>Generated: ${escapeHtml(now)}</span>
+            <span>Faculty: ${escapeHtml(faculties.length)} &bull; Forms: ${escapeHtml(summary.forms_total ?? "—")} &bull; Overall: ${escapeHtml(summary.overall_average ?? "—")}</span>
+          </div>
+          <div class="note">Statistics only. Written comments, AI summaries and identities are excluded by policy (D13).</div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>Faculty Name</th><th>Program</th><th>Subjects</th>
+                <th>Forms</th><th>Avg Rating</th><th>Performance</th><th>Distribution</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div class="footer">FacultyTrack Faculty Evaluation System &mdash; Confidential</div>
+          <script>window.onload = () => { window.print(); }</script>
+        </body>
+        </html>
+      `;
+
+      win.document.write(html);
+      win.document.close();
+    } catch (err) {
+      if (win && !win.closed) win.close();
+      alert("PDF export failed: " + (err.message || "unknown error"));
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   return (
@@ -349,19 +384,51 @@ export default function AdminReport() {
             <h2 className="ad-title">Evaluation Report</h2>
             <p className="ad-subtitle">View and export faculty evaluation results.</p>
           </div>
-          <button
-            className="ad-btnPrimary"
-            onClick={handleExportPDF}
-            disabled={loading || reportData.length === 0}
-            title={reportData.length === 0 ? "No data to export" : `Export ${reportData.length} records to PDF`}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Export CSV
-          </button>
+          {canExport && (
+          <div style={{ position: "relative" }}>
+            <button
+              className="ad-btnPrimary"
+              onClick={() => setShowExportMenu((v) => !v)}
+              disabled={loading || exporting || exportingPdf || !filterAY || !filterSem}
+              title={!filterAY || !filterSem ? "Pick a year and semester first" : "Statistics-only export (audited, D13)"}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              {exporting || exportingPdf ? "Exporting..." : "Export ▾"}
+            </button>
+            {showExportMenu && (
+              <>
+                <div
+                  style={{ position: "fixed", inset: 0, zIndex: 40 }}
+                  onClick={() => setShowExportMenu(false)}
+                />
+                <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", background: "#fff", border: "1px solid #e5e7eb", borderRadius: "10px", boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: "220px", zIndex: 41, overflow: "hidden" }}>
+                  <button
+                    type="button"
+                    onClick={() => { setShowExportMenu(false); handleExport(); }}
+                    disabled={exporting}
+                    style={{ display: "block", width: "100%", textAlign: "left", padding: "12px 16px", background: "none", border: "none", cursor: "pointer", fontSize: "14px", fontWeight: 600, color: "#1f2937" }}
+                  >
+                    Export CSV
+                    <div style={{ fontSize: "12px", fontWeight: 400, color: "#6b7280" }}>Statistics only, audited</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowExportMenu(false); handleExportPDF(); }}
+                    disabled={exportingPdf}
+                    style={{ display: "block", width: "100%", textAlign: "left", padding: "12px 16px", background: "none", border: "none", cursor: "pointer", fontSize: "14px", fontWeight: 600, color: "#1f2937", borderTop: "1px solid #f3f4f6" }}
+                  >
+                    Export PDF
+                    <div style={{ fontSize: "12px", fontWeight: 400, color: "#6b7280" }}>Statistics only, audited</div>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+          )}
         </div>
 
         <div className="ad-filterCard">
@@ -389,18 +456,6 @@ export default function AdminReport() {
                 .filter(f => !filterDept || f.department === filterDept)
                 .map(f => <option key={f.id} value={f.id}>{f.fullName}</option>)}
             </select>
-            <button className="ad-btnSearch" onClick={handleSearch}>Search</button>
-            {canExport && (
-              <button
-                className="ad-btnSearch"
-                onClick={handleExport}
-                disabled={exporting}
-                title="Statistics-only export (D13): numbers, no comments, no identities"
-                style={{ opacity: exporting ? 0.6 : 1 }}
-              >
-                {exporting ? "Exporting..." : "Export CSV"}
-              </button>
-            )}
           </div>
         </div>
 
@@ -638,23 +693,9 @@ export default function AdminReport() {
                 )}
               </div>
 
-              <div style={{ marginTop: "24px" }}>
-                <h4 style={{ fontSize: "14px", fontWeight: 700, color: "#1f2937", marginBottom: "12px", borderBottom: "1px solid #e5e7eb", paddingBottom: "8px" }}>
-                  Anonymized Student Comments ({viewingReport.comments.length})
-                </h4>
-                {viewingReport.comments.length === 0 ? (
-                  <div style={{ padding: "16px", background: "#f9fafb", borderRadius: "8px", color: "#6b7280", fontSize: "13px", textAlign: "center", fontStyle: "italic" }}>
-                    No comments provided by students for this period.
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "300px", overflowY: "auto", paddingRight: "4px" }}>
-                    {viewingReport.comments.map((comment, idx) => (
-                      <div key={idx} style={{ background: "#f8fafc", padding: "12px 16px", borderRadius: "8px", borderLeft: "3px solid #3b82f6", fontSize: "13.5px", color: "#374151", lineHeight: "1.5" }}>
-                        "{comment}"
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div style={{ marginTop: "24px", padding: "12px 16px", background: "#f9fafb", borderRadius: "8px", border: "1px solid #e5e7eb", color: "#6b7280", fontSize: "13px", fontStyle: "italic", textAlign: "center" }}>
+                Written comments are excluded from reports by policy (D13: statistics only).
+                Review flagged comments in the Moderation queue.
               </div>
 
             </div>
