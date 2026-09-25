@@ -9,18 +9,12 @@ import {
   Calendar,
   ShieldCheck,
   Clock,
-  AlertTriangle,
-  Search,
-  Users,
-  Lock,
-  Unlock,
   Save,
   RotateCcw,
   Eye,
   EyeOff,
   Check,
   X,
-  FileCheck,
 } from "lucide-react";
 
 const STATUS_CONFIG = {
@@ -72,10 +66,6 @@ export default function AdminReleaseManagement() {
   const [filterSem, setFilterSem] = useState("");
   const [filterDept, setFilterDept] = useState("");
   const [drafts, setDrafts] = useState({});
-
-  // Search and filter state for faculty table
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all"); // "all" | "submitted" | "pending"
 
   useEffect(() => {
     let cancelled = false;
@@ -152,37 +142,9 @@ export default function AdminReleaseManagement() {
     (r) => r.academic_year === filterYear && r.semester === filterSem && (r.department ?? null) === (scopeDept ?? null),
   );
 
-  // Per-faculty grade status for the selected period
-  const [gradeRows, setGradeRows] = useState([]);
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      if (!filterYear || !filterSem) return;
-      const { data } = await supabase
-        .from("grade_submissions")
-        .select("faculty_id, submitted_at")
-        .eq("academic_year", filterYear)
-        .eq("semester", filterSem);
-      if (!cancelled) setGradeRows(data || []);
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [filterYear, filterSem]);
-
-  const gradeMap = useMemo(() => {
-    const m = new Map();
-    for (const g of gradeRows) m.set(g.faculty_id, g.submitted_at);
-    return m;
-  }, [gradeRows]);
-
-  const submittedCount = faculty.filter((f) => gradeMap.has(f.id)).length;
   // Faculty without a program never match a scoped release row
   // (gate compares release.department to users.department text).
   const unassignedCount = faculty.filter((f) => !f.department || !String(f.department).trim()).length;
-  const pendingCount = faculty.length - submittedCount;
-  const submissionPercent = faculty.length > 0 ? Math.round((submittedCount / faculty.length) * 100) : 0;
 
   const derivedStatus = (row) =>
     is_period_released(row) ? "released" : row?.approved || row?.release_date ? "scheduled" : "draft";
@@ -284,42 +246,6 @@ export default function AdminReleaseManagement() {
 
   const effectiveStatus = releaseRow ? derivedStatus(releaseRow) : "draft";
   const draftStatus = derivedStatus({ ...currentDraft, approved: currentDraft.approved || false });
-  const isCurrentlyReleased = releaseRow ? is_period_released(releaseRow) : false;
-
-  // Unique departments for filter
-  const uniqueDepartments = useMemo(() => {
-    const set = new Set();
-    faculty.forEach((f) => {
-      if (f.department) set.add(f.department);
-    });
-    return Array.from(set).sort();
-  }, [faculty]);
-
-  // Filtered faculty list
-  const filteredFaculty = useMemo(() => {
-    return faculty.filter((f) => {
-      // Search filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesName = (f.full_name || "").toLowerCase().includes(q);
-        const matchesId = (f.school_id || "").toLowerCase().includes(q);
-        const matchesDept = (f.department || "").toLowerCase().includes(q);
-        if (!matchesName && !matchesId && !matchesDept) return false;
-      }
-
-      // Department filter
-      if (filterDept && f.department !== filterDept) {
-        return false;
-      }
-
-      // Status filter
-      const isSubmitted = gradeMap.has(f.id);
-      if (filterStatus === "submitted" && !isSubmitted) return false;
-      if (filterStatus === "pending" && isSubmitted) return false;
-
-      return true;
-    });
-  }, [faculty, searchQuery, filterDept, filterStatus, gradeMap]);
 
   // Date helper functions
   const formatDateDisplay = (dateStr) => {
@@ -545,23 +471,6 @@ export default function AdminReleaseManagement() {
                 </div>
               </div>
 
-              <div className="ad-rel-stat-card">
-                <div className="ad-rel-stat-top">
-                  <span className="ad-rel-stat-label">Grades Submitted</span>
-                  <div className="ad-rel-stat-icon-wrap ad-rel-stat-icon-wrap--green">
-                    <FileCheck size={20} />
-                  </div>
-                </div>
-                <div className="ad-rel-stat-val">
-                  {submittedCount}{" "}
-                  <span style={{ fontSize: "14px", fontWeight: 500, color: "#64748b" }}>
-                    / {faculty.length}
-                  </span>
-                </div>
-                <div className="ad-rel-stat-desc">
-                  {submissionPercent}% of faculty have submitted grades.
-                </div>
-              </div>
             </div>
 
             <div className="ad-rel-console">
@@ -799,176 +708,6 @@ export default function AdminReleaseManagement() {
               </div>
             </div>
 
-            <div className="ad-rel-table-card">
-              <div className="ad-rel-table-header">
-                <div className="ad-rel-table-header-top">
-                  <div className="ad-rel-table-title-group">
-                    <h3 className="ad-rel-table-title">Faculty Grade Submissions Monitor</h3>
-                    <span className="ad-rel-count-pill">
-                      {submittedCount} of {faculty.length} Submitted
-                    </span>
-                  </div>
-                  <span style={{ fontSize: "13px", color: "#64748b" }}>
-                    Period: <strong>{filterYear} {filterSem}</strong>
-                  </span>
-                </div>
-
-                <div className="ad-rel-filter-row">
-                  <div className="ad-rel-search-wrap">
-                    <Search size={16} className="ad-rel-search-icon" />
-                    <input
-                      type="text"
-                      className="ad-rel-search-input"
-                      placeholder="Search faculty by name, ID, or program..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="ad-rel-tabs">
-                    <button
-                      type="button"
-                      className={`ad-rel-tab ${filterStatus === "all" ? "ad-rel-tab--active" : ""}`}
-                      onClick={() => setFilterStatus("all")}
-                    >
-                      All ({faculty.length})
-                    </button>
-                    <button
-                      type="button"
-                      className={`ad-rel-tab ${filterStatus === "submitted" ? "ad-rel-tab--active" : ""}`}
-                      onClick={() => setFilterStatus("submitted")}
-                    >
-                      Submitted ({submittedCount})
-                    </button>
-                    <button
-                      type="button"
-                      className={`ad-rel-tab ${filterStatus === "pending" ? "ad-rel-tab--active" : ""}`}
-                      onClick={() => setFilterStatus("pending")}
-                    >
-                      Awaiting ({pendingCount})
-                    </button>
-                  </div>
-
-                  {uniqueDepartments.length > 0 && (
-                    <select
-                      className="ad-filterSelect"
-                      style={{ padding: "8px 12px", fontSize: "12.5px" }}
-                      value={filterDept}
-                      onChange={(e) => setFilterDept(e.target.value)}
-                    >
-                      <option value="">All Programs</option>
-                      {uniqueDepartments.map((d) => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              </div>
-
-              <div className="ad-tableWrap">
-                <table className="ad-table ad-table--plain">
-                  <thead>
-                    <tr>
-                      <th>FACULTY MEMBER</th>
-                      <th>SCHOOL ID</th>
-                      <th>PROGRAM</th>
-                      <th>GRADE STATUS</th>
-                      <th style={{ textAlign: "right" }}>EVALUATION ACCESS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredFaculty.length === 0 ? (
-                      <tr>
-                        <td colSpan="5" style={{ textAlign: "center", padding: "48px 20px", color: "#64748b" }}>
-                          <Users size={36} style={{ margin: "0 auto 10px", opacity: 0.4 }} />
-                          <p style={{ margin: 0, fontWeight: 600, fontSize: "14px" }}>
-                            No faculty members match your filters.
-                          </p>
-                          <p style={{ margin: "4px 0 0 0", fontSize: "12.5px", color: "#94a3b8" }}>
-                            Try adjusting your search query or status filter.
-                          </p>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredFaculty.map((f) => {
-                        const submittedAt = gradeMap.get(f.id);
-                        const hasAccess = isCurrentlyReleased && submittedAt;
-                        const initials = (f.full_name || "??")
-                          .split(" ")
-                          .map((n) => n[0])
-                          .slice(0, 2)
-                          .join("")
-                          .toUpperCase();
-
-                        return (
-                          <tr key={f.id}>
-                            <td>
-                              <div className="ad-avatarCell">
-                                <div className="ad-avatar ad-avatar--blue">{initials}</div>
-                                <div className="ad-cellLines">
-                                  <span className="ad-cellPrimary">{f.full_name}</span>
-                                  <span className="ad-cellSecondary">{f.email || "Faculty Member"}</span>
-                                </div>
-                              </div>
-                            </td>
-                            <td>
-                              <span className="ad-code">{f.school_id || "—"}</span>
-                            </td>
-                            <td>
-                              <span
-                                style={{
-                                  display: "inline-block",
-                                  padding: "3px 10px",
-                                  background: "#f1f5f9",
-                                  color: "#334155",
-                                  border: "1px solid #e2e8f0",
-                                  borderRadius: "999px",
-                                  fontSize: "11px",
-                                  fontWeight: 700,
-                                }}
-                              >
-                                {f.department || "General"}
-                              </span>
-                            </td>
-                            <td>
-                              {submittedAt ? (
-                                <span className="ad-rel-badge ad-rel-badge--submitted">
-                                  <Check size={13} />
-                                  Submitted · {new Date(submittedAt).toLocaleDateString()}
-                                </span>
-                              ) : (
-                                <span className="ad-rel-badge ad-rel-badge--pending">
-                                  <Clock size={13} />
-                                  Awaiting Submission
-                                </span>
-                              )}
-                            </td>
-                            <td style={{ textAlign: "right" }}>
-                              {hasAccess ? (
-                                <span className="ad-rel-access-badge ad-rel-access-badge--granted">
-                                  <Unlock size={12} />
-                                  Access Granted
-                                </span>
-                              ) : !isCurrentlyReleased ? (
-                                <span className="ad-rel-access-badge ad-rel-access-badge--locked">
-                                  <Lock size={12} />
-                                  Period Gated
-                                </span>
-                              ) : (
-                                <span className="ad-rel-access-badge ad-rel-access-badge--locked">
-                                  <Lock size={12} />
-                                  Grades Required
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
           </>
         )}
       </section>

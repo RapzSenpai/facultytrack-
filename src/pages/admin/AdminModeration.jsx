@@ -40,7 +40,7 @@ export default function AdminModeration() {
           supabase.from("admin_evaluations_anon").select("*"),
           supabase.from("priority_reviews").select("*").order("created_at", { ascending: false }),
           supabase.from("blocked_words").select("*").order("word"),
-          supabase.from("users").select("id, full_name").eq("role", "faculty"),
+          supabase.from("users").select("id, full_name, department").eq("role", "faculty"),
         ]);
         setEvaluations(evalRes.data || []);
         setReviews(reviewRes.data || []);
@@ -62,6 +62,9 @@ export default function AdminModeration() {
   const facultyName = (id) =>
     faculty.find((f) => f.id === id)?.full_name || "Unknown faculty";
 
+  const facultyDept = (id) =>
+    faculty.find((f) => f.id === id)?.department?.trim() || "Unassigned";
+
   const openReviews = reviews.filter((r) => r.status === "new" || r.status === "acknowledged");
 
   const flaggedEvals = evaluations.filter((e) => e.moderation_status === "flag");
@@ -76,11 +79,17 @@ export default function AdminModeration() {
       const update = terminal
         ? { ...patch, resolved_by: userData?.user?.id, resolved_at: new Date().toISOString() }
         : { status: patch.status };
-      const { error } = await supabase
+      // RLS-filtered writes return success with zero rows — verify.
+      const { data, error } = await supabase
         .from("priority_reviews")
         .update(update)
-        .eq("id", review.id);
+        .eq("id", review.id)
+        .select("id");
       if (error) throw error;
+      if (!data || data.length === 0) {
+        alert("No change saved — this case is outside your program scope.");
+        return;
+      }
       setReviews((prev) => prev.map((r) => (r.id === review.id ? { ...r, ...update } : r)));
       logAdminAction("priority_review.update", "priority_reviews", review.id, { status: patch.status });
     } catch (err) {
@@ -94,11 +103,18 @@ export default function AdminModeration() {
   const setModeration = async (evaluation, status) => {
     setBusyId(evaluation.id);
     try {
-      const { error } = await supabase
+      // RLS-filtered writes return success with zero rows — verify
+      // before touching local state, or Allow looks saved until refresh.
+      const { data, error } = await supabase
         .from("evaluations")
         .update({ moderation_status: status })
-        .eq("id", evaluation.id);
+        .eq("id", evaluation.id)
+        .select("id");
       if (error) throw error;
+      if (!data || data.length === 0) {
+        alert("No change saved — this comment belongs to a program outside your scope.");
+        return;
+      }
       setEvaluations((prev) =>
         prev.map((e) => (e.id === evaluation.id ? { ...e, moderation_status: status } : e)),
       );
@@ -156,7 +172,7 @@ export default function AdminModeration() {
     if (!evaluation) return <em style={{ color: "#9ca3af" }}>Evaluation not found</em>;
     return (
       <div style={{ fontSize: "13px", color: "#374151", lineHeight: 1.5 }}>
-        <div><strong>{facultyName(evaluation.faculty_id)}</strong> · {evaluation.academic_year} {evaluation.semester}</div>
+        <div><strong>{facultyName(evaluation.faculty_id)}</strong> · {facultyDept(evaluation.faculty_id)} · {evaluation.academic_year} {evaluation.semester}</div>
         {evaluation.original_comment && (
           <div style={{ marginTop: "6px", padding: "8px 12px", background: "#f8fafc", borderLeft: "3px solid #3b82f6", borderRadius: "6px" }}>
             “{evaluation.original_comment}”
