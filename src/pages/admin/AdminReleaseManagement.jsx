@@ -214,9 +214,24 @@ export default function AdminReleaseManagement() {
     });
   };
 
+  // Approved without a date never releases (is_period_released rule).
+  // Shared by both approval checkboxes below.
+  const handleApproveToggle = (checked) => {
+    setDraft({
+      approved: checked,
+      ...(checked && !currentDraft.release_date ? { release_date: today } : {}),
+    });
+  };
+
+  const needsDate = currentDraft.approved && !currentDraft.release_date;
+
   const handleSave = async () => {
     if (!isSuper && !scopeDept) {
       alert("Your account has no program assignment yet. Ask a super admin to assign you a program first.");
+      return;
+    }
+    if (currentDraft.approved && !currentDraft.release_date) {
+      alert("Set a release date before saving an approval. Approved without a date stays hidden from faculty.");
       return;
     }
     setSaving(true);
@@ -332,7 +347,7 @@ export default function AdminReleaseManagement() {
     setDraft({ release_date: d.toISOString().slice(0, 10) });
   };
 
-  const activePeriodObj = periodOptions.find((p) => `${p.year}__${p.semester}` === periodKey);
+  const activePeriodObj = periodOptions.find((p) => `${p.year}__${p.semester}` === periodSelectorValue);
   const statusInfo = STATUS_CONFIG[effectiveStatus] || STATUS_CONFIG.draft;
   const StatusIcon = statusInfo.icon;
 
@@ -435,7 +450,7 @@ export default function AdminReleaseManagement() {
                   <input
                     type="checkbox"
                     checked={currentDraft.approved || false}
-                    onChange={(e) => setDraft({ approved: e.target.checked })}
+                    onChange={(e) => handleApproveToggle(e.target.checked)}
                   />
                   Approved for release
                 </label>
@@ -450,12 +465,23 @@ export default function AdminReleaseManagement() {
                 </button>
               </div>
 
+              {needsDate && (
+                <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: 700, color: "#b45309" }}>
+                  Approved without a release date stays hidden from faculty. Pick a date before saving.
+                </div>
+              )}
+
               <div style={{ marginTop: "12px", fontSize: "13px", color: "#6b7280" }}>
                 Scope: <strong>{isSuper ? "All programs (global)" : (scopeDept || "—")}</strong>
                 {" · "}
                 {releaseRow
                   ? `Saved: ${releaseRow.approved ? "approved" : "not approved"}, release date ${releaseRow.release_date || "—"}`
                   : "No release row saved for this period yet."}
+                {releaseRow && releaseRow.approved && !releaseRow.release_date && (
+                  <span style={{ marginLeft: "8px", fontWeight: 700, color: "#b45309" }}>
+                    → Still hidden: approval needs a release date
+                  </span>
+                )}
                 {releaseRow && releaseRow.approved && releaseRow.release_date && (
                   <span style={{ marginLeft: "8px", fontWeight: 700, color: STATUS_COLORS[derivedStatus(releaseRow)] }}>
                     {is_period_released(releaseRow)
@@ -548,7 +574,7 @@ export default function AdminReleaseManagement() {
                   id="periodSelect"
                   className="ad-filterSelect"
                   style={{ width: "100%", marginBottom: "16px", fontWeight: 600 }}
-                  value={periodKey}
+                  value={periodSelectorValue}
                   onChange={(e) => {
                     const [year, sem] = e.target.value.split("__");
                     setFilterYear(year);
@@ -650,7 +676,7 @@ export default function AdminReleaseManagement() {
                       type="checkbox"
                       className="ad-rel-switch-input"
                       checked={currentDraft.approved || false}
-                      onChange={(e) => setDraft({ approved: e.target.checked })}
+                      onChange={(e) => handleApproveToggle(e.target.checked)}
                     />
                     <span className="ad-rel-switch-slider" />
                   </label>
@@ -719,7 +745,9 @@ export default function AdminReleaseManagement() {
                       {draftStatus === "released"
                         ? "Faculty members who have submitted their grades can now view their evaluation ratings."
                         : draftStatus === "scheduled"
-                        ? `Results will become automatically accessible on ${formatDateDisplay(currentDraft.release_date)}.`
+                        ? (currentDraft.release_date
+                          ? `Results will become automatically accessible on ${formatDateDisplay(currentDraft.release_date)}.`
+                          : "Approved, but no date set — still hidden. Pick a release date.")
                         : "Faculty cannot view ratings until approved AND scheduled date arrives."}
                     </div>
                   </div>
