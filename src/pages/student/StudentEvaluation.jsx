@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, X, List, Calendar, CheckCircle, AlertCircle, Info, MessageSquare } from "lucide-react";
+import { Search, X, List, Calendar, CheckCircle, AlertCircle, Info, MessageSquare, BookOpen, FileText, ChevronRight, Clock } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import { parseFunctionError } from "../../utils/audit";
@@ -47,6 +47,7 @@ const FALLBACK_CRITERIA = [
 
 export default function StudentEvaluation() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterTab, setFilterTab] = useState("all");
   const [selectedFaculty, setSelectedFaculty] = useState(null);
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -327,6 +328,18 @@ export default function StudentEvaluation() {
   const answeredQuestions = Object.keys(ratings).length;
   const progressPercentage = totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0;
   const submittedCount = assignedFaculty.filter((f) => f.status === "submitted").length;
+  const pendingCount = assignedFaculty.filter((f) => f.status !== "submitted").length;
+
+  const filteredAssignedFaculty = assignedFaculty.filter((item) => {
+    if (filterTab === "pending" && item.status === "submitted") return false;
+    if (filterTab === "completed" && item.status !== "submitted") return false;
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase().trim();
+    const nameMatch = (item.name || "").toLowerCase().includes(query);
+    const subjectMatch = (item.subject || "").toLowerCase().includes(query);
+    const sectionMatch = `${item.dept || ""} ${item.year || ""} ${item.section || ""}`.toLowerCase().includes(query);
+    return nameMatch || subjectMatch || sectionMatch;
+  });
 
   const now = new Date();
   const endDate = activeYear?.endDate ? new Date(activeYear.endDate + "T23:59:59") : null;
@@ -404,213 +417,184 @@ export default function StudentEvaluation() {
         </div>
       )}
 
-      {assignedFaculty.length > 0 && (
-        <div className="se-progressSummaryCardHorizontal">
-          <div className="se-progressSummaryLeft">
-            <h3 className="se-progressSummaryTitle">Evaluation Progress</h3>
-            <div className="se-progressSummaryCountBox">
-              <span className="se-progressSummaryCurrent">{submittedCount}</span>
-              <span className="se-progressSummaryTotal">of {assignedFaculty.length}</span>
-            </div>
-            <div className="se-progressSummaryText">evaluations completed</div>
-          </div>
-          <div className="se-progressSummaryRight">
-            <div className="se-progressSummaryBarWrapper">
-              <div className="se-progressSummaryBarHorizontal">
-                <div
-                  className="se-progressSummaryFillHorizontal"
-                  style={{ width: assignedFaculty.length > 0 ? `${Math.round((submittedCount / assignedFaculty.length) * 100)}%` : "0%" }}
-                />
-              </div>
-              <span className="se-progressSummaryPercent">
-                {assignedFaculty.length > 0 ? `${Math.round((submittedCount / assignedFaculty.length) * 100)}%` : "0%"}
-              </span>
-            </div>
-            <div className="se-progressSummaryEncouragement">
-              <CheckCircle size={16} className="se-progressCheckIcon" />
-              <span>Great! You're {submittedCount === assignedFaculty.length ? "all done" : "making progress"}.</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="se-stepCard">
-        <div className="se-stepHeader se-stepHeader-flex">
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span className="se-stepBadge">STEP 1</span>
-            <h3 className="se-stepTitle">Select Faculty Member &amp; Subject</h3>
-          </div>
-        </div>
-
-        <div className="se-infoCallout">
-          <Info size={16} className="se-infoCalloutIcon" />
-          <div>
-            <p className="se-infoCalloutStrong">
-              Showing faculty automatically matched to your curriculum section.
-            </p>
-            <p className="se-infoCalloutText">
-              You have <strong>{assignedFaculty.length}</strong> subject(s) assigned for <strong>{dept} {yearLevel} - Section {section}</strong>.
-              Progress: <strong>{submittedCount}/{assignedFaculty.length}</strong> completed.
-            </p>
-          </div>
-        </div>
-
-        <div className="se-step1-inputs">
-          <div className="se-fieldGroup">
-            <label className="se-fieldLabel">SEARCH FACULTY MEMBER</label>
-            <div className="se-searchWrap">
-              <Search size={16} className="se-searchIcon" />
-              <input
-                type="text"
-                className="se-search"
-                placeholder="Search by faculty name..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  if (selectedFaculty && e.target.value !== selectedFaculty.name) {
-                    setSelectedFaculty(null);
-                    setSelectedSubjectId("");
-                  }
-                }}
-              />
-            </div>
-            {searchQuery && !selectedFaculty && filteredFacultyNames.length > 0 && (
-              <div className="se-suggestionList">
-                {filteredFacultyNames.map((name) => {
-                  const isDone = assignedFaculty
-                    .filter((x) => x.name === name)
-                    .every((x) => x.status === "submitted");
-                  return (
-                    <div
-                      key={name}
-                      className={`se-suggestionItem ${isDone ? "se-suggestionItem--done" : ""}`}
-                      onClick={() => handleSelectFaculty(name)}
-                    >
-                      <div className="sd-avatar sd-avatar--blue" style={{ width: 30, height: 30, fontSize: 11, flexShrink: 0 }}>
-                        {name.substring(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <span className="se-suggestionName">{name}</span>
-                        {isDone && <span className="se-suggestionDone">✓ All Evaluated</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+      {/* Search Bar & Filter Controls */}
+      <div className="se-controlsCard">
+        <div className="se-controlsTop">
+          <div className="se-searchBarWrap">
+            <Search size={16} className="se-searchBarIcon" />
+            <input
+              type="text"
+              className="se-searchBarInput"
+              placeholder="Search by teacher name or subject..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="se-searchBarClear"
+                onClick={() => setSearchQuery("")}
+                title="Clear search"
+                aria-label="Clear search"
+              >
+                <X size={15} />
+              </button>
             )}
           </div>
 
-          <div className="se-fieldGroup">
-            <label className="se-fieldLabel">SUBJECT / COURSE</label>
-            <div className="se-selectWrap">
-              <select
-                className="se-subjectSelect"
-                value={selectedSubjectId}
-                onChange={(e) => setSelectedSubjectId(e.target.value)}
-                disabled={!selectedFaculty || subjectsForFaculty.length === 0}
-              >
-                <option value="">
-                  {selectedFaculty
-                    ? subjectsForFaculty.length === 0
-                      ? "— No subjects available —"
-                      : "— Select a faculty member first —"
-                    : "— Select a faculty member first —"}
-                </option>
-                {subjectsForFaculty.map((f) => (
-                  <option key={f.assignmentId} value={f.assignmentId} disabled={f.status === "submitted"}>
-                    {f.subject}{f.status === "submitted" ? " ✓ Already Evaluated" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="se-filterChips">
+            <button
+              type="button"
+              className={`se-filterChip ${filterTab === "all" ? "se-filterChip--active" : ""}`}
+              onClick={() => setFilterTab("all")}
+            >
+              All <span className="se-filterChipCount">{assignedFaculty.length}</span>
+            </button>
+            <button
+              type="button"
+              className={`se-filterChip ${filterTab === "pending" ? "se-filterChip--active" : ""}`}
+              onClick={() => setFilterTab("pending")}
+            >
+              To Evaluate <span className="se-filterChipCount">{pendingCount}</span>
+            </button>
+            <button
+              type="button"
+              className={`se-filterChip ${filterTab === "completed" ? "se-filterChip--active" : ""}`}
+              onClick={() => setFilterTab("completed")}
+            >
+              Completed <span className="se-filterChipCount">{submittedCount}</span>
+            </button>
           </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-          <button
-            type="button"
-            className="se-beginBtn"
-            onClick={handleBeginEvaluation}
-            disabled={
-              !chosenAssignment ||
-              chosenAssignment.status === "submitted" ||
-              !isEvaluationOpen
-            }
-          >
-            {!chosenAssignment
-              ? "Select Faculty & Subject"
-              : chosenAssignment.status === "submitted"
-                ? "Already Evaluated"
-                : !isEvaluationOpen
-                  ? "Period Closed"
-                  : "Begin Evaluation →"}
-          </button>
+        <div className="se-sectionSummaryBanner">
+          <Info size={15} style={{ color: "#2563eb", flexShrink: 0 }} />
+          <span>
+            Assigned faculty for <strong>{dept} {yearLevel} - Section {section}</strong>. Progress:{" "}
+            <strong>{submittedCount}/{assignedFaculty.length}</strong> evaluated.
+          </span>
         </div>
       </div>
 
-      {assignedFaculty.length > 0 && (
-        <div className="se-tableCard sdb-subjectsCard">
-          <div className="se-tableHeader">
-            <div>
-              <h3 className="se-tableTitle">Assigned Subjects & Teachers</h3>
-              <p className="se-tableHint">These are your assigned subjects and teachers for this semester.</p>
-            </div>
-          </div>
-          <div className="se-tableWrap">
-            <table className="sd-table">
-              <thead>
-                <tr>
-                  <th>FACULTY NAME</th>
-                  <th>SUBJECT</th>
-                  <th>SECTION</th>
-                  <th style={{ textAlign: "right" }}>ACTION</th>
-                </tr>
-              </thead>
-              <tbody>
-                {assignedFaculty.map((item) => (
-                  <tr key={item.assignmentId}>
-                    <td>
-                      <div className="sd-avatarCell">
-                        <div className="sd-avatar sd-avatar--blue">
-                          {(item.name || "??").substring(0, 2).toUpperCase()}
-                        </div>
-                        <div className="sd-cellLines">
-                          <span className="sd-cellPrimary">{item.name || "— No faculty assigned"}</span>
-                          <span className="sd-cellSecondary">Faculty Member</span>
-                        </div>
+      {/* Responsive Teacher Cards Grid */}
+      {filteredAssignedFaculty.length === 0 ? (
+        <div className="se-empty-card">
+          <AlertCircle size={36} style={{ color: "#94a3b8", margin: "0 auto 8px" }} />
+          <h4 className="se-empty-title">No assigned teachers found</h4>
+          <p className="se-empty-desc">
+            {searchQuery
+              ? `No teachers or subjects match "${searchQuery}".`
+              : filterTab === "pending"
+              ? "All your evaluations are completed!"
+              : "No faculty members match the selected filter."}
+          </p>
+          {(searchQuery || filterTab !== "all") && (
+            <button
+              type="button"
+              className="sdb-evaluatePillBtn"
+              onClick={() => {
+                setSearchQuery("");
+                setFilterTab("all");
+              }}
+            >
+              Reset Filters
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="se-teacher-grid">
+          {filteredAssignedFaculty.map((item) => {
+            const isEvaluated = item.status === "submitted";
+            const initials = (item.name || "??")
+              .split(" ")
+              .map((n) => n[0])
+              .filter(Boolean)
+              .slice(0, 2)
+              .join("")
+              .toUpperCase();
+
+            return (
+              <div
+                key={item.assignmentId}
+                className={`se-teacher-card ${isEvaluated ? "se-teacher-card--evaluated" : ""}`}
+              >
+                <div>
+                  {/* Card Top: Avatar, Name & Status Pill */}
+                  <div className="se-teacher-card-top">
+                    <div className="se-teacher-profile">
+                      <div className={`se-teacher-avatar ${isEvaluated ? "se-teacher-avatar--evaluated" : ""}`}>
+                        {initials}
                       </div>
-                    </td>
-                    <td className="sd-engagement">{item.subject}</td>
-                    <td>
-                      <span className="se-sectionBadge">
-                        {item.dept} {item.year} - {item.section}
+                      <div className="se-teacher-meta">
+                        <h4 className="se-teacher-name" title={item.name}>
+                          {item.name || "— No faculty assigned"}
+                        </h4>
+                        <span className="se-teacher-role">Faculty Member</span>
+                      </div>
+                    </div>
+
+                    {isEvaluated ? (
+                      <span className="se-statusPill se-statusPill--evaluated" title="Evaluation finalized">
+                        <CheckCircle size={12} /> Evaluated
                       </span>
-                    </td>
-                    <td className="sd-tableActions" style={{ justifyContent: "flex-end" }}>
-                      {item.status === "submitted" ? (
-                        <span
-                          className="sdb-assignedBadge"
-                          title={item.submittedAt ? `Evaluated on ${formatDate(item.submittedAt)}` : "Evaluation finalized"}
-                        >
-                          <CheckCircle size={13} />
-                          <span>Evaluated</span>
+                    ) : (
+                      <span className="se-statusPill se-statusPill--pending">
+                        <Clock size={11} /> Pending
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Card Body: Subject Box */}
+                  <div className="se-teacher-body">
+                    <span className="se-teacher-subject-label">ASSIGNED SUBJECT</span>
+                    <div className="se-teacher-subject-row">
+                      <BookOpen size={16} className="se-teacher-subject-icon" />
+                      <span className="se-teacher-subject-text">{item.subject}</span>
+                    </div>
+
+                    <div className="se-teacher-badges-row">
+                      <span className="se-teacher-section-badge">
+                        {item.dept} {item.year} - Section {item.section}
+                      </span>
+                      {item.semester && (
+                        <span className="se-teacher-sem-badge">
+                          {item.semester}
                         </span>
-                      ) : (
-                        <button
-                          type="button"
-                          className="sdb-evaluatePillBtn"
-                          onClick={() => handleEvaluate(item)}
-                          disabled={!isEvaluationOpen}
-                        >
-                          Evaluate
-                        </button>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card Bottom: Action Button */}
+                <div className="se-teacher-card-bottom">
+                  {isEvaluated ? (
+                    <div
+                      className="se-btn-evaluated"
+                      title={item.submittedAt ? `Submitted on ${formatDate(item.submittedAt)}` : "Evaluation submitted"}
+                    >
+                      <CheckCircle size={15} />
+                      <span>Evaluation Completed</span>
+                    </div>
+                  ) : !isEvaluationOpen ? (
+                    <button type="button" className="se-btn-closed" disabled>
+                      <Clock size={15} />
+                      <span>Period Closed</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="se-btn-evaluate"
+                      onClick={() => handleEvaluate(item)}
+                    >
+                      <FileText size={15} />
+                      <span>Evaluate Teacher</span>
+                      <ChevronRight size={15} style={{ marginLeft: "auto" }} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
