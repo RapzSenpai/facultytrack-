@@ -55,6 +55,10 @@ export default function AdminFaculty() {
 
     setLoading(true);
     const isEditing = !!editingFaculty;
+    // Keep department_id in sync with the department name —
+    // release gating + scoped-admin RLS match on it, and the
+    // signup trigger only resolves it at signup time.
+    const selectedDept = departmentOptions.find((d) => d.name === formData.department);
 
     try {
       if (isEditing) {
@@ -65,6 +69,7 @@ export default function AdminFaculty() {
             email: formData.email,
             school_id: formData.schoolId,
             department: formData.department,
+            department_id: selectedDept?.id || null,
           })
           .eq('id', editingFaculty.id);
 
@@ -104,6 +109,7 @@ export default function AdminFaculty() {
             role: 'faculty',
             school_id: formData.schoolId,
             department: formData.department,
+            department_id: selectedDept?.id || null,
             status: 'active',
           }, { onConflict: 'id' });
 

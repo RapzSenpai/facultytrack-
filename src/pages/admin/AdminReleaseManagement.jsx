@@ -178,6 +178,9 @@ export default function AdminReleaseManagement() {
   }, [gradeRows]);
 
   const submittedCount = faculty.filter((f) => gradeMap.has(f.id)).length;
+  // Faculty without a program never match a scoped release row
+  // (gate compares release.department to users.department text).
+  const unassignedCount = faculty.filter((f) => !f.department || !String(f.department).trim()).length;
   const pendingCount = faculty.length - submittedCount;
   const submissionPercent = faculty.length > 0 ? Math.round((submittedCount / faculty.length) * 100) : 0;
 
@@ -468,6 +471,12 @@ export default function AdminReleaseManagement() {
               {needsDate && (
                 <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: 700, color: "#b45309" }}>
                   Approved without a release date stays hidden from faculty. Pick a date before saving.
+                </div>
+              )}
+
+              {unassignedCount > 0 && (
+                <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: 700, color: "#b45309" }}>
+                  {unassignedCount} facult{unassignedCount === 1 ? "y has" : "ies have"} no program assigned — scoped releases never reach them. Assign programs under Faculty Management first.
                 </div>
               )}
 
