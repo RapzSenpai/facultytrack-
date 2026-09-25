@@ -3,16 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import FacultyLayout from "./FacultyLayout";
-import { fetchFacultyReleaseStatus, setGradesSubmitted } from "../../utils/releaseStatus";
+import { fetchFacultyReleaseStatus } from "../../utils/releaseStatus";
 
 export default function FacultyDashboard() {
   const [overallRating, setOverallRating] = useState(null);
   const [totalResponses, setTotalResponses] = useState(null);
   const [activeYear, setActiveYear] = useState(null);
   const [loading, setLoading] = useState(true);
-  // Phase 5: release gating + grades-submitted [D2/D3]
+  // Phase 5: release gating [D2]
   const [releaseStatus, setReleaseStatus] = useState([]);
-  const [gradeSaving, setGradeSaving] = useState(false);
   const navigate = useNavigate();
   const { currentUser, userProfile } = useAuth();
 
@@ -54,37 +53,7 @@ export default function FacultyDashboard() {
   const displayName = userProfile?.fullName || "Faculty";
   const firstName = displayName.split(" ")[0];
 
-  // Phase 5 [D3]: toggle "grades submitted" for the active period.
-  const handleToggleGrades = async () => {
-    if (!activeYear || gradeSaving) return;
-    const year = activeYear.year;
-    const semester = activeYear.semester;
-    const current = releaseStatus.find(
-      (r) => r.academic_year === year && r.semester === semester,
-    );
-    const next = !(current?.grades_submitted ?? false);
-    setGradeSaving(true);
-    try {
-      await setGradesSubmitted(currentUser.id, year, semester, next);
-      setReleaseStatus((prev) =>
-        prev.some((r) => r.academic_year === year && r.semester === semester)
-          ? prev.map((r) =>
-              r.academic_year === year && r.semester === semester
-                ? { ...r, grades_submitted: next }
-                : r,
-            )
-          : [
-              ...prev,
-              { academic_year: year, semester, grades_submitted: next, released: false, has_evaluations: true },
-            ],
-      );
-    } catch (err) {
-      console.error("Failed to update grades-submitted status:", err);
-      alert("Could not update the grades-submitted status. Please try again.");
-    } finally {
-      setGradeSaving(false);
-    }
-  };
+
 
   // Phase 5: status of the ACTIVE period for banner + card.
   const activeStatus = activeYear
@@ -97,7 +66,7 @@ export default function FacultyDashboard() {
   // status view rather than counting released rows only.
   const activeHasEvaluations = activeStatus ? activeStatus.has_evaluations : overallRating !== null;
   const activeReleased = activeStatus ? activeStatus.released : false;
-  const activeGradesSubmitted = activeStatus ? activeStatus.grades_submitted : false;
+
 
   // Phase 6 [D6]: neutral escalation notice — booleans only, from
   // the SECURITY DEFINER RPC. Never any comment content.
@@ -193,50 +162,7 @@ export default function FacultyDashboard() {
           </div>
         )}
 
-        {/* Phase 5 [D3]: self-mark grades-submitted status. */}
-        {activeYear && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "12px",
-              background: "#f8fafc",
-              border: "1px solid #e2e8f0",
-              borderRadius: "10px",
-              padding: "14px 18px",
-              marginBottom: "20px",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: "13px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                GRADES SUBMITTED
-              </div>
-              <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
-                Mark your grades for {activeYear.year} {activeYear.semester} as submitted (admins see this status when scheduling the release).
-              </div>
-            </div>
-            <button
-              type="button"
-              disabled={gradeSaving}
-              onClick={handleToggleGrades}
-              style={{
-                padding: "8px 18px",
-                borderRadius: "8px",
-                border: "none",
-                cursor: gradeSaving ? "wait" : "pointer",
-                fontWeight: 700,
-                fontSize: "13px",
-                whiteSpace: "nowrap",
-                background: activeGradesSubmitted ? "#16a34a" : "#1d4ed8",
-                color: "#fff",
-                opacity: gradeSaving ? 0.6 : 1,
-              }}
-            >
-              {gradeSaving ? "Saving…" : activeGradesSubmitted ? "Submitted ✓" : "Mark as Submitted"}
-            </button>
-          </div>
-        )}
+
 
         <div className="fd-statsGrid">
           <div className="fd-statCard">
