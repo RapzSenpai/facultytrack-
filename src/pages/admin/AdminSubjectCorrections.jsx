@@ -9,6 +9,7 @@ import {
   Eye,
   ClipboardList,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 
 // Phase 3 (Req 2 / D5): students can no longer build their own
@@ -127,6 +128,22 @@ export default function AdminSubjectCorrections() {
       alert("Error: " + err.message);
     } finally {
       setResolvingBusy(false);
+    }
+  };
+
+  const handleDeleteRequest = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this correction request?")) return;
+    try {
+      const { error } = await supabase
+        .from("subject_correction_requests")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      logAdminAction("correction.delete", "subject_correction_requests", id);
+      fetchData();
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("Failed to delete request: " + (err.message || "Unknown error"));
     }
   };
 
@@ -451,6 +468,13 @@ export default function AdminSubjectCorrections() {
                           }}
                         >
                           <ClipboardList size={16} />
+                        </button>
+                        <button
+                          className="ad-actionBtn ad-actionBtn--delete"
+                          title="Delete request"
+                          onClick={() => handleDeleteRequest(r.id)}
+                        >
+                          <Trash2 size={16} />
                         </button>
                       </td>
                     </tr>
