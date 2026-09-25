@@ -474,13 +474,27 @@ section.fd-content {
 }
 
 @keyframes fd-fadeUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to   { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @keyframes fd-countUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ── Welcome Header Card (matches sdb-welcomeCard) ── */
@@ -654,16 +668,40 @@ section.fd-content {
 
 /* ── Apply colors to fd-statCard based on icon class inside (CSS :has) ── */
 /* Rating card — yellow/gold */
-.fd-statCard:has(.fd-statIcon--rating)::before   { background: #eab308; }
-.fd-statCard:has(.fd-statIcon--rating) .fd-statLabel { color: #ca8a04; }
-.fd-statCard:has(.fd-statIcon--rating) .fd-statNum   { color: #713f12; }
-.fd-statIcon--rating { background: #fefce8; color: #eab308; }
+.fd-statCard:has(.fd-statIcon--rating)::before {
+  background: #eab308;
+}
+
+.fd-statCard:has(.fd-statIcon--rating) .fd-statLabel {
+  color: #ca8a04;
+}
+
+.fd-statCard:has(.fd-statIcon--rating) .fd-statNum {
+  color: #713f12;
+}
+
+.fd-statIcon--rating {
+  background: #fefce8;
+  color: #eab308;
+}
 
 /* Responses card — blue */
-.fd-statCard:has(.fd-statIcon--responses)::before   { background: #3b82f6; }
-.fd-statCard:has(.fd-statIcon--responses) .fd-statLabel { color: #2563eb; }
-.fd-statCard:has(.fd-statIcon--responses) .fd-statNum   { color: #1e3a8a; }
-.fd-statIcon--responses { background: #eff6ff; color: #3b82f6; }
+.fd-statCard:has(.fd-statIcon--responses)::before {
+  background: #3b82f6;
+}
+
+.fd-statCard:has(.fd-statIcon--responses) .fd-statLabel {
+  color: #2563eb;
+}
+
+.fd-statCard:has(.fd-statIcon--responses) .fd-statNum {
+  color: #1e3a8a;
+}
+
+.fd-statIcon--responses {
+  background: #eff6ff;
+  color: #3b82f6;
+}
 
 /* Profile Card */
 .fd-profileCard {
@@ -1764,9 +1802,11 @@ section.fd-content {
   .fd {
     grid-template-columns: 1fr;
   }
+
   .fd.fd--closed {
     grid-template-columns: 1fr;
   }
+
   .fd-sidebar {
     position: fixed;
     z-index: 1000;

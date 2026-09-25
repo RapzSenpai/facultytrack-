@@ -1542,7 +1542,7 @@
   height: 220px;
   border-radius: 50%;
 
-  pointer-events: none;  
+  pointer-events: none;
 }
 
 .ad-title {
@@ -3712,6 +3712,7 @@ select.ad-input {
 
 /* Landscape phones: keep sidebar hidden in landscape mode on small screens */
 @media (max-width: 900px) and (orientation: landscape) {
+
   .ad,
   .ad.ad--open {
     grid-template-columns: 1fr;
@@ -3786,7 +3787,8 @@ select.ad-input {
   }
 
   .ad-topUserName {
-    display: none; /* hide name on small screens, keep avatar */
+    display: none;
+    /* hide name on small screens, keep avatar */
   }
 
   /* ── Content padding ── */
@@ -3834,7 +3836,8 @@ select.ad-input {
   }
 
   .ad-table {
-    min-width: 600px; /* ensure table doesn't collapse */
+    min-width: 600px;
+    /* ensure table doesn't collapse */
   }
 
   /* ── Form rows: stack to single column ── */
@@ -3997,7 +4000,7 @@ select.ad-input {
 /* ── KPI Stats Grid ── */
 .ad-rel-stats {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 24px;
 }
@@ -4308,15 +4311,15 @@ select.ad-input {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
-.ad-rel-switch-input:checked + .ad-rel-switch-slider {
+.ad-rel-switch-input:checked+.ad-rel-switch-slider {
   background-color: #10b981;
 }
 
-.ad-rel-switch-input:focus + .ad-rel-switch-slider {
+.ad-rel-switch-input:focus+.ad-rel-switch-slider {
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
 }
 
-.ad-rel-switch-input:checked + .ad-rel-switch-slider:before {
+.ad-rel-switch-input:checked+.ad-rel-switch-slider:before {
   transform: translateX(24px);
 }
 
@@ -4452,9 +4455,20 @@ select.ad-input {
 }
 
 @keyframes pulse {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
-  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(37, 99, 235, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+  }
+
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(37, 99, 235, 0);
+  }
+
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+  }
 }
 
 /* ── Save Action Controls ── */
@@ -5170,4 +5184,3 @@ select.ad-input {
     justify-content: center;
   }
 }
-
