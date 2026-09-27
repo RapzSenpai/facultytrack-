@@ -323,7 +323,7 @@ export default function StudentDashboard() {
                     <th>FACULTY NAME</th>
                     <th>SUBJECT</th>
                     <th>SECTION</th>
-                    <th style={{ textAlign: "right" }}>ACTION</th>
+                    <th style={{ textAlign: "right" }}>STATUS</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -366,17 +366,10 @@ export default function StudentDashboard() {
                               <span>Evaluated</span>
                             </span>
                           ) : (
-                            <button
-                              type="button"
-                              className="sdb-evaluatePillBtn"
-                              onClick={() =>
-                                navigate(
-                                  `/student/evaluate?facultyId=${encodeURIComponent(item.facultyId || "")}&assignmentId=${encodeURIComponent(item.assignmentId || "")}`
-                                )
-                              }
-                            >
-                              Evaluate
-                            </button>
+                            <span className="sdb-assignedBadge sdb-assignedBadge--pending" title="Not yet evaluated">
+                              <Clock size={13} />
+                              <span>Pending</span>
+                            </span>
                           )}
                         </td>
                       </tr>
@@ -389,7 +382,7 @@ export default function StudentDashboard() {
             <div className="se-enrollmentFooter">
               <p className="se-enrollmentNote">
                 <Info size={14} />
-                Click "Evaluate" or go to Evaluate Teacher to submit your evaluations.
+                Go to Evaluate Teacher to submit your evaluations.
               </p>
               <div className="sdb-footerActions">
                 <button

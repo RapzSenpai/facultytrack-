@@ -1,3 +1,14 @@
+/* ==========================================================================
+   FACULTYTRACK STUDENT STYLESHEET
+   Cleaned & reorganized version
+
+   Notes:
+   - Existing class names and responsive breakpoints are preserved.
+   - Repeated rules are removed only where they were safe to consolidate.
+   - Later responsive overrides are intentionally kept where they affect
+     the cascade for specific breakpoints or screen states.
+   ========================================================================== */
+
 /* ========================= STUDENT DASHBOARD ========================= */
 .sd {
   min-height: 100vh;
@@ -171,7 +182,7 @@
   padding: 16px 8px;
 }
 
-/* ── Sidebar User Footer Card (Screenshot Style) ── */
+/* Sidebar user footer */
 .sd-userFooterCard {
   margin-top: auto;
   margin-left: 12px;
@@ -449,9 +460,9 @@
   margin: 8px 0;
 }
 
-/* Content - FIXED: Now uses flexbox to properly position footer */
+/* Content area */
 .sd-content {
-  padding: 26px 26px 26px;
+  padding: 26px;
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
@@ -470,16 +481,11 @@
   padding: 28px;
   margin-bottom: 20px;
   border-radius: 18px;
-  box-shadow: 0 8px 30px rgba(85, 98, 120, 0.06);
+  box-shadow: 0 20px 45px rgba(15, 31, 58, 0.10);
   transition: 0.25s ease;
   position: relative;
   overflow: hidden;
-  animation: fadeUp 0.5s ease;
-}
-
-.sd-welcomeHeader {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 45px rgba(15, 31, 58, 0.10);
+  animation: fadeInUp 0.5s ease;
 }
 
 .sd-welcomeHeader::after {
@@ -562,7 +568,8 @@
 }
 
 .sd-statusBadge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   padding: 3px 10px;
   border-radius: 999px;
   background: #d1fae5;
@@ -748,7 +755,7 @@
   color: #111827;
 }
 
-/* Footer - FIXED: Positioned at bottom with margin-top: auto */
+/* Footer */
 .sd-footer {
   height: 48px;
   background: #fff;
@@ -3706,6 +3713,13 @@
   box-shadow: 0 1px 3px rgba(16, 185, 129, 0.08);
 }
 
+.sdb-assignedBadge--pending {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+  box-shadow: 0 1px 3px rgba(217, 119, 6, 0.08);
+}
+
 /* Footer Container & Action Buttons */
 .sdb-footerActions {
   display: flex;
@@ -5208,6 +5222,7 @@
 .sdb-assignedBadge {
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 11.5px;
@@ -5217,42 +5232,15 @@
   border: 1px solid #bbf7d0;
 }
 
-.sd-statusBadge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 700;
+.sdb-assignedBadge--pending {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
 }
+
 
 /* Tablet & Mobile Responsive Enhancements */
 @media (max-width: 900px) {
-  .sd-sidebar {
-    position: fixed;
-    top: 0;
-    left: -260px;
-    height: 100vh;
-    z-index: 999;
-    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .sd--open .sd-sidebar {
-    left: 0;
-  }
-
-  .sd-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.5);
-    backdrop-filter: blur(4px);
-    z-index: 998;
-  }
-
-  .sd--open .sd-overlay {
-    display: block;
-  }
 
   .sd-main {
     margin-left: 0 !important;
@@ -5863,5 +5851,463 @@
     height: 40px;
     font-size: 13px;
     padding: 0 34px 0 36px;
+  }
+}
+
+
+/* ==========================================================================
+   FACULTYTRACK VISUAL ENHANCEMENT LAYER
+   Purpose: add subtle motion, depth, hover feedback, and accessibility
+   without changing the existing layout or component behavior.
+   ========================================================================== */
+
+/* ---------- Motion primitives ---------- */
+
+@keyframes ft-fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ft-fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ft-scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes ft-softPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(244, 180, 0, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(244, 180, 0, 0.12);
+  }
+}
+
+@keyframes ft-shimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+/* ---------- Smoother page appearance ---------- */
+
+.sd-content {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.35) transparent;
+}
+
+.sd-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sd-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sd-content::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.28);
+  border-radius: 999px;
+}
+
+.sd-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.45);
+}
+
+/* ---------- Sidebar polish ---------- */
+
+.sd-sidebar {
+  box-shadow: 8px 0 24px rgba(15, 31, 58, 0.08);
+}
+
+.sd-brand {
+  transition:
+    padding 0.3s ease,
+    background-color 0.2s ease;
+}
+
+.sd-brand:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.sd-logo {
+  transition:
+    width 0.3s ease,
+    height 0.3s ease,
+    transform 0.25s ease;
+}
+
+.sd-brand:hover .sd-logo {
+  transform: scale(1.04);
+}
+
+.sd-link {
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease,
+    padding 0.3s ease;
+}
+
+.sd-link:hover {
+  transform: translateX(3px);
+}
+
+.sd--closed .sd-link:hover {
+  transform: translateY(-1px);
+}
+
+.sd-link--active {
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.08);
+}
+
+.sd-link--active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+/* ---------- Topbar interaction ---------- */
+
+.sd-topbar {
+  position: relative;
+  z-index: 20;
+}
+
+.sd-burger {
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.sd-burger:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(15, 31, 58, 0.08);
+}
+
+.sd-burger:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.sd-topUser {
+  transition:
+    background-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.sd-topUser:hover {
+  transform: translateY(-1px);
+}
+
+.sd-dropdownMenu {
+  transform-origin: top right;
+  animation: ft-scaleIn 0.18s ease both;
+}
+
+/* ---------- Welcome header ---------- */
+
+.sd-welcomeHeader {
+  animation:
+    ft-fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.sd-welcomeHeader:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 34px rgba(15, 31, 58, 0.11);
+}
+
+.sd-welcomeHeader::after {
+  pointer-events: none;
+  animation: ft-softPulse 4s ease-in-out infinite;
+}
+
+/* ---------- Information card ---------- */
+
+.sd-infoCard {
+  animation: ft-fadeUp 0.5s 0.08s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.sd-infoCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(33, 150, 243, 0.10);
+}
+
+.sd-infoIcon {
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.sd-infoCard:hover .sd-infoIcon {
+  transform: scale(1.05) rotate(-2deg);
+}
+
+/* ---------- Dashboard/stat cards ---------- */
+
+.sd-statCard {
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    border-color 0.22s ease;
+  animation: ft-fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.sd-statCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 26px rgba(15, 31, 58, 0.10);
+  border-color: #d8dee8;
+}
+
+.sd-statIcon {
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.sd-statCard:hover .sd-statIcon {
+  transform: scale(1.06);
+}
+
+.sd-statsGrid .sd-statCard:nth-child(1) {
+  animation-delay: 0.12s;
+}
+
+.sd-statsGrid .sd-statCard:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.sd-statsGrid .sd-statCard:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+/* ---------- Profile card ---------- */
+
+.sd-profileCard {
+  animation: ft-fadeUp 0.5s 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.sd-profileCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px rgba(15, 31, 58, 0.09);
+}
+
+.sd-profileAvatar {
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.sd-profileCard:hover .sd-profileAvatar {
+  transform: scale(1.04);
+}
+
+/* ---------- Evaluation page ---------- */
+
+.se-controlsCard {
+  animation: ft-fadeUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.se-controlsCard:hover {
+  box-shadow: 0 10px 24px rgba(15, 31, 58, 0.07);
+}
+
+.se-urgencyBanner {
+  animation: ft-fadeUp 0.45s 0.08s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.se-teacher-card {
+  animation: ft-fadeUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    border-color 0.22s ease;
+}
+
+.se-teacher-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 28px rgba(15, 31, 58, 0.10);
+}
+
+.se-teacher-grid .se-teacher-card:nth-child(1) {
+  animation-delay: 0.12s;
+}
+
+.se-teacher-grid .se-teacher-card:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.se-teacher-grid .se-teacher-card:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+.se-teacher-grid .se-teacher-card:nth-child(4) {
+  animation-delay: 0.30s;
+}
+
+.se-teacher-grid .se-teacher-card:nth-child(5) {
+  animation-delay: 0.36s;
+}
+
+.se-teacher-grid .se-teacher-card:nth-child(6) {
+  animation-delay: 0.42s;
+}
+
+/* ---------- Evaluation filters/buttons ---------- */
+
+.se-filterChip,
+.se-btn-evaluate,
+.se-btn-evaluated,
+.se-btn-closed {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.se-filterChip:hover {
+  transform: translateY(-1px);
+}
+
+.se-filterChip--active {
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.12);
+}
+
+.se-btn-evaluate:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 7px 16px rgba(37, 99, 235, 0.16);
+}
+
+.se-btn-evaluate:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* ---------- Focus states ---------- */
+
+.sd-burger:focus-visible,
+.sd-topUser:focus-visible,
+.sd-link:focus-visible,
+.sd-dropdownItem:focus-visible,
+.se-filterChip:focus-visible,
+.se-btn-evaluate:focus-visible,
+.se-btn-evaluated:focus-visible,
+.se-btn-closed:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.28);
+  outline-offset: 2px;
+}
+
+/* ---------- Subtle loading shine for important active areas ---------- */
+
+.sd-link--active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: inherit;
+  background: linear-gradient(
+    100deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.10) 50%,
+    transparent 65%
+  );
+  transform: translateX(-120%);
+  animation: ft-shimmer 4.5s ease-in-out infinite;
+}
+
+/* ---------- Footer ---------- */
+
+.sd-footer {
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+/* ---------- Reduced motion accessibility ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .sd *,
+  .sd *::before,
+  .sd *::after,
+  .se-pageHeader,
+  .se-stepCard,
+  .se-progressSummaryCardHorizontal,
+  .se-tableCard,
+  .se-controlsCard,
+  .se-urgencyBanner,
+  .se-teacher-card {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .sd-welcomeHeader:hover,
+  .sd-infoCard:hover,
+  .sd-statCard:hover,
+  .sd-profileCard:hover,
+  .se-teacher-card:hover,
+  .se-btn-evaluate:hover {
+    transform: none !important;
+  }
+}
+
+/* ---------- Small screens: keep motion subtle ---------- */
+
+@media (max-width: 640px) {
+  .sd-welcomeHeader:hover,
+  .sd-infoCard:hover,
+  .sd-statCard:hover,
+  .sd-profileCard:hover,
+  .se-teacher-card:hover {
+    transform: translateY(-2px);
+  }
+
+  .sd-link:hover {
+    transform: none;
   }
 }
