@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 
 const YEAR_LEVELS = ["1st", "2nd", "3rd", "4th"];
 const SECTIONS = ["A", "B", "C", "D"];
@@ -11,6 +12,7 @@ const normalizeYear = (y) => (y || "").replace(/[\s\-_]*(year)?\s*/gi, "").toLow
 const EMPTY_FORM = { schoolId: "", name: "", email: "", password: "", department: "", yearLevel: "", section: "" };
 
 export default function AdminStudent() {
+  const { isSuper, myDeptIds, inScopeName, loading: scopeLoading } = useScopedAdmin();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDept, setFilterDept] = useState("");
   const [filterYear, setFilterYear] = useState("");
@@ -26,15 +28,19 @@ export default function AdminStudent() {
   const [formData, setFormData] = useState(EMPTY_FORM);
 
   const fetchStudents = async () => {
+    if (scopeLoading) return;
     try {
       const { data, error } = await supabase.from('users').select('*').eq('role', 'student');
       if (!error) {
-        setStudentList((data || []).map(s => ({
+        const inScope = (s) => isSuper
+          || (s.department_id && myDeptIds.includes(s.department_id))
+          || inScopeName(s.department);
+        setStudentList(((data || []).map(s => ({
           ...s,
           fullName: s.full_name,
           schoolId: s.school_id,
           yearLevel: s.year_level,  // map snake_case DB column to camelCase
-        })));
+        }))).filter(inScope));
       }
     } catch (err) {
       console.error("Fetch error:", err);
@@ -55,7 +61,7 @@ export default function AdminStudent() {
         if (data) setSectionList(data);
       })
       .catch(() => {});
-  }, []);
+  }, [scopeLoading, isSuper, myDeptIds.join("|")]);
 
   const allSectionOptions = useMemo(() => {
     const set = new Set(SECTIONS);

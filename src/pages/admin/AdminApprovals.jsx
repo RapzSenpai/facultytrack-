@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
+import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { Check, X, Search, AlertCircle, IdCard } from "lucide-react";
 import { logAdminAction } from "../../utils/audit";
 
 export default function AdminApprovals() {
     const { currentUser, userProfile } = useAuth();
+    const { isSuper, myDeptIds, inScopeName, loading: scopeLoading } = useScopedAdmin();
     const [activeTab, setActiveTab] = useState("faculty");
     const [searchQuery, setSearchQuery] = useState("");
     const [loading, setLoading] = useState(false);
@@ -38,8 +40,12 @@ export default function AdminApprovals() {
             const fData = (fRes.data || []).map(mapUser);
             const sData = (sRes.data || []).map(mapUser);
 
-            setPendingFaculty(fData.filter(u => u.status === 'pending'));
-            setPendingStudents(sData.filter(u => u.status === 'pending'));
+            // D9 strict: scoped admin sees only own program(s). Super sees all.
+            const inScope = (u) => isSuper
+                || (u.department_id && myDeptIds.includes(u.department_id))
+                || inScopeName(u.department);
+            setPendingFaculty(fData.filter(u => u.status === 'pending' && inScope(u)));
+            setPendingStudents(sData.filter(u => u.status === 'pending' && inScope(u)));
         } catch (err) {
             console.error("Fetch error:", err);
             setFetchError("Could not load pending accounts: " + (err.message || "permission denied."));
@@ -108,8 +114,8 @@ export default function AdminApprovals() {
     };
 
     useEffect(() => {
-        fetchApprovals();
-    }, []);
+        if (!scopeLoading) fetchApprovals();
+    }, [scopeLoading, isSuper, myDeptIds.join("|")]);
 
     const handleApprove = async (uid) => {
         if (window.confirm("Approve this account?")) {

@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 
 export default function AdminFaculty() {
+  const { isSuper, myDeptIds, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
   const [facultyList, setFacultyList] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDept, setFilterDept] = useState("");
@@ -16,8 +18,9 @@ export default function AdminFaculty() {
   const initialForm = { schoolId: "", name: "", email: "", password: "", department: "" };
   const [formData, setFormData] = useState(initialForm);
 
-  // 1. READ: Fetch faculty members and departments
+  // 1. READ: Fetch faculty members and departments (D9 strict: scoped to own program)
   const fetchData = async () => {
+    if (scopeLoading) return;
     try {
       const [facultyResult, deptResult] = await Promise.all([
         supabase.from('users').select('*').eq('role', 'faculty'),
@@ -25,11 +28,14 @@ export default function AdminFaculty() {
       ]);
 
       if (facultyResult.error) throw facultyResult.error;
-      setFacultyList((facultyResult.data || []).map(f => ({
+      const inScope = (f) => isSuper
+        || (f.department_id && myDeptIds.includes(f.department_id))
+        || inScopeName(f.department);
+      setFacultyList(((facultyResult.data || []).map(f => ({
         ...f,
         fullName: f.full_name,
         schoolId: f.school_id,
-      })));
+      }))).filter(inScope));
 
       if (!deptResult.error) {
         setDepartmentOptions(deptResult.data || []);
@@ -41,7 +47,7 @@ export default function AdminFaculty() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [scopeLoading, isSuper, myDeptIds.join("|")]);
 
   // 2. CREATE & UPDATE Logic
   const handleSave = async (e) => {
@@ -233,8 +239,8 @@ export default function AdminFaculty() {
             </div>
 
             <select className="ad-filterSelect" value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
-              <option value="">All Programs</option>
-              {departmentOptions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+              <option value="">{isSuper ? "All Programs" : (myDeptNames.join(", ") || "No program assigned")}</option>
+              {(isSuper ? departmentOptions : departmentOptions.filter(d => inScopeName(d.name))).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             </select>
 
             {(filterDept || searchQuery) && (

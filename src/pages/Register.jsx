@@ -119,8 +119,8 @@ export default function Register() {
     if (!form.lastName.trim()) errors.lastName = "Last name is required.";
     if (!/^\d{8}$/.test(form.schoolId.trim())) errors.schoolId = "Enter your 8-digit ID number.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errors.email = "Enter a valid email address.";
+    if (!form.department) errors.department = "Select your program.";
     if (isStudent) {
-      if (!form.department) errors.department = "Select your program.";
       if (!form.yearLevel) errors.yearLevel = "Select your year level.";
       if (!form.section) errors.section = "Select your section.";
     }
@@ -201,7 +201,7 @@ export default function Register() {
             suffix: form.suffix,
             role: activeTab,
             school_id: form.schoolId.trim(),
-            department: isStudent ? form.department : "",
+            department: form.department,
             year_level: isStudent ? form.yearLevel : "",
             section: isStudent ? form.section : "",
           },
@@ -380,8 +380,7 @@ export default function Register() {
               </SelectWrap>
             </AuthField>
 
-            {isStudent && (
-              <AuthField label="PROGRAM" htmlFor="department" required error={fieldErrors.department}>
+            <AuthField label="PROGRAM" htmlFor="department" required error={fieldErrors.department}>
                 <SelectWrap>
                   <select
                     id="department"
@@ -404,7 +403,6 @@ export default function Register() {
                   </select>
                 </SelectWrap>
               </AuthField>
-            )}
 
             {isStudent && (
               <>
