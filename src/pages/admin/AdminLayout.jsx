@@ -17,6 +17,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { supabase } from "../../config/supabase";
 import logo from "../../assets/logo.jpg";
 
@@ -46,7 +47,7 @@ const navSections = [
     label: "MANAGE EVALUATION",
     items: [
       { key: "department", label: "Curriculum & Sections", path: "/admin/department", icon: GraduationCap },
-      { key: "subject", label: "All Subjects", path: "/admin/subject", icon: BookOpen },
+      { key: "subject", label: "All Subjects", path: "/admin/subject", icon: BookOpen, scopedHide: true },
       { key: "class-assignment", label: "Class Assignment", path: "/admin/class-assignment", icon: ClipboardList },
       { key: "academic-year", label: "Academic Year", path: "/admin/academic-year", icon: CalendarDays },
       { key: "subject-corrections", label: "Subject Corrections", path: "/admin/subject-corrections", icon: ClipboardCheck },
@@ -68,23 +69,27 @@ export default function AdminLayout({ title, children }) {
   const location = useLocation();
   const { logout, userProfile } = useAuth();
   const superAdmin = isSuperAdmin(userProfile);
+  const { inScopeName, loading: scopeLoading } = useScopedAdmin();
 
   useEffect(() => {
     const fetchPending = async () => {
       try {
         const [fRes, sRes] = await Promise.all([
-          supabase.from('users').select('id, status').eq('role', 'faculty'),
-          supabase.from('users').select('id, status').eq('role', 'student'),
+          supabase.from('users').select('id, status, department').eq('role', 'faculty'),
+          supabase.from('users').select('id, status, department').eq('role', 'student'),
         ]);
-        const fPending = (fRes.data || []).filter(u => u.status === 'pending').length;
-        const sPending = (sRes.data || []).filter(u => u.status === 'pending').length;
+        // D9 backstop: scoped admins count only their programs
+        // (RLS already filters server-side).
+        const inScope = (d) => superAdmin || inScopeName(d);
+        const fPending = (fRes.data || []).filter(u => u.status === 'pending' && inScope(u.department)).length;
+        const sPending = (sRes.data || []).filter(u => u.status === 'pending' && inScope(u.department)).length;
         setPendingCount(fPending + sPending);
       } catch (err) {
         console.error("Failed to fetch pending counts:", err);
       }
     };
-    fetchPending();
-  }, [location.pathname]);
+    if (!scopeLoading) fetchPending();
+  }, [location.pathname, scopeLoading, superAdmin, inScopeName]);
 
   // Fix orientation change: reset sidebar state based on actual window width
   useEffect(() => {
@@ -145,7 +150,7 @@ export default function AdminLayout({ title, children }) {
           <div key={section.id}>
             {section.label && <div className="ad-menuLabel">{section.label}</div>}
             <nav className="ad-nav">
-              {section.items.filter((item) => !item.superOnly || superAdmin).map((item) => {
+              {section.items.filter((item) => (!item.superOnly || superAdmin) && (!item.scopedHide || superAdmin)).map((item) => {
                 const Icon = item.icon;
                 return (
                   <button

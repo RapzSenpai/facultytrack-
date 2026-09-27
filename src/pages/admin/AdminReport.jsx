@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
+import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { parseFunctionError } from "../../utils/audit";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -62,6 +63,9 @@ const tierColors = {
 
 export default function AdminReport() {
   const { userProfile } = useAuth();
+  // D9: scoped admins are locked to their assigned program(s).
+  // Backend (export-report + anon view RLS) enforces the same.
+  const { isSuper, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
   const canExport = userProfile?.role === "admin" || userProfile?.role === "super_admin"; // D11
   const [exporting, setExporting] = useState(false);
   const [evaluations, setEvaluations] = useState([]);
@@ -129,6 +133,16 @@ export default function AdminReport() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Lock scoped admins into their assigned program.
+  useEffect(() => {
+    if (scopeLoading || isSuper) return;
+    if (myDeptNames.length > 0 && !myDeptNames.includes(filterDept)) {
+      setFilterDept(myDeptNames[0]);
+      setFilterFaculty("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeLoading, isSuper, myDeptNames]);
+
   const uniqueAYs = [...new Set(academicYearsList.map(y => y.year).filter(Boolean))].sort().reverse();
   const uniqueSems = [...new Set(academicYearsList.map(y => y.semester).filter(Boolean))].sort();
 
@@ -164,7 +178,9 @@ export default function AdminReport() {
       };
     })
     .filter(r => !filterFaculty || r.facultyId === filterFaculty)
-    .filter(r => !filterDept || r.department === filterDept);
+    .filter(r => !filterDept || r.department === filterDept)
+    // D9 backstop: never render out-of-program rows for scoped admins.
+    .filter(r => isSuper || inScopeName(r.department));
 
   // Department bar chart data
   const deptMap = {};
@@ -241,7 +257,7 @@ export default function AdminReport() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `facultytrack-report-${filterAY}-${filterSem}.csv`;
+      link.download = `facultytrack-report-${isSuper ? (filterDept || "all") : (myDeptNames[0] || filterDept || "scoped")}-${filterAY}-${filterSem}.csv`;
       link.click();
       URL.revokeObjectURL(url);
     } catch (err) {
@@ -289,6 +305,7 @@ export default function AdminReport() {
 
       const ayLabel = filterAY;
       const semLabel = filterSem;
+      const scopeLabel = isSuper ? (filterDept || "All programs") : (myDeptNames.join(", ") || filterDept || "Assigned program");
       const now = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
 
       const ratingColor = (r) => {
@@ -344,7 +361,7 @@ export default function AdminReport() {
         <body>
           <div class="header">
             <h1>FacultyTrack — Faculty Evaluation Report</h1>
-            <h2>${escapeHtml(ayLabel)} &bull; ${escapeHtml(semLabel)}</h2>
+            <h2>${escapeHtml(ayLabel)} &bull; ${escapeHtml(semLabel)} &bull; Scope: ${escapeHtml(scopeLabel)}</h2>
           </div>
           <div class="meta">
             <span>Generated: ${escapeHtml(now)}</span>
@@ -382,7 +399,13 @@ export default function AdminReport() {
        <div className="ad-welcomeHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
             <h2 className="ad-title">Evaluation Report</h2>
-            <p className="ad-subtitle">View and export faculty evaluation results.</p>
+            <p className="ad-subtitle">View and export faculty evaluation results.
+              {!scopeLoading && !isSuper && (
+                <span style={{ display: "block", marginTop: 4, fontWeight: 700 }}>
+                  Scope: {myDeptNames.join(", ") || "No program assigned — no data"}
+                </span>
+              )}
+            </p>
           </div>
           {canExport && (
           <div style={{ position: "relative" }}>
@@ -444,15 +467,26 @@ export default function AdminReport() {
             <select className="ad-filterSelect" value={filterDept} onChange={e => {
               setFilterDept(e.target.value);
               setFilterFaculty(""); // Reset faculty when changing department
-            }}>
-              <option value="">All Programs</option>
-              {departmentsList.map(d => (
-                <option key={d.id || d.name} value={d.name}>{d.name}</option>
-              ))}
+            }}
+              disabled={!isSuper && myDeptNames.length <= 1}
+              title={!isSuper ? "Locked to your assigned program" : undefined}>
+              {isSuper ? (
+                <>
+                  <option value="">All Programs</option>
+                  {departmentsList.map(d => (
+                    <option key={d.id || d.name} value={d.name}>{d.name}</option>
+                  ))}
+                </>
+              ) : (
+                myDeptNames.map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))
+              )}
             </select>
             <select className="ad-filterSelect" value={filterFaculty} onChange={e => setFilterFaculty(e.target.value)}>
               <option value="">All Faculty</option>
               {facultyUsers
+                .filter(f => isSuper || inScopeName(f.department))
                 .filter(f => !filterDept || f.department === filterDept)
                 .map(f => <option key={f.id} value={f.id}>{f.fullName}</option>)}
             </select>

@@ -1,9 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 
 export default function AdminSubject() {
+  // Curriculum console is canonical for scoped admins (D9);
+  // this global catalog stays super-only.
+  const { isSuper, loading: scopeLoading } = useScopedAdmin();
   const [searchQuery, setSearchQuery] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingSubject, setEditingSubject] = useState(null);
@@ -64,6 +68,10 @@ export default function AdminSubject() {
     (s.code || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
     (s.description || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (!scopeLoading && !isSuper) {
+    return <Navigate to="/admin/department" replace />;
+  }
 
   return (
     <AdminLayout title="Manage Subject">

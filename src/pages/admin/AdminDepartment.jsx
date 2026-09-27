@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import {
   GraduationCap,
   BookOpen,
@@ -24,6 +25,9 @@ const SEMESTERS = ["1st Semester", "2nd Semester", "Summer / Elective"];
 export default function AdminDepartment() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // D9: scoped admins manage only their assigned program(s);
+  // program CRUD stays super-only. RLS enforces the same server-side.
+  const { isSuper, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
 
   // Core Data
   const [departments, setDepartments] = useState([]);
@@ -147,9 +151,23 @@ export default function AdminDepartment() {
     loadData();
   }, []); // Run on initial mount
 
-  // 2. Program CRUD
+  // Single-program admins land directly in their curriculum.
+  useEffect(() => {
+    if (isSuper || scopeLoading || selectedProgram) return;
+    if (myDeptNames.length === 1) {
+      const only = departments.find((d) => inScopeName(d.name));
+      if (only) setSelectedProgram(only);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuper, scopeLoading, departments, myDeptNames]);
+
+  // 2. Program CRUD (super-only; scoped admins manage subjects/sections inside their program)
   const handleSaveProgram = async (e) => {
     e.preventDefault();
+    if (!isSuper) {
+      alert("Only super admins can create or rename programs.");
+      return;
+    }
     if (!programForm.name.trim() || !programForm.description.trim()) {
       alert("Please provide both Program Code and Description.");
       return;
@@ -187,6 +205,10 @@ export default function AdminDepartment() {
   };
 
   const handleDeleteProgram = async (dept) => {
+    if (!isSuper) {
+      alert("Only super admins can delete programs.");
+      return;
+    }
     if (
       !window.confirm(
         `Are you sure you want to delete ${dept.name}? This will also delete all associated sections and subjects.`,
@@ -422,16 +444,18 @@ export default function AdminDepartment() {
     return Array.from(set).sort();
   }, [currentProgramSubjects, currentProgramSections, openYears]);
 
-  // Filtered Programs list for main overview
+  // Filtered Programs list for main overview (D9: scoped to assignments).
   const filteredDepartments = useMemo(() => {
-    if (!searchQuery.trim()) return departments;
+    let list = departments;
+    if (!isSuper) list = list.filter((d) => inScopeName(d.name));
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase();
-    return departments.filter(
+    return list.filter(
       (d) =>
         (d.name || "").toLowerCase().includes(q) ||
         (d.description || "").toLowerCase().includes(q),
     );
-  }, [departments, searchQuery]);
+  }, [departments, searchQuery, isSuper, inScopeName]);
 
   return (
     <AdminLayout title={selectedProgram ? `${selectedProgram.name} Curriculum` : "Programs & Curriculum"}>
@@ -486,8 +510,14 @@ export default function AdminDepartment() {
                 </h2>
                 <p className="ad-subtitle">
                   Configure academic programs, curriculum prospectus subjects, and dynamic student sections.
+                  {!scopeLoading && !isSuper && (
+                    <span style={{ display: "block", marginTop: 4, fontWeight: 700 }}>
+                      Scope: {myDeptNames.join(", ") || "No program assigned — nothing to show"}
+                    </span>
+                  )}
                 </p>
               </div>
+              {isSuper && (
               <button
                 type="button"
                 className="ad-btnPrimary"
@@ -500,6 +530,7 @@ export default function AdminDepartment() {
                 <Plus size={18} style={{ marginRight: 6 }} />
                 Add New Program
               </button>
+              )}
             </div>
 
             {/* Filter / Search Bar */}
@@ -571,6 +602,7 @@ export default function AdminDepartment() {
                       <div>
                         <div className="ad-curr-program-top">
                           <h3 className="ad-curr-program-code">{dept.name}</h3>
+                          {isSuper && (
                           <div style={{ display: "flex", gap: "6px" }}>
                             <button
                               type="button"
@@ -593,6 +625,7 @@ export default function AdminDepartment() {
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2" /></svg>
                             </button>
                           </div>
+                          )}
                         </div>
 
                         <p className="ad-curr-program-desc">{dept.description || "No description provided."}</p>

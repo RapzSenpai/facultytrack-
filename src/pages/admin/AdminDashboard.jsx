@@ -2,10 +2,12 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import "../../styles/dashboard-mockup.css";
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { isSuper, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
   const [stats, setStats] = useState({ faculty: 0, students: 0, evaluations: 0, currentPeriodEvals: 0, uniqueParticipants: 0, pendingFaculty: 0, pendingStudents: 0 });
   const [activeYear, setActiveYear] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -20,6 +22,7 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("department"); // "department" or "faculty"
 
   useEffect(() => {
+    if (scopeLoading) return;
     Promise.all([
       supabase.from('users').select('*').eq('role', 'faculty'),
       supabase.from('users').select('*').eq('role', 'student'),
@@ -28,11 +31,14 @@ export default function AdminDashboard() {
       supabase.from('class_assignments').select('*'),
     ])
       .then(([facultyRes, studentsRes, evaluationsRes, yearsRes, assignmentsRes]) => {
-        const faculty = facultyRes.data || [];
-        const students = studentsRes.data || [];
-        const evaluations = evaluationsRes.data || [];
+        // D9: RLS already scopes these server-side for dept admins;
+        // client filter is a backstop so mixed-dept rows never render.
+        const inScope = (d) => isSuper || inScopeName(d);
+        const faculty = (facultyRes.data || []).filter((f) => inScope(f.department));
+        const students = (studentsRes.data || []).filter((s) => inScope(s.department));
+        const evaluations = (evaluationsRes.data || []).filter((e) => inScope(e.student_department));
         const years = yearsRes.data || [];
-        const assignments = assignmentsRes?.data || [];
+        const assignments = (assignmentsRes?.data || []).filter((a) => inScope(a.department));
 
         // Map snake_case to camelCase for faculty
         const facultyMapped = faculty.map(f => ({
@@ -207,7 +213,8 @@ export default function AdminDashboard() {
       })
       .catch(err => console.error("Dashboard fetch error:", err))
       .finally(() => setLoading(false));
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeLoading, isSuper, myDeptNames.join("|")]);
 
   // Filter chart data based on time range
   const filteredChartData = useMemo(() => {
@@ -230,6 +237,11 @@ export default function AdminDashboard() {
                   Welcome, Admin! <span style={{ fontSize: "1.2rem" }}></span>
                 </h2>
                 <p>Monitor faculty evaluations, user activities, and academic management.</p>
+                {!scopeLoading && (
+                  <p style={{ marginTop: 6, fontSize: 12, fontWeight: 700, color: "#1e3a5f" }}>
+                    Scope: {isSuper ? "All programs" : (myDeptNames.join(", ") || "No program assigned — no data")}
+                  </p>
+                )}
               </div>
               <div className="mockup-quick-actions">
                 <button className="mockup-btn" onClick={() => navigate('/admin/report')}>

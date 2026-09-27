@@ -191,7 +191,10 @@ export default function AdminReleaseManagement() {
   const needsDate = currentDraft.approved && !currentDraft.release_date;
 
   const handleSave = async () => {
-    if (!isSuper && !scopeDept) {
+    // D9/D10: scoped admins can only write their own program row —
+    // never the global (NULL department) row, which is super-only.
+    const targetDept = isSuper ? null : (scopeDept || "");
+    if (!isSuper && !targetDept) {
       alert("Your account has no program assignment yet. Ask a super admin to assign you a program first.");
       return;
     }
@@ -207,7 +210,7 @@ export default function AdminReleaseManagement() {
       const payload = {
         academic_year: filterYear,
         semester: filterSem,
-        department: scopeDept,
+        department: targetDept,
         approved: currentDraft.approved || false,
         approved_by: approvedBy,
         approved_at: currentDraft.approved ? new Date().toISOString() : null,
@@ -227,7 +230,7 @@ export default function AdminReleaseManagement() {
       }
       const { data: refreshed } = await supabase.from("evaluation_releases").select("*");
       setReleases(refreshed || []);
-      logAdminAction("release.save", "evaluation_releases", `${filterYear}:${filterSem}:${scopeDept ?? "global"}`, {
+      logAdminAction("release.save", "evaluation_releases", `${filterYear}:${filterSem}:${targetDept ?? "global"}`, {
         approved: currentDraft.approved || false,
         release_date: currentDraft.release_date || null,
       });
@@ -693,7 +696,7 @@ export default function AdminReleaseManagement() {
                   <button
                     type="button"
                     className="ad-rel-save-btn"
-                    disabled={saving || !filterYear}
+                    disabled={saving || !filterYear || (!isSuper && !scopeDept)}
                     onClick={handleSave}
                   >
                     <Save size={16} />
