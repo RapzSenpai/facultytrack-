@@ -359,7 +359,7 @@ export default function StudentDashboard() {
                             {item.dept} {item.year} - {item.section}
                           </span>
                         </td>
-                        <td className="sd-tableActions" style={{ justifyContent: "flex-end" }}>
+                        <td className="sd-tableActions" style={{ textAlign: "right" }}>
                           {item.status === "submitted" ? (
                             <span className="sdb-assignedBadge" title="Already evaluated">
                               <CheckCircle2 size={13} />
