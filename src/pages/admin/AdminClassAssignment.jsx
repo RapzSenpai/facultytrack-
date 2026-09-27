@@ -1,8 +1,15 @@
 import { useState, useEffect, useMemo } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 
 export default function AdminClassAssignment() {
+  const { isSuper, myDeptIds, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
+  const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  // D9 strict: scoped admin sees only own program(s). Super sees all.
+  const inScope = (r) => isSuper
+    || (r.department_id && myDeptIds.includes(r.department_id))
+    || inScopeName(r.department);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDept, setFilterDept] = useState("");
   const [filterYear, setFilterYear] = useState("");
@@ -28,6 +35,7 @@ export default function AdminClassAssignment() {
 
   useEffect(() => {
     const loadAllData = async () => {
+      if (scopeLoading) return;
       try {
         const [assignRes, facRes, subRes, deptRes, ayRes, secRes] = await Promise.all([
           supabase.from('class_assignments').select('*'),
@@ -53,12 +61,12 @@ export default function AdminClassAssignment() {
         const ays = ayRes.data || [];
         const secs = secRes.data || [];
 
-        setAssignmentList(assignments);
-        setFacultyOptions(users.filter(u => u.role === "faculty" && u.status !== "deleted").map(u => ({ ...u, fullName: u.full_name })));
-        setSubjectOptions(subjects);
+        setAssignmentList(assignments.filter(inScope));
+        setFacultyOptions(users.filter(u => u.role === "faculty" && u.status !== "deleted" && inScope(u)).map(u => ({ ...u, fullName: u.full_name })));
+        setSubjectOptions(subjects.filter(inScope));
         setDepartmentOptions(depts);
         setAcademicYearOptions(ays);
-        setSectionOptions(secs);
+        setSectionOptions(secs.filter(inScope));
         const deletedUids = new Set(
           users.filter(u => u.status === "deleted").map(u => u.id || u.uid)
         );
@@ -66,10 +74,20 @@ export default function AdminClassAssignment() {
       } catch (err) { console.error("Fetch Error:", err); }
     };
     loadAllData();
-  }, []);
+  }, [scopeLoading, isSuper, myDeptIds.join("|")]);
+
+  // Scoped admin: pin program filter to own assignment (same as Report/Student pages).
+  useEffect(() => {
+    if (!scopeLoading && !isSuper && myDeptNames.length > 0 && !myDeptNames.includes(filterDept)) {
+      setFilterDept(myDeptNames[0]);
+    }
+  }, [scopeLoading, isSuper, myDeptNames.join("|")]);
 
   const handleSave = async () => {
     try {
+      // Keep department_id in sync with the department name —
+      // scoped RLS + list filters match on it.
+      const selectedDept = departmentOptions.find((d) => sameDept(d.name, formData.department));
       if (editingAssignment) {
         const { error } = await supabase.from('class_assignments').update({
           faculty_id: formData.facultyId,
@@ -77,6 +95,7 @@ export default function AdminClassAssignment() {
           subject_code: formData.subjectCode,
           subject_name: formData.subjectName,
           department: formData.department,
+          department_id: selectedDept?.id || null,
           year_level: formData.yearLevel,
           section: formData.section,
           semester: formData.semester,
@@ -90,6 +109,7 @@ export default function AdminClassAssignment() {
           subject_code: formData.subjectCode,
           subject_name: formData.subjectName,
           department: formData.department,
+          department_id: selectedDept?.id || null,
           year_level: formData.yearLevel,
           section: formData.section,
           semester: formData.semester,
@@ -99,7 +119,7 @@ export default function AdminClassAssignment() {
       }
 
       const { data: refreshed } = await supabase.from('class_assignments').select('*');
-      setAssignmentList((refreshed || []).map(a => ({
+      setAssignmentList(((refreshed || []).map(a => ({
         ...a,
         facultyId: a.faculty_id,
         facultyName: a.faculty_name,
@@ -107,7 +127,7 @@ export default function AdminClassAssignment() {
         subjectName: a.subject_name,
         yearLevel: a.year_level,
         academicYear: a.academic_year,
-      })));
+      }))).filter(inScope));
       setShowModal(false);
     } catch (err) { console.error("Save error:", err); }
   };
@@ -128,7 +148,7 @@ export default function AdminClassAssignment() {
       a.facultyName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       a.subjectCode?.toLowerCase().includes(searchQuery.toLowerCase())
     )
-    .filter(a => !filterDept || a.department === filterDept)
+    .filter(a => !filterDept || sameDept(a.department, filterDept))
     .filter(a => !filterYear || a.yearLevel === filterYear)
     .filter(a => !filterSemester || a.semester === filterSemester)
   const normYear = (y) => {
@@ -147,7 +167,7 @@ export default function AdminClassAssignment() {
     }
     const matches = sectionOptions.filter(
       (sec) =>
-        (sec.department || "").toLowerCase() === formData.department.toLowerCase() &&
+        sameDept(sec.department, formData.department) &&
         normYear(sec.year_level) === normYear(formData.yearLevel)
     );
     if (matches.length > 0) {
@@ -162,7 +182,7 @@ export default function AdminClassAssignment() {
     }
     const filtered = subjectOptions.filter(
       (s) =>
-        (s.department || "").toLowerCase() === formData.department.toLowerCase() &&
+        sameDept(s.department, formData.department) &&
         normYear(s.year_level) === normYear(formData.yearLevel)
     );
     return filtered.length > 0 ? filtered : subjectOptions;
@@ -178,7 +198,7 @@ export default function AdminClassAssignment() {
           </div>
           <button className="ad-btnPrimary" onClick={() => {
             setEditingAssignment(null);
-            setFormData({ facultyId: "", facultyName: "", subjectCode: "", subjectName: "", department: "", yearLevel: "", section: "", semester: "", academicYear: "" });
+            setFormData({ facultyId: "", facultyName: "", subjectCode: "", subjectName: "", department: (!isSuper && myDeptNames[0]) || "", yearLevel: "", section: "", semester: "", academicYear: "" });
             setShowModal(true);
           }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -217,8 +237,8 @@ export default function AdminClassAssignment() {
               value={filterDept}
               onChange={(e) => setFilterDept(e.target.value)}
             >
-              <option value="">All Programs</option>
-              {departmentOptions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+              <option value="">{isSuper ? "All Programs" : (myDeptNames.join(", ") || "No program assigned")}</option>
+              {(isSuper ? departmentOptions : departmentOptions.filter(d => inScopeName(d.name))).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             </select>
 
             {/* Year Level Filter */}
@@ -391,7 +411,7 @@ export default function AdminClassAssignment() {
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                   >
                     <option value="">Select program</option>
-                    {departmentOptions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    {(isSuper ? departmentOptions : departmentOptions.filter(d => inScopeName(d.name))).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
                   </select>
                 </div>
                 <div className="ad-formGroup">
