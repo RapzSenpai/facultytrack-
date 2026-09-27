@@ -12,7 +12,8 @@ const normalizeYear = (y) => (y || "").replace(/[\s\-_]*(year)?\s*/gi, "").toLow
 const EMPTY_FORM = { schoolId: "", name: "", email: "", password: "", department: "", yearLevel: "", section: "" };
 
 export default function AdminStudent() {
-  const { isSuper, myDeptIds, inScopeName, loading: scopeLoading } = useScopedAdmin();
+  const { isSuper, myDeptIds, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
+  const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDept, setFilterDept] = useState("");
   const [filterYear, setFilterYear] = useState("");
@@ -62,6 +63,13 @@ export default function AdminStudent() {
       })
       .catch(() => {});
   }, [scopeLoading, isSuper, myDeptIds.join("|")]);
+
+  // Scoped admin: pin program filter to own assignment (same as Report page).
+  useEffect(() => {
+    if (!scopeLoading && !isSuper && myDeptNames.length > 0 && !myDeptNames.includes(filterDept)) {
+      setFilterDept(myDeptNames[0]);
+    }
+  }, [scopeLoading, isSuper, myDeptNames.join("|")]);
 
   const allSectionOptions = useMemo(() => {
     const set = new Set(SECTIONS);
@@ -128,6 +136,9 @@ export default function AdminStudent() {
 
     setLoading(true);
     const isEditing = !!editingStudent;
+    // Keep department_id in sync with the department name —
+    // scoped RLS + list filters match on it (same as Faculty page).
+    const selectedDept = departmentOptions.find((d) => sameDept(d.name, formData.department));
 
     try {
       if (isEditing) {
@@ -138,6 +149,7 @@ export default function AdminStudent() {
             email: formData.email,
             school_id: formData.schoolId,
             department: formData.department,
+            department_id: selectedDept?.id || null,
             year_level: formData.yearLevel,
             section: formData.section,
           })
@@ -181,6 +193,7 @@ export default function AdminStudent() {
             role: 'student',
             school_id: formData.schoolId,
             department: formData.department,
+            department_id: selectedDept?.id || null,
             year_level: formData.yearLevel,
             section: formData.section,
             status: 'active',
@@ -209,7 +222,7 @@ export default function AdminStudent() {
   );
 
   const displayedStudents = filteredStudents
-    .filter(s => !filterDept || s.department === filterDept)
+    .filter(s => !filterDept || sameDept(s.department, filterDept))
     .filter(s => !filterYear || normalizeYear(s.yearLevel) === normalizeYear(filterYear))
     .filter(s => !filterSection || (s.section || "").toUpperCase() === filterSection.toUpperCase());
 
@@ -248,8 +261,8 @@ export default function AdminStudent() {
             </div>
 
             <select className="ad-filterSelect" value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
-              <option value="">All Programs</option>
-              {departmentOptions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+              <option value="">{isSuper ? "All Programs" : (myDeptNames.join(", ") || "No program assigned")}</option>
+              {(isSuper ? departmentOptions : departmentOptions.filter(d => inScopeName(d.name))).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             </select>
 
             <select className="ad-filterSelect" value={filterYear} onChange={(e) => setFilterYear(e.target.value)}>
