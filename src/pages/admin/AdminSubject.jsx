@@ -26,8 +26,10 @@ export default function AdminSubject() {
   }, []);
 
   useEffect(() => {
-    fetchSubjects();
-  }, [fetchSubjects]);
+    // Super-only page: fetch only once scope settles as super;
+    // scoped admins redirect below without firing the query.
+    if (!scopeLoading && isSuper) fetchSubjects();
+  }, [fetchSubjects, scopeLoading, isSuper]);
 
   const handleSave = async () => {
     if (!formData.code || !formData.description) return alert("Please fill all fields");

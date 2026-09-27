@@ -457,6 +457,12 @@ export default function AdminDepartment() {
     );
   }, [departments, searchQuery, isSuper, inScopeName]);
 
+  // Scoped total for the "Showing X of Y" count — scoped admins
+  // must not see the global program total.
+  const scopedTotal = isSuper
+    ? departments.length
+    : departments.filter((d) => inScopeName(d.name)).length;
+
   return (
     <AdminLayout title={selectedProgram ? `${selectedProgram.name} Curriculum` : "Programs & Curriculum"}>
       <section className="ad-content">
@@ -553,13 +559,13 @@ export default function AdminDepartment() {
                   </button>
                 )}
                 <span className="ad-filterCount ad-filterBar--end">
-                  Showing <strong>{filteredDepartments.length}</strong> of <strong>{departments.length}</strong> programs
+                  Showing <strong>{filteredDepartments.length}</strong> of <strong>{scopedTotal}</strong> programs
                 </span>
               </div>
             </div>
 
             {/* Programs Cards Grid */}
-            {loading ? (
+            {loading || scopeLoading ? (
               <div className="ad-tableCard" style={{ padding: "60px 20px", textAlign: "center", color: "#64748b" }}>
                 <Layers size={36} style={{ margin: "0 auto 12px", opacity: 0.5 }} />
                 <p style={{ fontWeight: 600, fontSize: "15px", margin: 0 }}>Loading academic programs...</p>
@@ -568,7 +574,12 @@ export default function AdminDepartment() {
               <div className="ad-tableCard" style={{ padding: "60px 20px", textAlign: "center", color: "#64748b" }}>
                 <GraduationCap size={42} style={{ margin: "0 auto 12px", opacity: 0.4 }} />
                 <h3 style={{ fontSize: "16px", fontWeight: 700, color: "#1e293b", margin: 0 }}>No programs found</h3>
-                <p style={{ fontSize: "13.5px", margin: "6px 0 16px 0" }}>Try adjusting your search query or add a new program.</p>
+                <p style={{ fontSize: "13.5px", margin: "6px 0 16px 0" }}>
+                  {isSuper
+                    ? "Try adjusting your search query or add a new program."
+                    : "No programs are assigned to your account. Ask a super admin for a program assignment."}
+                </p>
+                {isSuper && (
                 <button
                   type="button"
                   className="ad-btnPrimary"
@@ -580,6 +591,7 @@ export default function AdminDepartment() {
                 >
                   <Plus size={16} style={{ marginRight: 6 }} /> Add Program
                 </button>
+                )}
               </div>
             ) : (
               <div className="ad-curr-grid">

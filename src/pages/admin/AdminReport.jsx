@@ -11,6 +11,12 @@ import {
 
 const avg = (arr) => arr.length ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2) : "—";
 
+// Department names come from mixed sources (users, assignments,
+// departments table) with inconsistent casing/whitespace — compare
+// normalized so "BSIT" matches "bsit ".
+const normDept = (v) => String(v || "").trim().toLowerCase();
+const sameDept = (a, b) => normDept(a) === normDept(b) && normDept(a) !== "";
+
 const getPerformanceLabel = (r) => {
   const n = Number(r);
   if (isNaN(n)) return "—";
@@ -178,20 +184,27 @@ export default function AdminReport() {
       };
     })
     .filter(r => !filterFaculty || r.facultyId === filterFaculty)
-    .filter(r => !filterDept || r.department === filterDept)
+    .filter(r => !filterDept || sameDept(r.department, filterDept))
     // D9 backstop: never render out-of-program rows for scoped admins.
     .filter(r => isSuper || inScopeName(r.department));
 
-  // Department bar chart data
+  // Department bar chart data (grouped by normalized name so
+  // "BSIT" vs "bsit" casing variants don't split into two bars).
   const deptMap = {};
+  const deptLabel = {};
   reportData.forEach(r => {
     if (r.rating === "—") return;
-    if (!deptMap[r.department]) deptMap[r.department] = { total: 0, count: 0 };
-    deptMap[r.department].total += parseFloat(r.rating);
-    deptMap[r.department].count++;
+    const key = normDept(r.department);
+    if (!key) return;
+    if (!deptMap[key]) {
+      deptMap[key] = { total: 0, count: 0 };
+      deptLabel[key] = r.department;
+    }
+    deptMap[key].total += parseFloat(r.rating);
+    deptMap[key].count++;
   });
-  const deptData = Object.entries(deptMap).map(([dept, v]) => ({
-    dept,
+  const deptData = Object.entries(deptMap).map(([key, v]) => ({
+    dept: deptLabel[key],
     avg: parseFloat((v.total / v.count).toFixed(2)),
   }));
 
@@ -412,7 +425,7 @@ export default function AdminReport() {
             <button
               className="ad-btnPrimary"
               onClick={() => setShowExportMenu((v) => !v)}
-              disabled={loading || exporting || exportingPdf || !filterAY || !filterSem}
+              disabled={loading || scopeLoading || exporting || exportingPdf || !filterAY || !filterSem}
               title={!filterAY || !filterSem ? "Pick a year and semester first" : "Statistics-only export (audited, D13)"}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
@@ -487,14 +500,14 @@ export default function AdminReport() {
               <option value="">All Faculty</option>
               {facultyUsers
                 .filter(f => isSuper || inScopeName(f.department))
-                .filter(f => !filterDept || f.department === filterDept)
+                .filter(f => !filterDept || sameDept(f.department, filterDept))
                 .map(f => <option key={f.id} value={f.id}>{f.fullName}</option>)}
             </select>
           </div>
         </div>
 
         <div className="ad-tableCard">
-          {loading ? (
+          {loading || scopeLoading ? (
             <div style={{ padding: "40px", textAlign: "center", color: "#6b7280" }}>Loading report data...</div>
           ) : (
             <div className="ad-tableWrap">
@@ -558,7 +571,7 @@ export default function AdminReport() {
         </div>
 
         {/* Charts */}
-        {!loading && hasChartData && (
+        {!loading && !scopeLoading && hasChartData && (
           <div className="ad-chartsRow">
 
             {/* LEFT: Program Performance — horizontal bar chart */}
