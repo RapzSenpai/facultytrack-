@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { logAdminAction } from "../../utils/audit";
 
 // Phase 6 [D7]: priority cases are handled by Admin. This page is
@@ -22,6 +23,12 @@ const MOD_COLORS = {
 };
 
 export default function AdminModeration() {
+  const { isSuper, myDeptIds, inScopeName, loading: scopeLoading } = useScopedAdmin();
+  // D9 strict: evaluation belongs to a program via its faculty (primary)
+  // or the responding student's department (fallback). Super sees all.
+  const inScopeFaculty = (f) => isSuper
+    || (f?.department_id && myDeptIds.includes(f.department_id))
+    || inScopeName(f?.department);
   const [loading, setLoading] = useState(true);
   const [evaluations, setEvaluations] = useState([]);
   const [reviews, setReviews] = useState([]);
@@ -35,23 +42,33 @@ export default function AdminModeration() {
 
   useEffect(() => {
     const load = async () => {
+      if (scopeLoading) return;
       try {
         const [evalRes, reviewRes, wordsRes, facRes] = await Promise.all([
           supabase.from("admin_evaluations_anon").select("*"),
           supabase.from("priority_reviews").select("*").order("created_at", { ascending: false }),
           supabase.from("blocked_words").select("*").order("word"),
-          supabase.from("users").select("id, full_name, department").eq("role", "faculty"),
+          supabase.from("users").select("id, full_name, department, department_id").eq("role", "faculty"),
         ]);
-        setEvaluations(evalRes.data || []);
-        setReviews(reviewRes.data || []);
+        const fac = facRes.data || [];
+        const facById = new Map(fac.map((f) => [f.id, f]));
+        const inScopeEval = (e) => isSuper
+          || inScopeFaculty(facById.get(e.faculty_id))
+          || inScopeName(e.student_department);
+        const scopedEvals = (evalRes.data || []).filter(inScopeEval);
+        const scopedIds = new Set(scopedEvals.map((e) => e.id));
+        setEvaluations(scopedEvals);
+        // Fail-closed: reviews pointing at out-of-scope (or missing)
+        // evaluations never reach a scoped admin's queue.
+        setReviews((reviewRes.data || []).filter((r) => isSuper || scopedIds.has(r.evaluation_id)));
         setWords(wordsRes.data || []);
-        setFaculty(facRes.data || []);
+        setFaculty(fac.filter((f) => isSuper || inScopeFaculty(f)));
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, []);
+  }, [scopeLoading, isSuper, myDeptIds.join("|")]);
 
   const evalById = useMemo(() => {
     const m = new Map();
