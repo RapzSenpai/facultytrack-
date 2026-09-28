@@ -3,12 +3,12 @@ import { useNavigate, Link } from "react-router-dom";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
-import { isPeriodActive, periodStatusLabel } from "../../utils/periodStatus";
+import { isPeriodActive, periodStatusLabel, pickActivePeriod } from "../../utils/periodStatus";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import "../../styles/dashboard-mockup.css";
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const { isSuper, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
+  const { isSuper, myDeptIds, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
   const [stats, setStats] = useState({ faculty: 0, students: 0, evaluations: 0, currentPeriodEvals: 0, uniqueParticipants: 0, pendingFaculty: 0, pendingStudents: 0 });
   const [activeYear, setActiveYear] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,17 +28,18 @@ export default function AdminDashboard() {
       supabase.from('users').select('*').eq('role', 'faculty'),
       supabase.from('users').select('*').eq('role', 'student'),
       supabase.from('admin_evaluations_anon').select('*'),
-      supabase.from('academic_years').select('*'),
+      supabase.from('academic_years').select('*, departments(name)'),
       supabase.from('class_assignments').select('*'),
     ])
       .then(([facultyRes, studentsRes, evaluationsRes, yearsRes, assignmentsRes]) => {
         // D9: RLS already scopes these server-side for dept admins;
         // client filter is a backstop so mixed-dept rows never render.
         const inScope = (d) => isSuper || inScopeName(d);
+        const inScopePeriod = (y) => isSuper || !y.department_id || myDeptIds.includes(y.department_id);
         const faculty = (facultyRes.data || []).filter((f) => inScope(f.department));
         const students = (studentsRes.data || []).filter((s) => inScope(s.department));
         const evaluations = (evaluationsRes.data || []).filter((e) => inScope(e.student_department));
-        const years = yearsRes.data || [];
+        const years = (yearsRes.data || []).filter(inScopePeriod);
         const assignments = (assignmentsRes?.data || []).filter((a) => inScope(a.department));
 
         // Map snake_case to camelCase for faculty
@@ -103,7 +104,7 @@ export default function AdminDashboard() {
         // Find current period
         let active = null;
         if (yearsMapped.length > 0) {
-          active = yearsMapped.find(y => isPeriodActive(y)) || yearsMapped[0];
+          active = pickActivePeriod(yearsMapped, myDeptNames[0]) || yearsMapped[0];
           setActiveYear(active);
         }
 
@@ -215,7 +216,7 @@ export default function AdminDashboard() {
       .catch(err => console.error("Dashboard fetch error:", err))
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeLoading, isSuper, myDeptNames.join("|")]);
+  }, [scopeLoading, isSuper, myDeptNames.join("|"), myDeptIds.join("|")]);
 
   // Filter chart data based on time range
   const filteredChartData = useMemo(() => {

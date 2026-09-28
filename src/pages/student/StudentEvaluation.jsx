@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import { parseFunctionError } from "../../utils/audit";
 import { isAssignmentMatch } from "../../utils/assignmentMatch";
-import { isPeriodActive } from "../../utils/periodStatus";
+import { pickActivePeriod } from "../../utils/periodStatus";
 import StudentLayout from "./StudentLayout";
 
 // Institutional fallback criteria so questionnaire is never blank
@@ -82,7 +82,7 @@ export default function StudentEvaluation() {
           supabase.from("evaluations").select("*").eq("student_id", currentUser.id),
           supabase.from("criteria").select("*"),
           supabase.from("questions").select("*"),
-          supabase.from("academic_years").select("*"),
+          supabase.from("academic_years").select("*, departments(name)"),
           supabase.from("student_enrollments")
             .select("confirmed_assignments, excluded_assignments, enrollment_kind, academic_year, semester")
             .eq("student_id", currentUser.id),
@@ -122,10 +122,13 @@ export default function StudentEvaluation() {
           semester: y.semester,
           startDate: y.start_date,
           endDate: y.end_date,
+          end_date: y.end_date,
           status: y.status,
+          department_id: y.department_id,
+          departments: y.departments,
         }));
 
-        const active = years.find((y) => isPeriodActive(y)) || null;
+        const active = pickActivePeriod(years, studentDept) || null;
         setActiveYear(active);
 
         const subMap = new Map();

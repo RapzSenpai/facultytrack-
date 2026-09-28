@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import FacultyLayout from "./FacultyLayout";
 import { fetchFacultyReleaseStatus } from "../../utils/releaseStatus";
-import { isPeriodActive } from "../../utils/periodStatus";
+import { pickActivePeriod } from "../../utils/periodStatus";
 
 export default function FacultyDashboard() {
   const [overallRating, setOverallRating] = useState(null);
@@ -25,7 +25,7 @@ export default function FacultyDashboard() {
     // returns belongs to released periods by definition.
     Promise.all([
       supabase.from('faculty_evaluations_anon').select('*'),
-      supabase.from('academic_years').select('*'),
+      supabase.from('academic_years').select('*, departments(name)'),
       fetchFacultyReleaseStatus().catch(() => []),
     ])
       .then(([evalRes, yearRes, statusRows]) => {
@@ -39,7 +39,7 @@ export default function FacultyDashboard() {
         setTotalResponses(evals.length);
 
         if (years.length > 0) {
-          const active = years.find(y => isPeriodActive(y)) || years[0];
+          const active = pickActivePeriod(years, userProfile?.department) || years[0];
           setActiveYear({
             ...active,
             startDate: active.start_date,

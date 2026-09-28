@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import { isAssignmentMatch } from "../../utils/assignmentMatch";
-import { isPeriodActive } from "../../utils/periodStatus";
+import { pickActivePeriod } from "../../utils/periodStatus";
 import {
   Calendar,
   Check,
@@ -52,7 +52,7 @@ export default function StudentDashboard() {
         const [assignmentsRes, submissionsRes, yearsRes, enrollmentRes] = await Promise.all([
           supabase.from("class_assignments").select("*"),
           supabase.from("evaluations").select("*").eq("student_id", currentUser.id),
-          supabase.from("academic_years").select("*"),
+          supabase.from("academic_years").select("*, departments(name)"),
           supabase.from("student_enrollments")
             .select("confirmed_assignments, excluded_assignments, enrollment_kind, academic_year, semester")
             .eq("student_id", currentUser.id),
@@ -87,7 +87,7 @@ export default function StudentDashboard() {
           status: y.status,
         }));
 
-        const active = years.find((y) => isPeriodActive(y)) || null;
+        const active = pickActivePeriod(yearsRes.data || [], studentDept) || null;
         setActiveYear(active);
 
         const subMap = new Map();

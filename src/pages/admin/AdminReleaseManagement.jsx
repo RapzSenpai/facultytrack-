@@ -79,7 +79,7 @@ export default function AdminReleaseManagement() {
             .eq("role", "faculty")
             .order("full_name"),
           supabase.from("evaluation_releases").select("*"),
-          supabase.from("academic_years").select("*").order("start_date"),
+          supabase.from("academic_years").select("*, departments(name)").order("start_date"),
           supabase.from("departments").select("id, name").order("name"),
         ]);
         if (cancelled) return;
@@ -99,7 +99,9 @@ export default function AdminReleaseManagement() {
           if (!cancelled) setMyDeptIds((mine || []).map((a) => a.department_id));
         }
 
-        const active = y.find((row) => isPeriodActive(row)) || y[0];
+        const inScopeY = (r) => isSuper || !r.department_id || myDeptIds.includes(r.department_id);
+        const active = y.find((row) => inScopeY(row) && isPeriodActive(row))
+          || y.find((row) => isPeriodActive(row)) || y[0];
         if (active) {
           setFilterYear(active.year);
           setFilterSem(active.semester);
@@ -118,7 +120,10 @@ export default function AdminReleaseManagement() {
   const periodOptions = useMemo(() => {
     const seen = new Set();
     const out = [];
+    // D9: scoped admin picks from own-program + shared periods only.
+    const inScope = (y) => isSuper || !y.department_id || myDeptIds.includes(y.department_id);
     for (const y of years) {
+      if (!inScope(y)) continue;
       const key = `${y.year}__${y.semester}`;
       if (!seen.has(key)) {
         seen.add(key);
@@ -126,7 +131,7 @@ export default function AdminReleaseManagement() {
       }
     }
     return out;
-  }, [years]);
+  }, [years, isSuper, myDeptIds.join("|")]);
 
   // Scope [D9/D10]: super admin manages the global row
   // (department NULL); a scoped admin manages rows for their own
