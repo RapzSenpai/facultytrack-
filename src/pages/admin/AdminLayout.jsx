@@ -49,7 +49,7 @@ const navSections = [
       { key: "department", label: "Curriculum & Sections", path: "/admin/department", icon: GraduationCap },
       { key: "subject", label: "All Subjects", path: "/admin/subject", icon: BookOpen, scopedHide: true },
       { key: "class-assignment", label: "Class Assignment", path: "/admin/class-assignment", icon: ClipboardList },
-      { key: "academic-year", label: "Academic Year", path: "/admin/academic-year", icon: CalendarDays },
+      { key: "academic-year", label: "Evaluation Period", path: "/admin/academic-year", icon: CalendarDays },
       { key: "subject-corrections", label: "Subject Corrections", path: "/admin/subject-corrections", icon: ClipboardCheck },
       { key: "release-management", label: "Release Management", path: "/admin/release-management", icon: ClipboardCheck },
       { key: "moderation", label: "Moderation & Priority", path: "/admin/moderation", icon: ClipboardCheck },
