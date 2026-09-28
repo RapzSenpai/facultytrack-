@@ -1,8 +1,15 @@
 import { useState, useEffect } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 
 export default function AdminQuestionnaire() {
+  const { isSuper, myDeptIds, loading: scopeLoading } = useScopedAdmin();
+  // D9: scoped admin sees own-program + shared (NULL) criteria.
+  // Super sees all. Shared rows are read-only for scoped admins.
+  const inScopeCriteria = (c) => isSuper
+    || !c.department_id
+    || myDeptIds.includes(c.department_id);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState({ show: false, message: "", type: "" });
 
@@ -28,14 +35,16 @@ export default function AdminQuestionnaire() {
   };
 
   const fetchData = async () => {
+    if (scopeLoading) return;
     try {
       const [criteriaRes, questionsRes] = await Promise.all([
         supabase.from('criteria').select('*'),
         supabase.from('questions').select('*'),
       ]);
 
-      const criteriaData = criteriaRes.data || [];
-      const questionsData = questionsRes.data || [];
+      const criteriaData = (criteriaRes.data || []).filter(inScopeCriteria);
+      const visibleIds = new Set(criteriaData.map((c) => c.id));
+      const questionsData = (questionsRes.data || []).filter((q) => visibleIds.has(q.criteria_id));
 
       setCriteriaList(criteriaData);
 
@@ -62,7 +71,7 @@ export default function AdminQuestionnaire() {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [scopeLoading, isSuper, myDeptIds.join("|")]);
 
   // --- CRITERIA CRUD ---
   const handleSaveCriteria = async () => {
@@ -70,17 +79,28 @@ export default function AdminQuestionnaire() {
       showToast("Please enter a criteria name", "error");
       return;
     }
+    // Scoped admin creates into own program; super creates shared rows.
+    const ownerDeptId = isSuper ? null : (myDeptIds[0] || null);
+    if (!isSuper && !ownerDeptId) {
+      showToast("No program assigned — ask a super admin to assign you first.", "error");
+      return;
+    }
     try {
       if (editingCriteriaId) {
+        const target = criteriaList.find((c) => c.id === editingCriteriaId);
+        if (!isSuper && !target?.department_id) {
+          showToast("Shared criteria are read-only for program admins.", "error");
+          return;
+        }
         const { error } = await supabase.from('criteria').update({ name: criteriaFormData.name }).eq('id', editingCriteriaId);
         if (error) throw error;
         setCriteriaList(list => list.map(c => c.id === editingCriteriaId ? { ...c, name: criteriaFormData.name } : c));
         showToast("Criteria updated successfully!", "success");
         setEditingCriteriaId(null);
       } else {
-        const { data, error } = await supabase.from('criteria').insert({ name: criteriaFormData.name, enabled: true }).select().single();
+        const { data, error } = await supabase.from('criteria').insert({ name: criteriaFormData.name, enabled: true, department_id: ownerDeptId }).select().single();
         if (error) throw error;
-        setCriteriaList(list => [...list, { id: data.id, name: criteriaFormData.name, enabled: true }]);
+        setCriteriaList(list => [...list, { id: data.id, name: criteriaFormData.name, enabled: true, department_id: ownerDeptId }]);
         setQuestionsByCriteria(prev => ({ ...prev, [data.id]: [] }));
         setSelectedCriteriaId(data.id);
         showToast("Criteria added and activated successfully!", "success");
@@ -94,6 +114,10 @@ export default function AdminQuestionnaire() {
 
   const handleToggleCriteria = async (e, item) => {
     if (e) e.stopPropagation();
+    if (!isSuper && !item.department_id) {
+      showToast("Shared criteria are read-only for program admins.", "error");
+      return;
+    }
     const newEnabled = !item.enabled;
     try {
       const { error } = await supabase.from('criteria').update({ enabled: newEnabled }).eq('id', item.id);
@@ -114,6 +138,10 @@ export default function AdminQuestionnaire() {
 
   const handleDeleteCriteria = async (e, id) => {
     e.stopPropagation();
+    if (!isSuper && !criteriaList.find((c) => c.id === id)?.department_id) {
+      showToast("Shared criteria are read-only for program admins.", "error");
+      return;
+    }
     if (!confirm("Are you sure you want to delete this criteria? All its questions will also be lost.")) return;
     try {
       const { error } = await supabase.from('criteria').delete().eq('id', id);
@@ -136,6 +164,10 @@ export default function AdminQuestionnaire() {
       return;
     }
     const criteriaId = selectedCriteriaId;
+    if (!isSuper && !criteriaList.find((c) => c.id === criteriaId)?.department_id) {
+      showToast("Shared criteria are read-only for program admins.", "error");
+      return;
+    }
     try {
       if (editingQuestion) {
         const { error } = await supabase.from('questions').update({ text: questionFormData.text }).eq('id', editingQuestion.id);

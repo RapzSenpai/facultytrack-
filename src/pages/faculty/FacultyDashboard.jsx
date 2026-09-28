@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import FacultyLayout from "./FacultyLayout";
 import { fetchFacultyReleaseStatus } from "../../utils/releaseStatus";
+import { isPeriodActive } from "../../utils/periodStatus";
 
 export default function FacultyDashboard() {
   const [overallRating, setOverallRating] = useState(null);
@@ -38,7 +39,7 @@ export default function FacultyDashboard() {
         setTotalResponses(evals.length);
 
         if (years.length > 0) {
-          const active = years.find(y => (y.status || "").toLowerCase().trim() === "on-going") || years[0];
+          const active = years.find(y => isPeriodActive(y)) || years[0];
           setActiveYear({
             ...active,
             startDate: active.start_date,

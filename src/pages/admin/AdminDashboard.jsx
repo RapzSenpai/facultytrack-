@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
+import { isPeriodActive, periodStatusLabel } from "../../utils/periodStatus";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import "../../styles/dashboard-mockup.css";
 export default function AdminDashboard() {
@@ -102,7 +103,7 @@ export default function AdminDashboard() {
         // Find current period
         let active = null;
         if (yearsMapped.length > 0) {
-          active = yearsMapped.find(y => (y.status || "").toLowerCase().trim() === "on-going") || yearsMapped[0];
+          active = yearsMapped.find(y => isPeriodActive(y)) || yearsMapped[0];
           setActiveYear(active);
         }
 
@@ -273,7 +274,7 @@ export default function AdminDashboard() {
                   {activeYear ? `${activeYear.year} • ${activeYear.semester}` : "No active year"}
                 </div>
                 <div className="mockup-period-status">
-                  Evaluation Status: <span className="mockup-status-badge">{(activeYear?.status || "").toLowerCase().trim() === "on-going" ? "On-going" : "Closed"}</span>
+                  Evaluation Status: <span className="mockup-status-badge">{periodStatusLabel(activeYear)}</span>
                 </div>
               </div>
             </div>

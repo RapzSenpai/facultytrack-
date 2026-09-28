@@ -129,7 +129,10 @@ export default function AdminModeration() {
         .select("id");
       if (error) throw error;
       if (!data || data.length === 0) {
-        alert("No change saved — this comment belongs to a program outside your scope.");
+        const fac = faculty.find((f) => f.id === evaluation.faculty_id);
+        alert(fac && !fac.department?.trim()
+          ? "No change saved — the evaluated faculty has no assigned program. Assign one in Faculty Management first."
+          : "No change saved — this comment belongs to a program outside your scope.");
         return;
       }
       setEvaluations((prev) =>

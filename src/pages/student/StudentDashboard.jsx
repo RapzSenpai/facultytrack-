@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import { isAssignmentMatch } from "../../utils/assignmentMatch";
+import { isPeriodActive } from "../../utils/periodStatus";
 import {
   Calendar,
   Check,
@@ -86,7 +87,7 @@ export default function StudentDashboard() {
           status: y.status,
         }));
 
-        const active = years.find((y) => (y.status || "").toLowerCase().trim() === "on-going") || null;
+        const active = years.find((y) => isPeriodActive(y)) || null;
         setActiveYear(active);
 
         const subMap = new Map();

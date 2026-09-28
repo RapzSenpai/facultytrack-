@@ -3,6 +3,7 @@ import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { is_period_released } from "../../utils/periodRelease";
+import { isPeriodActive } from "../../utils/periodStatus";
 import { logAdminAction } from "../../utils/audit";
 import {
   ClipboardCheck,
@@ -98,7 +99,7 @@ export default function AdminReleaseManagement() {
           if (!cancelled) setMyDeptIds((mine || []).map((a) => a.department_id));
         }
 
-        const active = y.find((row) => (row.status || "").toLowerCase().trim() === "on-going") || y[0];
+        const active = y.find((row) => isPeriodActive(row)) || y[0];
         if (active) {
           setFilterYear(active.year);
           setFilterSem(active.semester);
@@ -121,7 +122,7 @@ export default function AdminReleaseManagement() {
       const key = `${y.year}__${y.semester}`;
       if (!seen.has(key)) {
         seen.add(key);
-        out.push({ year: y.year, semester: y.semester, status: y.status });
+        out.push({ year: y.year, semester: y.semester, status: y.status, end_date: y.end_date });
       }
     }
     return out;
@@ -248,6 +249,12 @@ export default function AdminReleaseManagement() {
   };
 
   const effectiveStatus = releaseRow ? derivedStatus(releaseRow) : "draft";
+  // A released global (all-program) row makes results visible to EVERY
+  // program — flag its blast radius explicitly (super-only surface).
+  const globalReleasedRow = releases.find(
+    (r) => r.academic_year === filterYear && r.semester === filterSem
+      && (r.department ?? null) === null && is_period_released(r),
+  );
   const draftStatus = derivedStatus({ ...currentDraft, approved: currentDraft.approved || false });
 
   // Date helper functions
@@ -301,7 +308,7 @@ export default function AdminReleaseManagement() {
             <span className="ad-rel-period-dot" />
             <span>
               {filterYear && filterSem ? `${filterYear} • ${filterSem}` : "Select Period"}
-              {(activePeriodObj?.status || "").toLowerCase() === "on-going" ? " (Active)" : ""}
+              {isPeriodActive(activePeriodObj) ? " (Active)" : ""}
             </span>
           </div>
         </div>
@@ -326,7 +333,7 @@ export default function AdminReleaseManagement() {
                 >
                   {periodOptions.map((p) => (
                     <option key={`${p.year}__${p.semester}`} value={`${p.year}__${p.semester}`}>
-                      {p.year} — {p.semester}{(p.status || "").toLowerCase() === "on-going" ? " (active)" : ""}
+                      {p.year} — {p.semester}{isPeriodActive(p) ? " (active)" : ""}
                     </option>
                   ))}
                 </select>
@@ -476,6 +483,15 @@ export default function AdminReleaseManagement() {
 
             </div>
 
+            {isSuper && globalReleasedRow && (
+              <div className="ad-rel-unsaved-alert" style={{ borderColor: "#fca5a5", background: "#fef2f2" }}>
+                <div>
+                  <span className="ad-rel-unsaved-pulse" style={{ background: "#dc2626" }} />
+                  Global release is live for <strong>{filterYear} {filterSem}</strong> — visible to <strong>ALL programs</strong>. Restrict per program or revoke it to stop cross-department visibility.
+                </div>
+              </div>
+            )}
+
             <div className="ad-rel-console">
               <div className="ad-rel-panel">
                 <div className="ad-rel-panel-header">
@@ -505,7 +521,7 @@ export default function AdminReleaseManagement() {
                   {periodOptions.map((p) => (
                     <option key={`${p.year}__${p.semester}`} value={`${p.year}__${p.semester}`}>
                       {p.year} — {p.semester}
-                      {(p.status || "").toLowerCase() === "on-going" ? " (Active Semester)" : ""}
+                      {isPeriodActive(p) ? " (Active Semester)" : ""}
                     </option>
                   ))}
                 </select>

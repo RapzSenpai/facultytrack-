@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import { parseFunctionError } from "../../utils/audit";
 import { isAssignmentMatch } from "../../utils/assignmentMatch";
+import { isPeriodActive } from "../../utils/periodStatus";
 import StudentLayout from "./StudentLayout";
 
 // Institutional fallback criteria so questionnaire is never blank
@@ -124,7 +125,7 @@ export default function StudentEvaluation() {
           status: y.status,
         }));
 
-        const active = years.find((y) => (y.status || "").toLowerCase().trim() === "on-going") || null;
+        const active = years.find((y) => isPeriodActive(y)) || null;
         setActiveYear(active);
 
         const subMap = new Map();

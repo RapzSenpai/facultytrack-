@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { isPeriodActive, periodStatusLabel } from "../../utils/periodStatus";
 
 export default function AdminAcademicYear() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -108,8 +109,11 @@ export default function AdminAcademicYear() {
       ay.semester?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Derived status: a past end date reads Closed even before manual close.
+  const ayStatus = (ay) => (isPeriodActive(ay) ? "on-going" : "closed");
+
   const displayedAY = filteredAcademicYears
-    .filter(ay => !filterStatus || (ay.status || "").toLowerCase().trim() === filterStatus)
+    .filter(ay => !filterStatus || ayStatus(ay) === filterStatus)
     .filter(ay => !filterSemester || ay.semester === filterSemester);
 
   return (
@@ -191,8 +195,8 @@ export default function AdminAcademicYear() {
                       <td className="ad-engagement">{ay.start_date}</td>
                       <td className="ad-engagement">{ay.end_date}</td>
                       <td>
-                        <span className={`ad-badge ad-badge--${(ay.status || "").toLowerCase().trim() === "on-going" ? "active" : "inactive"}`}>
-                          {(ay.status || "").toLowerCase().trim() === "on-going" ? "On-going" : "Closed"}
+                        <span className={`ad-badge ad-badge--${isPeriodActive(ay) ? "active" : "inactive"}`}>
+                          {periodStatusLabel(ay)}
                         </span>
                       </td>
                       <td className="ad-tableActions" style={{ justifyContent: 'flex-end' }}>
