@@ -129,10 +129,34 @@ export default function AdminModeration() {
         .select("id");
       if (error) throw error;
       if (!data || data.length === 0) {
-        const fac = faculty.find((f) => f.id === evaluation.faculty_id);
-        alert(fac && !fac.department?.trim()
-          ? "No change saved — the evaluated faculty has no assigned program. Assign one in Faculty Management first."
-          : "No change saved — this comment belongs to a program outside your scope.");
+        // Self-diagnosing: print both sides of the scope match so the
+        // next click explains itself in the dev console.
+        try {
+          const [{ data: facRow }, { data: mine }, { data: depts }] = await Promise.all([
+            supabase.from("users").select("id, full_name, department, department_id").eq("id", evaluation.faculty_id).maybeSingle(),
+            supabase.from("admin_program_assignments").select("department_id"),
+            supabase.from("departments").select("id, name"),
+          ]);
+          const deptName = (id) => depts?.find((d) => d.id === id)?.name || id;
+          const diag = {
+            evaluation: evaluation.id,
+            faculty: facRow || "NOT VISIBLE (RLS hides this faculty row)",
+            myAssignments: (mine || []).map((a) => deptName(a.department_id)),
+          };
+          console.log("[moderation-scope]", JSON.stringify(diag, null, 2));
+          if (!facRow) {
+            alert("No change saved — RLS hides the evaluated faculty row entirely (program-less or other program). Open console ([moderation-scope]) for details.");
+          } else if (!facRow.department?.trim() && !facRow.department_id) {
+            alert("No change saved — the evaluated faculty has no assigned program. Assign one in Faculty Management first.");
+          } else {
+            alert(`No change saved — faculty program (${facRow.department || facRow.department_id}) does not match your assignment (${diag.myAssignments.join(", ") || "none"}). Details in console.`);
+          }
+        } catch {
+          const fac = faculty.find((f) => f.id === evaluation.faculty_id);
+          alert(fac && !fac.department?.trim()
+            ? "No change saved — the evaluated faculty has no assigned program. Assign one in Faculty Management first."
+            : "No change saved — this comment belongs to a program outside your scope.");
+        }
         return;
       }
       setEvaluations((prev) =>
