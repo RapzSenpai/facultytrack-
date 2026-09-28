@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { useAuth } from "../../context/AuthContext";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { logAdminAction } from "../../utils/audit";
 
@@ -23,6 +24,7 @@ const MOD_COLORS = {
 };
 
 export default function AdminModeration() {
+  const { currentUser } = useAuth();
   const { isSuper, myDeptIds, inScopeName, loading: scopeLoading } = useScopedAdmin();
   // D9 strict: evaluation belongs to a program via its faculty (primary)
   // or the responding student's department (fallback). Super sees all.
@@ -132,9 +134,10 @@ export default function AdminModeration() {
         // Self-diagnosing: print both sides of the scope match so the
         // next click explains itself in the dev console.
         try {
+          const mineQuery = supabase.from("admin_program_assignments").select("department_id");
           const [{ data: facRow }, { data: mine }, { data: depts }] = await Promise.all([
             supabase.from("users").select("id, full_name, department, department_id").eq("id", evaluation.faculty_id).maybeSingle(),
-            supabase.from("admin_program_assignments").select("department_id"),
+            currentUser ? mineQuery.eq("admin_id", currentUser.id) : mineQuery,
             supabase.from("departments").select("id, name"),
           ]);
           const deptName = (id) => depts?.find((d) => d.id === id)?.name || id;
