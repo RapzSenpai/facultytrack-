@@ -30,7 +30,7 @@ export default function AdminClassAssignment() {
 
   const [formData, setFormData] = useState({
     facultyId: "", facultyName: "", subjectCode: "", subjectName: "",
-    department: "", yearLevel: "", section: "", semester: "", academicYear: ""
+    department: "", yearLevel: "", section: "", selectedSections: [], semester: "", academicYear: ""
   });
 
   useEffect(() => {
@@ -85,10 +85,40 @@ export default function AdminClassAssignment() {
 
   const handleSave = async () => {
     try {
+      if (!formData.facultyId) {
+        alert("Please select a faculty member.");
+        return;
+      }
+      if (!formData.department) {
+        alert("Please select a program/department.");
+        return;
+      }
+      if (!formData.yearLevel) {
+        alert("Please select a year level.");
+        return;
+      }
+      if (!formData.subjectCode) {
+        alert("Please select a subject.");
+        return;
+      }
+      if (!formData.semester) {
+        alert("Please select a semester.");
+        return;
+      }
+      if (!formData.academicYear) {
+        alert("Please select an academic year.");
+        return;
+      }
+
       // Keep department_id in sync with the department name —
       // scoped RLS + list filters match on it.
       const selectedDept = departmentOptions.find((d) => sameDept(d.name, formData.department));
+
       if (editingAssignment) {
+        if (!formData.section) {
+          alert("Please select a section.");
+          return;
+        }
         const { error } = await supabase.from('class_assignments').update({
           faculty_id: formData.facultyId,
           faculty_name: formData.facultyName,
@@ -103,7 +133,37 @@ export default function AdminClassAssignment() {
         }).eq('id', editingAssignment.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('class_assignments').insert({
+        // Multi-section batch creation
+        const sectionsToCreate = formData.selectedSections && formData.selectedSections.length > 0
+          ? formData.selectedSections
+          : (formData.section ? [formData.section] : []);
+
+        if (sectionsToCreate.length === 0) {
+          alert("Please select at least one section.");
+          return;
+        }
+
+        // Duplicate check against existing assignments for this faculty + subject + semester + academicYear
+        const existingSections = new Set(
+          assignmentList
+            .filter(a => 
+              a.facultyId === formData.facultyId &&
+              a.subjectCode === formData.subjectCode &&
+              a.semester === formData.semester &&
+              a.academicYear === formData.academicYear
+            )
+            .map(a => a.section)
+        );
+
+        const newSections = sectionsToCreate.filter(sec => !existingSections.has(sec));
+        const skippedSections = sectionsToCreate.filter(sec => existingSections.has(sec));
+
+        if (newSections.length === 0) {
+          alert(`This faculty is already assigned to ${skippedSections.map(s => `Section ${s}`).join(", ")} for this subject, semester, and academic year.`);
+          return;
+        }
+
+        const rowsToInsert = newSections.map(sec => ({
           faculty_id: formData.facultyId,
           faculty_name: formData.facultyName,
           subject_code: formData.subjectCode,
@@ -111,11 +171,17 @@ export default function AdminClassAssignment() {
           department: formData.department,
           department_id: selectedDept?.id || null,
           year_level: formData.yearLevel,
-          section: formData.section,
+          section: sec,
           semester: formData.semester,
           academic_year: formData.academicYear,
-        });
+        }));
+
+        const { error } = await supabase.from('class_assignments').insert(rowsToInsert);
         if (error) throw error;
+
+        if (skippedSections.length > 0) {
+          alert(`Successfully assigned ${newSections.map(s => `Section ${s}`).join(", ")}.\n(Skipped ${skippedSections.map(s => `Section ${s}`).join(", ")} because already assigned.)`);
+        }
       }
 
       const { data: refreshed } = await supabase.from('class_assignments').select('*');
@@ -129,7 +195,10 @@ export default function AdminClassAssignment() {
         academicYear: a.academic_year,
       }))).filter(inScope));
       setShowModal(false);
-    } catch (err) { console.error("Save error:", err); }
+    } catch (err) {
+      console.error("Save error:", err);
+      alert(`Failed to save: ${err.message || 'Unknown error'}`);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -198,7 +267,7 @@ export default function AdminClassAssignment() {
           </div>
           <button className="ad-btnPrimary" onClick={() => {
             setEditingAssignment(null);
-            setFormData({ facultyId: "", facultyName: "", subjectCode: "", subjectName: "", department: (!isSuper && myDeptNames[0]) || "", yearLevel: "", section: "", semester: "", academicYear: "" });
+            setFormData({ facultyId: "", facultyName: "", subjectCode: "", subjectName: "", department: (!isSuper && myDeptNames[0]) || "", yearLevel: "", section: "", selectedSections: [], semester: "", academicYear: "" });
             setShowModal(true);
           }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -291,7 +360,6 @@ export default function AdminClassAssignment() {
                 <tr>
                   <th>Faculty Name</th>
                   <th>Subject Code</th>
-                  <th>Subject Name</th>
                   <th>Program</th>
                   <th>Year & Section</th>
                   <th>Semester</th>
@@ -316,9 +384,6 @@ export default function AdminClassAssignment() {
                       </td>
                       <td className="ad-code">{assignment.subjectCode}</td>
                       <td>
-                        <span className="ad-cellPrimary">{assignment.subjectName}</span>
-                      </td>
-                      <td>
                         <span style={{ display: 'inline-block', padding: '4px 10px', background: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '999px', fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                           {assignment.department || "—"}
                         </span>
@@ -339,6 +404,7 @@ export default function AdminClassAssignment() {
                             department: assignment.department || "",
                             yearLevel: assignment.yearLevel || "",
                             section: assignment.section || "",
+                            selectedSections: assignment.section ? [assignment.section] : [],
                             semester: assignment.semester || "",
                             academicYear: assignment.academicYear || "",
                           });
@@ -354,7 +420,7 @@ export default function AdminClassAssignment() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="8" style={{ textAlign: "center", padding: "48px 20px", color: "#6b7280" }}>
+                    <td colSpan="7" style={{ textAlign: "center", padding: "48px 20px", color: "#6b7280" }}>
                       <svg style={{ display: 'block', margin: '0 auto 12px auto', color: '#9ca3af' }} width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                         <circle cx="9" cy="7" r="4"></circle>
@@ -462,6 +528,32 @@ export default function AdminClassAssignment() {
 
               <div className="ad-formRow">
                 <div className="ad-formGroup">
+                  <label className="ad-label">Semester *</label>
+                  <select className="ad-input" value={formData.semester || ""} onChange={(e) => setFormData({ ...formData, semester: e.target.value })}>
+                    <option value="">Select semester</option>
+                    {["1st Semester", "2nd Semester", "Summer"].map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="ad-formGroup">
+                  <label className="ad-label">Academic Year *</label>
+                  <select
+                    className="ad-input"
+                    value={formData.academicYear || ""}
+                    onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
+                  >
+                    <option value="">Select academic year</option>
+                    {academicYearOptions.map(y => (
+                      <option key={y.id} value={y.year}>
+                        {y.year}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* SECTION SELECTION */}
+              {editingAssignment ? (
+                <div className="ad-formGroup">
                   <label className="ad-label">
                     Section *
                     {availableSections.length > 0 && formData.department && (
@@ -479,35 +571,136 @@ export default function AdminClassAssignment() {
                     {availableSections.map(s => <option key={s} value={s}>Section {s}</option>)}
                   </select>
                 </div>
-                <div className="ad-formGroup">
-                  <label className="ad-label">Semester *</label>
-                  <select className="ad-input" value={formData.semester || ""} onChange={(e) => setFormData({ ...formData, semester: e.target.value })}>
-                    <option value="">Select semester</option>
-                    {["1st Semester", "2nd Semester", "Summer"].map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-              </div>
+              ) : (
+                <div className="ad-formGroup" style={{ marginTop: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                    <label className="ad-label" style={{ margin: 0 }}>
+                      Assign Sections *
+                      {formData.selectedSections?.length > 0 && (
+                        <span style={{ fontSize: "12px", color: "#2563eb", fontWeight: "700", marginLeft: "8px" }}>
+                          ({formData.selectedSections.length} selected)
+                        </span>
+                      )}
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, selectedSections: [...availableSections] })}
+                        style={{
+                          background: "#eff6ff",
+                          border: "1px solid #bfdbfe",
+                          color: "#1d4ed8",
+                          padding: "4px 10px",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: "600",
+                          cursor: "pointer",
+                          transition: "all 0.15s ease"
+                        }}
+                      >
+                        Select All ({availableSections.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, selectedSections: [] })}
+                        style={{
+                          background: "#f3f4f6",
+                          border: "1px solid #e5e7eb",
+                          color: "#4b5563",
+                          padding: "4px 10px",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: "600",
+                          cursor: "pointer",
+                          transition: "all 0.15s ease"
+                        }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
 
-              <div className="ad-formGroup">
-                <label className="ad-label">Academic Year *</label>
-                <select
-                  className="ad-input"
-                  value={formData.academicYear || ""}
-                  onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
-                >
-                  <option value="">Select academic year</option>
-                  {academicYearOptions.map(y => (
-                    <option key={y.id} value={y.year}>
-                      {y.year}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  <div style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                    padding: '12px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    minHeight: '48px',
+                    alignItems: 'center'
+                  }}>
+                    {availableSections.map((sec) => {
+                      const isChecked = (formData.selectedSections || []).includes(sec);
+                      return (
+                        <button
+                          key={sec}
+                          type="button"
+                          onClick={() => {
+                            const current = formData.selectedSections || [];
+                            const updated = isChecked
+                              ? current.filter((s) => s !== sec)
+                              : [...current, sec];
+                            setFormData({ ...formData, selectedSections: updated });
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '8px 14px',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            fontWeight: isChecked ? '600' : '500',
+                            cursor: 'pointer',
+                            border: isChecked ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                            background: isChecked ? '#eff6ff' : '#ffffff',
+                            color: isChecked ? '#1d4ed8' : '#334155',
+                            boxShadow: isChecked ? '0 1px 2px rgba(37,99,235,0.1)' : 'none',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <span style={{
+                            width: '16px',
+                            height: '16px',
+                            borderRadius: '4px',
+                            border: isChecked ? 'none' : '1.5px solid #94a3b8',
+                            background: isChecked ? '#2563eb' : 'transparent',
+                            color: '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '11px',
+                            fontWeight: 'bold',
+                            lineHeight: 1
+                          }}>
+                            {isChecked ? '✓' : ''}
+                          </span>
+                          Section {sec}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {(!formData.selectedSections || formData.selectedSections.length === 0) ? (
+                    <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: '#dc2626' }}>
+                      Please select at least one section for this assignment.
+                    </p>
+                  ) : (
+                    <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: '#059669', fontWeight: '500' }}>
+                      ✓ {formData.selectedSections.length} assignment{formData.selectedSections.length > 1 ? 's' : ''} will be created ({formData.selectedSections.map(s => `Section ${s}`).join(', ')}).
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
             <div className="ad-modalFooter">
               <button className="ad-btnSecondary" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="ad-btnPrimary" onClick={handleSave}>
-                {editingAssignment ? "Update Assignment" : "Save Assignment"}
+                {editingAssignment
+                  ? "Update Assignment"
+                  : (formData.selectedSections?.length > 1
+                      ? `Save ${formData.selectedSections.length} Assignments`
+                      : "Save Assignment")}
               </button>
             </div>
           </div>
