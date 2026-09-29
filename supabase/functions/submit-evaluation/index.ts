@@ -271,19 +271,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
     // Rating keys must be real question ids — arbitrary keys would
-    // pollute per-criteria aggregates downstream. Fail-open when no
-    // questionnaire is configured yet: the client falls back to its
-    // built-in criteria set (FALLBACK_CRITERIA) in that state.
+    // pollute per-criteria aggregates downstream. Always validate
+    // against the questions table; reject if no questionnaire exists.
     const { data: questionRows, error: qErr } = await admin
       .from("questions")
       .select("id");
     if (qErr) return json({ error: "Could not validate the questionnaire." }, 500);
-    if ((questionRows ?? []).length > 0) {
-      const validIds = new Set((questionRows ?? []).map((q: { id: string }) => q.id));
-      for (const key of Object.keys(ratings)) {
-        if (!validIds.has(key)) {
-          return json({ error: "Unknown question in ratings." }, 400);
-        }
+    if ((questionRows ?? []).length === 0) {
+      return json({ error: "No questionnaire has been configured. Please contact the administrator." }, 400);
+    }
+    const validIds = new Set((questionRows ?? []).map((q: { id: string }) => q.id));
+    for (const key of Object.keys(ratings)) {
+      if (!validIds.has(key)) {
+        return json({ error: "Unknown question in ratings." }, 400);
       }
     }
 

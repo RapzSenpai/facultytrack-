@@ -269,39 +269,19 @@ export default function AdminQuestionnaire() {
                   const isActive = selectedCriteriaId === criteria.id;
                   const qCount = (questionsByCriteria[criteria.id] || []).length;
                   
-                  const isTeaching = criteria.name.includes("Teaching");
-                  const isComm = criteria.name.includes("Communication");
-                  const isOrg = criteria.name.includes("Organization") || criteria.name.includes("Management");
-                  const isAssess = criteria.name.includes("Assessment");
-                  
-                  let iconClass = "ad-criteriaIcon--default";
-                  if (isTeaching) iconClass = "ad-criteriaIcon--blue";
-                  else if (isComm) iconClass = "ad-criteriaIcon--green";
-                  else if (isOrg) iconClass = "ad-criteriaIcon--purple";
-                  else if (isAssess) iconClass = "ad-criteriaIcon--orange";
-
                   return (
                     <div 
                       key={criteria.id} 
                       className={`ad-criteriaItem ${isActive ? 'ad-criteriaItem--active' : ''}`}
                       onClick={() => setSelectedCriteriaId(criteria.id)}
                     >
-                      <div className={`ad-criteriaItemIcon ${iconClass}`}>
-                        {isTeaching ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5z"></path><polyline points="10 2 10 10 13 7 16 10 16 2"></polyline></svg>
-                        : isComm ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                        : isOrg ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
-                        : isAssess ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                        : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                        }
+                      <div className={`ad-criteriaItemIcon ad-criteriaIcon--default`}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                       </div>
                       <div className="ad-criteriaItemContent">
                         <h4 className="ad-criteriaItemTitle">{criteria.name}</h4>
                         <p className="ad-criteriaItemDesc">
-                          {criteria.name === "Teaching Effectiveness" ? "Measures the effectiveness of teaching strategies and delivery." :
-                           criteria.name === "Communication & Interaction" ? "Assesses communication skills and interaction with students." :
-                           criteria.name === "Course Management & Organization" ? "Evaluates organization, planning, and management of the course." :
-                           criteria.name === "Assessment & Feedback" ? "Measures the quality and fairness of assessments and feedback." :
-                           "Evaluates this area of performance."} 
+                          {qCount} question{qCount !== 1 ? "s" : ""} configured for this criteria.
                         </p>
                       </div>
                       <div className="ad-criteriaItemRight" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -405,11 +385,7 @@ export default function AdminQuestionnaire() {
                       <div className="ad-infoText">You are managing questions for:</div>
                       <div className="ad-infoTitle" style={{ fontSize: '16px', marginTop: '4px', fontWeight: '700', color: '#1e3a8a' }}>{selectedCriteria.name}</div>
                       <div className="ad-infoText" style={{ marginTop: '2px' }}>
-                        {selectedCriteria.name === "Teaching Effectiveness" ? "Measures the effectiveness of teaching strategies and delivery." :
-                         selectedCriteria.name === "Communication & Interaction" ? "Assesses communication skills and interaction with students." :
-                         selectedCriteria.name === "Course Management & Organization" ? "Evaluates organization, planning, and management of the course." :
-                         selectedCriteria.name === "Assessment & Feedback" ? "Measures the quality and fairness of assessments and feedback." :
-                         "Evaluates this area of performance."}
+                        {(questionsByCriteria[selectedCriteriaId] || []).length} question{(questionsByCriteria[selectedCriteriaId] || []).length !== 1 ? "s" : ""} configured for this criteria.
                       </div>
                     </div>
                   </div>

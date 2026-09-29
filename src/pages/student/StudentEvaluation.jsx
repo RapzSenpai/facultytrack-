@@ -7,44 +7,6 @@ import { isAssignmentMatch } from "../../utils/assignmentMatch";
 import { pickActivePeriod } from "../../utils/periodStatus";
 import StudentLayout from "./StudentLayout";
 
-// Institutional fallback criteria so questionnaire is never blank
-const FALLBACK_CRITERIA = [
-  {
-    id: "fb-1",
-    category: "Instructional Competence & Subject Mastery",
-    items: [
-      { id: "q1", text: "Demonstrates comprehensive and up-to-date knowledge of the subject matter." },
-      { id: "q2", text: "Explains lessons and concepts clearly with practical, real-world examples." },
-      { id: "q3", text: "Organizes topics logically and follows the approved course syllabus." },
-      { id: "q4", text: "Encourages student questions, analytical discussions, and critical thinking." },
-    ],
-  },
-  {
-    id: "fb-2",
-    category: "Classroom Management & Learning Environment",
-    items: [
-      { id: "q5", text: "Starts and dismisses classes punctually and maintains consistent attendance." },
-      { id: "q6", text: "Fosters an inclusive, respectful, and motivating classroom atmosphere." },
-      { id: "q7", text: "Enforces classroom rules and academic standards fairly and consistently." },
-    ],
-  },
-  {
-    id: "fb-3",
-    category: "Assessment & Constructive Feedback",
-    items: [
-      { id: "q8", text: "Provides timely and constructive feedback on exams, assignments, and projects." },
-      { id: "q9", text: "Evaluates student work objectively based on transparent grading criteria." },
-    ],
-  },
-  {
-    id: "fb-4",
-    category: "Professionalism & Communication",
-    items: [
-      { id: "q10", text: "Shows approachability, professionalism, and willingness to assist students." },
-      { id: "q11", text: "Communicates course expectations, deadlines, and grade standing clearly." },
-    ],
-  },
-];
 
 export default function StudentEvaluation() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -139,7 +101,8 @@ export default function StudentEvaluation() {
         const submitted = new Set(subMap.keys());
         setSubmittedIds(submitted);
 
-        // Active criteria: load active criteria with questions, or fallback to standard criteria
+        // Active criteria: load enabled criteria with their questions from the DB.
+        // No hardcoded fallback — the admin must configure the questionnaire.
         const activeCriteriaList = criteria.some((c) => c.enabled)
           ? criteria.filter((c) => c.enabled)
           : criteria;
@@ -153,7 +116,7 @@ export default function StudentEvaluation() {
             .map((q) => ({ id: q.id, text: q.text })),
         })).filter((c) => c.items.length > 0);
 
-        setEvaluationCriteria(builtCriteria.length > 0 ? builtCriteria : FALLBACK_CRITERIA);
+        setEvaluationCriteria(builtCriteria);
 
         if (!active) {
           setAssignedFaculty([]);
