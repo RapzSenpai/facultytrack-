@@ -10,7 +10,7 @@ import { logAdminAction } from "../../utils/audit";
 // Only the super admin manages assignments here; RLS enforces the
 // same rule server-side (writes require is_super_admin()).
 export default function AdminProgramAssignments() {
-  const { userProfile } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [admins, setAdmins] = useState([]);
@@ -41,7 +41,7 @@ export default function AdminProgramAssignments() {
 
   const reloadAdmins = async () => {
     const [adminRes, assignRes] = await Promise.all([
-      supabase.from("users").select("id, full_name, email, role").in("role", ["admin", "super_admin"]).order("full_name"),
+      supabase.from("users").select("id, full_name, email, role, status").in("role", ["admin", "super_admin"]).order("full_name"),
       supabase.from("admin_program_assignments").select("admin_id, department_id"),
     ]);
     setAdmins(adminRes.data || []);
@@ -123,7 +123,7 @@ export default function AdminProgramAssignments() {
     const load = async () => {
       try {
         const [adminRes, deptRes, assignRes] = await Promise.all([
-          supabase.from("users").select("id, full_name, email, role").in("role", ["admin", "super_admin"]).order("full_name"),
+          supabase.from("users").select("id, full_name, email, role, status").in("role", ["admin", "super_admin"]).order("full_name"),
           supabase.from("departments").select("id, name").order("name"),
           supabase.from("admin_program_assignments").select("admin_id, department_id"),
         ]);
@@ -200,6 +200,35 @@ export default function AdminProgramAssignments() {
     }
   };
 
+  // Deactivate/reactivate an admin (super-only). Deactivated admins
+  // keep their rows but cannot sign in; assignments stay intact.
+  const handleToggleActive = async (admin) => {
+    if (admin.id === currentUser?.id || admin.role === "super_admin") return;
+    const next = (admin.status || "active").toLowerCase() === "active" ? "inactive" : "active";
+    if (!window.confirm(`${next === "active" ? "Reactivate" : "Deactivate"} ${admin.full_name || admin.email}?`)) return;
+    try {
+      const { data, error } = await supabase.from("users").update({ status: next }).eq("id", admin.id).select("id");
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        alert("No change saved — check RLS policies.");
+        return;
+      }
+      setAdmins((prev) => prev.map((a) => (a.id === admin.id ? { ...a, status: next } : a)));
+      logAdminAction(next === "active" ? "admin.reactivate" : "admin.deactivate", "users", admin.id, {});
+    } catch (err) {
+      console.error("Toggle admin error:", err);
+      alert("Could not update the admin: " + (err.message || "unknown error."));
+    }
+  };
+
+  // Coverage: programs with zero assigned (active) admin.
+  const uncovered = useMemo(() => {
+    const covered = new Set(
+      assignments.filter((a) => admins.find((u) => u.id === a.admin_id && (u.status || "active").toLowerCase() === "active")).map((a) => a.department_id)
+    );
+    return departments.filter((d) => !covered.has(d.id));
+  }, [assignments, admins, departments]);
+
   if (!isSuper) {
     return <Navigate to="/admin/dashboard" replace />;
   }
@@ -216,6 +245,11 @@ export default function AdminProgramAssignments() {
               Program Head = Admin with a program assignment [D8]. Assigned admins manage ONLY their programs [D9];
               super admins see everything.
             </p>
+            {uncovered.length > 0 && (
+              <p style={{ marginTop: "10px", fontSize: "13px", fontWeight: 700, color: "#b45309", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "10px 14px" }}>
+                No active admin for: {uncovered.map((d) => d.name).join(" · ")} — accounts there go unseen. Assign one below.
+              </p>
+            )}
           </div>
         </div>
 
@@ -321,8 +355,20 @@ export default function AdminProgramAssignments() {
                           SUPER
                         </span>
                       ) : (
-                        <span style={{ fontSize: "11px", fontWeight: 700, color: count > 0 ? "#16a34a" : "#9ca3af" }}>
-                          {count} ✓
+                        <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: (a.status || "active").toLowerCase() === "active" ? (count > 0 ? "#16a34a" : "#9ca3af") : "#b91c1c" }}>
+                            {(a.status || "active").toLowerCase() === "active" ? `${count} ✓` : "OFF"}
+                          </span>
+                          {a.id !== currentUser?.id && (
+                            <button
+                              type="button"
+                              title={(a.status || "active").toLowerCase() === "active" ? "Deactivate" : "Reactivate"}
+                              onClick={(e) => { e.stopPropagation(); handleToggleActive(a); }}
+                              style={{ fontSize: "11px", fontWeight: 700, color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "999px", padding: "2px 10px", cursor: "pointer" }}
+                            >
+                              {(a.status || "active").toLowerCase() === "active" ? "Off" : "On"}
+                            </button>
+                          )}
                         </span>
                       )}
                     </button>
