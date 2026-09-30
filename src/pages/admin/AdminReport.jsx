@@ -149,6 +149,20 @@ export default function AdminReport() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeLoading, isSuper, myDeptNames]);
 
+  // Deep link from super Reports cards (?department=): preset the
+  // program filter once departments load. Super stays unlocked.
+  useEffect(() => {
+    if (scopeLoading || !isSuper || departmentsList.length === 0) return;
+    const want = new URLSearchParams(window.location.search).get("department");
+    if (!want) return;
+    const hit = departmentsList.find((d) => sameDept(d.name, want));
+    if (hit && !sameDept(filterDept, hit.name)) {
+      setFilterDept(hit.name);
+      setFilterFaculty("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeLoading, isSuper, departmentsList]);
+
   const uniqueAYs = [...new Set(academicYearsList.map(y => y.year).filter(Boolean))].sort().reverse();
   const uniqueSems = [...new Set(academicYearsList.map(y => y.semester).filter(Boolean))].sort();
 

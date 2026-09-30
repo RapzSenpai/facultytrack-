@@ -49,6 +49,7 @@ const navSections = [
     label: "OVERSIGHT",
     items: [
       { key: "monitor", label: "System Monitor", path: "/admin/monitor", icon: Activity, superOnly: true },
+      { key: "reports", label: "Reports & Export", path: "/admin/reports", icon: FileText, superOnly: true },
     ],
   },
   {
