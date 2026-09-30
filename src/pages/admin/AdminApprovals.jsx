@@ -14,6 +14,10 @@ export default function AdminApprovals() {
     // fallback tools to that program. Oversight screens ignore this.
     const { scopeDeptId, scopeDeptName } = useSuperScope();
     const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+    // Super pick overrides the always-true super branch of inScopeName.
+    const scopeNameMatch = (name) => isSuper
+      ? (!scopeDeptId || sameDept(name, scopeDeptName))
+      : inScopeName(name);
     const [activeTab, setActiveTab] = useState("faculty");
     const [searchQuery, setSearchQuery] = useState("");
     const [loading, setLoading] = useState(false);
@@ -49,7 +53,7 @@ export default function AdminApprovals() {
             // or only the picked program when the super scope is set.
             const inScope = (u) => (isSuper && !scopeDeptId)
                 || (u.department_id && myDeptIds.includes(u.department_id))
-                || inScopeName(u.department)
+                || scopeNameMatch(u.department)
                 || (scopeDeptId && (u.department_id === scopeDeptId || sameDept(u.department, scopeDeptName)));
             setPendingFaculty(fData.filter(u => u.status === 'pending' && inScope(u)));
             setPendingStudents(sData.filter(u => u.status === 'pending' && inScope(u)));

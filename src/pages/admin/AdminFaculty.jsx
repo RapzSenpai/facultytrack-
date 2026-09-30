@@ -8,6 +8,10 @@ export default function AdminFaculty() {
   const { isSuper, myDeptIds, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
   const { scopeDeptId, scopeDeptName } = useSuperScope();
   const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  // Super pick overrides the always-true super branch of inScopeName.
+  const scopeNameMatch = (name) => isSuper
+    ? (!scopeDeptId || sameDept(name, scopeDeptName))
+    : inScopeName(name);
   const [facultyList, setFacultyList] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDept, setFilterDept] = useState("");
@@ -33,7 +37,7 @@ export default function AdminFaculty() {
       if (facultyResult.error) throw facultyResult.error;
       const inScope = (f) => (isSuper && !scopeDeptId)
         || (f.department_id && myDeptIds.includes(f.department_id))
-        || inScopeName(f.department)
+        || scopeNameMatch(f.department)
         || (scopeDeptId && (f.department_id === scopeDeptId || sameDept(f.department, scopeDeptName)));
       setFacultyList(((facultyResult.data || []).map(f => ({
         ...f,
@@ -244,7 +248,7 @@ export default function AdminFaculty() {
 
             <select className="ad-filterSelect" value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
               <option value="">{isSuper ? "All Programs" : (myDeptNames.join(", ") || "No program assigned")}</option>
-              {(isSuper && !scopeDeptId ? departmentOptions : departmentOptions.filter(d => inScopeName(d.name) || d.id === scopeDeptId)).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+              {(isSuper && !scopeDeptId ? departmentOptions : departmentOptions.filter(d => scopeNameMatch(d.name) || d.id === scopeDeptId)).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             </select>
 
             {(filterDept || searchQuery) && (

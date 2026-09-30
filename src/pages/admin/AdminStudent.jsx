@@ -16,6 +16,10 @@ export default function AdminStudent() {
   const { isSuper, myDeptIds, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
   const { scopeDeptId, scopeDeptName } = useSuperScope();
   const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  // Super pick overrides the always-true super branch of inScopeName.
+  const scopeNameMatch = (name) => isSuper
+    ? (!scopeDeptId || sameDept(name, scopeDeptName))
+    : inScopeName(name);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDept, setFilterDept] = useState("");
   const [filterYear, setFilterYear] = useState("");
@@ -37,7 +41,7 @@ export default function AdminStudent() {
       if (!error) {
         const inScope = (s) => (isSuper && !scopeDeptId)
           || (s.department_id && myDeptIds.includes(s.department_id))
-          || inScopeName(s.department)
+          || scopeNameMatch(s.department)
           || (scopeDeptId && (s.department_id === scopeDeptId || sameDept(s.department, scopeDeptName)));
         setStudentList(((data || []).map(s => ({
           ...s,
@@ -268,7 +272,7 @@ export default function AdminStudent() {
 
             <select className="ad-filterSelect" value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
               <option value="">{isSuper ? "All Programs" : (myDeptNames.join(", ") || "No program assigned")}</option>
-              {(isSuper && !scopeDeptId ? departmentOptions : departmentOptions.filter(d => inScopeName(d.name) || d.id === scopeDeptId)).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+              {(isSuper && !scopeDeptId ? departmentOptions : departmentOptions.filter(d => scopeNameMatch(d.name) || d.id === scopeDeptId)).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             </select>
 
             <select className="ad-filterSelect" value={filterYear} onChange={(e) => setFilterYear(e.target.value)}>

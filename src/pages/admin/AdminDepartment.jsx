@@ -154,14 +154,23 @@ export default function AdminDepartment() {
   }, []); // Run on initial mount
 
   // Single-program admins land directly in their curriculum.
+  // Super with a picked program lands in it too.
   useEffect(() => {
-    if (isSuper || scopeLoading || selectedProgram) return;
-    if (myDeptNames.length === 1) {
-      const only = departments.find((d) => inScopeName(d.name));
-      if (only) setSelectedProgram(only);
+    if (scopeLoading) return;
+    if (!isSuper) {
+      if (selectedProgram) return;
+      if (myDeptNames.length === 1) {
+        const only = departments.find((d) => inScopeName(d.name));
+        if (only) setSelectedProgram(only);
+      }
+      return;
+    }
+    if (scopeDeptId && selectedProgram?.id !== scopeDeptId) {
+      const picked = departments.find((d) => d.id === scopeDeptId);
+      if (picked) setSelectedProgram(picked);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSuper, scopeLoading, departments, myDeptNames]);
+  }, [isSuper, scopeLoading, departments, myDeptNames, scopeDeptId]);
 
   // 2. Program CRUD (super-only; scoped admins manage subjects/sections inside their program)
   const handleSaveProgram = async (e) => {

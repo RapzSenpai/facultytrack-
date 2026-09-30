@@ -33,11 +33,15 @@ export default function AdminModeration() {
   const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
   // Super program picker: a pick pins fallback tools to that program.
   const inPicked = (id, name) => scopeDeptId && (id === scopeDeptId || sameDept(name, scopeDeptName));
+  // Super pick overrides the always-true super branch of inScopeName.
+  const scopeNameMatch = (name) => isSuper
+    ? (!scopeDeptId || sameDept(name, scopeDeptName))
+    : inScopeName(name);
   // D9 strict: evaluation belongs to a program via its faculty (primary)
   // or the responding student's department (fallback). Super sees all.
   const inScopeFaculty = (f) => (isSuper && !scopeDeptId)
     || (f?.department_id && myDeptIds.includes(f.department_id))
-    || inScopeName(f?.department)
+    || scopeNameMatch(f?.department)
     || inPicked(f?.department_id, f?.department);
   const [loading, setLoading] = useState(true);
   const [evaluations, setEvaluations] = useState([]);
@@ -64,7 +68,7 @@ export default function AdminModeration() {
         const facById = new Map(fac.map((f) => [f.id, f]));
         const inScopeEval = (e) => (isSuper && !scopeDeptId)
           || inScopeFaculty(facById.get(e.faculty_id))
-          || inScopeName(e.student_department)
+          || scopeNameMatch(e.student_department)
           || (scopeDeptId && sameDept(e.student_department, scopeDeptName));
         const scopedEvals = (evalRes.data || []).filter(inScopeEval);
         const scopedIds = new Set(scopedEvals.map((e) => e.id));

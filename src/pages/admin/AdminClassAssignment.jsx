@@ -8,11 +8,15 @@ export default function AdminClassAssignment() {
   const { isSuper, myDeptIds, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
   const { scopeDeptId, scopeDeptName } = useSuperScope();
   const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  // Super pick overrides the always-true super branch of inScopeName.
+  const scopeNameMatch = (name) => isSuper
+    ? (!scopeDeptId || sameDept(name, scopeDeptName))
+    : inScopeName(name);
   // D9 strict: scoped admin sees only own program(s). Super sees all,
   // or only the picked program when the super scope is set.
   const inScope = (r) => (isSuper && !scopeDeptId)
     || (r.department_id && myDeptIds.includes(r.department_id))
-    || inScopeName(r.department)
+    || scopeNameMatch(r.department)
     || (scopeDeptId && (r.department_id === scopeDeptId || sameDept(r.department, scopeDeptName)));
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDept, setFilterDept] = useState("");
@@ -314,7 +318,7 @@ export default function AdminClassAssignment() {
               onChange={(e) => setFilterDept(e.target.value)}
             >
               <option value="">{isSuper ? "All Programs" : (myDeptNames.join(", ") || "No program assigned")}</option>
-              {(isSuper ? departmentOptions : departmentOptions.filter(d => inScopeName(d.name))).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+              {(isSuper && !scopeDeptId ? departmentOptions : departmentOptions.filter(d => scopeNameMatch(d.name) || d.id === scopeDeptId)).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             </select>
 
             {/* Year Level Filter */}
@@ -484,7 +488,7 @@ export default function AdminClassAssignment() {
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                   >
                     <option value="">Select program</option>
-                    {(isSuper ? departmentOptions : departmentOptions.filter(d => inScopeName(d.name))).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    {(isSuper && !scopeDeptId ? departmentOptions : departmentOptions.filter(d => scopeNameMatch(d.name) || d.id === scopeDeptId)).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
                   </select>
                 </div>
                 <div className="ad-formGroup">
