@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
-import { SuperScopeProvider, useSuperScope } from "../../context/SuperScopeContext";
+import { useSuperScope } from "../../context/SuperScopeContext";
 import { supabase } from "../../config/supabase";
 import logo from "../../assets/logo.jpg";
 import NotificationBell from "../../components/notifications/NotificationBell";
@@ -389,10 +389,7 @@ function AdminLayoutInner({ title, children }) {
 }
 
 export default function AdminLayout(props) {
-  const { userProfile } = useAuth();
-  return (
-    <SuperScopeProvider active={userProfile?.role === "super_admin"}>
-      <AdminLayoutInner {...props} />
-    </SuperScopeProvider>
-  );
+  // SuperScopeProvider lives in App.jsx (SuperScopeGate) so page-level
+  // useSuperScope() calls — which run ABOVE this component — can read it.
+  return <AdminLayoutInner {...props} />;
 }

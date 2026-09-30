@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import { SuperScopeProvider } from "./context/SuperScopeContext";
 import { NotificationProvider } from "./context/NotificationContext";
 import { DialogProvider } from "./context/DialogContext";
 import NotificationToast from "./components/notifications/NotificationToast";
@@ -50,14 +51,27 @@ function NotFound() {
   );
 }
 
+// Super scope must wrap the ROUTES, not AdminLayout — pages call
+// useSuperScope() as the parent of AdminLayout, so a provider mounted
+// inside AdminLayout is unreachable from them (they read the default "").
+function SuperScopeGate({ children }) {
+  const { userProfile } = useAuth();
+  return (
+    <SuperScopeProvider active={userProfile?.role === "super_admin"}>
+      {children}
+    </SuperScopeProvider>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <NotificationProvider>
-          <DialogProvider>
-            <NotificationToast />
-            <Routes>
+        <SuperScopeGate>
+          <NotificationProvider>
+            <DialogProvider>
+              <NotificationToast />
+              <Routes>
               {/* Public routes */}
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
@@ -100,8 +114,9 @@ export default function App() {
               {/* 404 fallback */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </DialogProvider>
-        </NotificationProvider>
+            </DialogProvider>
+          </NotificationProvider>
+        </SuperScopeGate>
       </AuthProvider>
     </BrowserRouter>
   );
