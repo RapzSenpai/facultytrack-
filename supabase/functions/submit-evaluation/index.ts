@@ -287,28 +287,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
 
-    // Active period: on-going row, and inside its end date.
-    const { data: years, error: yearsErr } = await admin
-      .from("academic_years")
-      .select("year, semester, status, start_date, end_date");
-    if (yearsErr) return json({ error: "Could not load academic periods." }, 500);
-    const active = (years ?? []).find(
-      (y: { status?: string }) => (y.status ?? "").toLowerCase().trim() === "on-going",
-    );
-    if (!active) {
-      return json({ error: "No active evaluation period is available." }, 400);
-    }
-    if (active.end_date) {
-      const end = new Date(`${active.end_date}T23:59:59Z`);
-      if (Number.isNaN(end.getTime())) {
-        return json({ error: "Active period has an invalid end date." }, 500);
-      }
-      if (new Date() > end) {
-        return json({ error: "The evaluation period is closed." }, 400);
-      }
-    }
-
-    // Assignment must exist and belong to the active period.
+    // 1. Assignment must exist.
     const { data: assignment, error: assignErr } = await admin
       .from("class_assignments")
       .select("id, faculty_id, department, year_level, section, academic_year, semester")
@@ -317,14 +296,57 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (assignErr || !assignment) {
       return json({ error: "Subject assignment not found." }, 404);
     }
-    if (
-      assignment.academic_year !== active.year ||
-      assignment.semester !== active.semester
-    ) {
-      return json(
-        { error: "This subject is not part of the active evaluation period." },
-        400,
-      );
+
+    // 2. Active period: lookup academic_years for this assignment's academic_year & semester.
+    // Handles per-program periods (Migration 026) as well as global/shared periods.
+    const { data: years, error: yearsErr } = await admin
+      .from("academic_years")
+      .select("id, year, semester, status, start_date, end_date, department_id, departments(id, name)")
+      .eq("year", assignment.academic_year)
+      .eq("semester", assignment.semester);
+    if (yearsErr) return json({ error: "Could not load academic periods." }, 500);
+
+    const ongoingYears = (years ?? []).filter(
+      (y: { status?: string }) => (y.status ?? "").toLowerCase().trim() === "on-going",
+    );
+    if (ongoingYears.length === 0) {
+      return json({ error: "The evaluation period for this subject is closed or not open yet." }, 400);
+    }
+
+    // Match student's or assignment's program department first, then fallback to shared (NULL department_id)
+    const studentDept = String(profile?.department ?? assignment.department ?? "").trim().toLowerCase();
+    const active =
+      ongoingYears.find(
+        (y: any) =>
+          y.departments?.name &&
+          String(y.departments.name).trim().toLowerCase() === studentDept,
+      ) ||
+      ongoingYears.find((y: any) => !y.department_id) ||
+      ongoingYears[0];
+
+    if (!active) {
+      return json({ error: "No active evaluation period is available for this subject." }, 400);
+    }
+
+    // End date validation: end of day in Philippine Time (UTC+8)
+    if (active.end_date) {
+      const rawEnd = String(active.end_date).trim().slice(0, 10);
+      const end = new Date(`${rawEnd}T23:59:59+08:00`);
+      if (Number.isNaN(end.getTime())) {
+        return json({ error: "Active period has an invalid end date." }, 500);
+      }
+      if (new Date() > end) {
+        return json({ error: "The evaluation period is closed." }, 400);
+      }
+    }
+
+    // Start date validation: start of day in Philippine Time (UTC+8)
+    if (active.start_date) {
+      const rawStart = String(active.start_date).trim().slice(0, 10);
+      const start = new Date(`${rawStart}T00:00:00+08:00`);
+      if (!Number.isNaN(start.getTime()) && new Date() < start) {
+        return json({ error: "The evaluation period has not started yet." }, 400);
+      }
     }
 
     // Authorized list (Phase 3): section match ∪ legacy confirmed
