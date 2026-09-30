@@ -10,6 +10,7 @@ import {
   ClipboardList,
   ClipboardCheck,
   BookOpen,
+  BarChart3,
   Menu,
   LogOut,
   ChevronRight,
@@ -50,6 +51,7 @@ const navSections = [
     items: [
       { key: "monitor", label: "System Monitor", path: "/admin/monitor", icon: Activity, superOnly: true },
       { key: "reports", label: "Reports & Export", path: "/admin/reports", icon: FileText, superOnly: true },
+      { key: "analytics", label: "Analytics", path: "/admin/analytics", icon: BarChart3, superOnly: true },
     ],
   },
   {

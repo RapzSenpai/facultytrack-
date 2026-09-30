@@ -35,6 +35,7 @@ import AdminProgramAssignments from "./pages/admin/AdminProgramAssignments.jsx";
 import AdminAIAnalyst from "./pages/admin/AdminAIAnalyst.jsx";
 import AdminMonitor from "./pages/admin/AdminMonitor.jsx";
 import AdminReports from "./pages/admin/AdminReports.jsx";
+import AdminAnalytics from "./pages/admin/AdminAnalytics.jsx";
 
 function NotFound() {
   return (
@@ -94,6 +95,7 @@ export default function App() {
               <Route path="/admin/ai-analyst" element={<ProtectedRoute role="admin"><AdminAIAnalyst /></ProtectedRoute>} />
               <Route path="/admin/monitor" element={<ProtectedRoute role="admin"><AdminMonitor /></ProtectedRoute>} />
               <Route path="/admin/reports" element={<ProtectedRoute role="admin"><AdminReports /></ProtectedRoute>} />
+              <Route path="/admin/analytics" element={<ProtectedRoute role="admin"><AdminAnalytics /></ProtectedRoute>} />
 
               {/* 404 fallback */}
               <Route path="*" element={<NotFound />} />
