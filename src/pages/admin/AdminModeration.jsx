@@ -4,6 +4,7 @@ import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { useDialog } from "../../context/DialogContext";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
+import { useSuperScope } from "../../context/SuperScopeContext";
 import { logAdminAction } from "../../utils/audit";
 
 // Phase 6 [D7]: priority cases are handled by Admin. This page is
@@ -28,11 +29,16 @@ export default function AdminModeration() {
   const { currentUser } = useAuth();
   const { showNotice } = useDialog();
   const { isSuper, myDeptIds, inScopeName, loading: scopeLoading } = useScopedAdmin();
+  const { scopeDeptId, scopeDeptName } = useSuperScope();
+  const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  // Super program picker: a pick pins fallback tools to that program.
+  const inPicked = (id, name) => scopeDeptId && (id === scopeDeptId || sameDept(name, scopeDeptName));
   // D9 strict: evaluation belongs to a program via its faculty (primary)
   // or the responding student's department (fallback). Super sees all.
-  const inScopeFaculty = (f) => isSuper
+  const inScopeFaculty = (f) => (isSuper && !scopeDeptId)
     || (f?.department_id && myDeptIds.includes(f.department_id))
-    || inScopeName(f?.department);
+    || inScopeName(f?.department)
+    || inPicked(f?.department_id, f?.department);
   const [loading, setLoading] = useState(true);
   const [evaluations, setEvaluations] = useState([]);
   const [reviews, setReviews] = useState([]);
@@ -56,23 +62,24 @@ export default function AdminModeration() {
         ]);
         const fac = facRes.data || [];
         const facById = new Map(fac.map((f) => [f.id, f]));
-        const inScopeEval = (e) => isSuper
+        const inScopeEval = (e) => (isSuper && !scopeDeptId)
           || inScopeFaculty(facById.get(e.faculty_id))
-          || inScopeName(e.student_department);
+          || inScopeName(e.student_department)
+          || (scopeDeptId && sameDept(e.student_department, scopeDeptName));
         const scopedEvals = (evalRes.data || []).filter(inScopeEval);
         const scopedIds = new Set(scopedEvals.map((e) => e.id));
         setEvaluations(scopedEvals);
         // Fail-closed: reviews pointing at out-of-scope (or missing)
         // evaluations never reach a scoped admin's queue.
-        setReviews((reviewRes.data || []).filter((r) => isSuper || scopedIds.has(r.evaluation_id)));
+        setReviews((reviewRes.data || []).filter((r) => (isSuper && !scopeDeptId) || scopedIds.has(r.evaluation_id)));
         setWords(wordsRes.data || []);
-        setFaculty(fac.filter((f) => isSuper || inScopeFaculty(f)));
+        setFaculty(fac.filter((f) => (isSuper && !scopeDeptId) || inScopeFaculty(f)));
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, [scopeLoading, isSuper, myDeptIds.join("|")]);
+  }, [scopeLoading, isSuper, myDeptIds.join("|"), scopeDeptId, scopeDeptName]);
 
   const evalById = useMemo(() => {
     const m = new Map();

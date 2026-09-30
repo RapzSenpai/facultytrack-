@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
+import { useScopedAdmin } from "../../hooks/useScopedAdmin";
+import { useSuperScope } from "../../context/SuperScopeContext";
 import { logAdminAction } from "../../utils/audit";
 import { sendNotification } from "../../utils/notifications";
 import {
@@ -30,6 +32,14 @@ const statusBadgeStyle = (status) => {
 };
 
 export default function AdminSubjectCorrections() {
+  const { isSuper, inScopeName } = useScopedAdmin();
+  const { scopeDeptId, scopeDeptName } = useSuperScope();
+  const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  // Student rows have TEXT department only: match own scope, or the
+  // super pick when set.
+  const inScopeStudent = (s) => (isSuper && !scopeDeptId)
+    || (!isSuper && inScopeName(s?.department))
+    || (isSuper && scopeDeptId && sameDept(s?.department, scopeDeptName));
   const [requests, setRequests] = useState([]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -89,6 +99,8 @@ export default function AdminSubjectCorrections() {
   const filteredRequests = requests
     .filter((r) => !statusFilter || r.status === statusFilter)
     .filter((r) => {
+      const stu = students.find((x) => x.id === r.student_id);
+      if (stu && !inScopeStudent(stu)) return false;
       if (!studentSearch) return true;
       const s = students.find((x) => x.id === r.student_id);
       const hay = `${s?.full_name || ""} ${s?.school_id || ""}`.toLowerCase();
@@ -98,7 +110,11 @@ export default function AdminSubjectCorrections() {
       );
     });
 
-  const newCount = requests.filter((r) => r.status === "new").length;
+  const newCount = requests.filter((r) => {
+    if (r.status !== "new") return false;
+    const s = students.find((x) => x.id === r.student_id);
+    return !s || inScopeStudent(s);
+  }).length;
 
   // ---------------- Request resolution ----------------
 
@@ -366,6 +382,7 @@ export default function AdminSubjectCorrections() {
 
   const studentSuggestions = students
     .filter((s) => (s.status || "") !== "pending")
+    .filter((s) => inScopeStudent(s))
     .filter((s) => {
       if (!studentSearch) return true;
       const hay = `${s.full_name || ""} ${s.school_id || ""}`.toLowerCase();

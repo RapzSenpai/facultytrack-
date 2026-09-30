@@ -3,11 +3,14 @@ import { Link, Navigate } from "react-router-dom";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
+import { useSuperScope } from "../../context/SuperScopeContext";
 
 export default function AdminSubject() {
   // Curriculum console is canonical for scoped admins (D9);
   // this global catalog stays super-only.
   const { isSuper, loading: scopeLoading } = useScopedAdmin();
+  const { scopeDeptId, scopeDeptName } = useSuperScope();
+  const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
   const [searchQuery, setSearchQuery] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingSubject, setEditingSubject] = useState(null);
@@ -66,7 +69,9 @@ export default function AdminSubject() {
     }
   };
 
-  const filteredSubjects = subjectList.filter(s =>
+  const filteredSubjects = subjectList
+    .filter(s => !scopeDeptId || s.department_id === scopeDeptId || sameDept(s.department, scopeDeptName))
+    .filter(s =>
     (s.code || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
     (s.description || "").toLowerCase().includes(searchQuery.toLowerCase())
   );

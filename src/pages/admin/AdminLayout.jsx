@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
+import { SuperScopeProvider, useSuperScope } from "../../context/SuperScopeContext";
 import { supabase } from "../../config/supabase";
 import logo from "../../assets/logo.jpg";
 import NotificationBell from "../../components/notifications/NotificationBell";
@@ -42,7 +43,6 @@ const navSections = [
       { key: "faculty", label: "Faculty", path: "/admin/faculty", icon: Users },
       { key: "approvals", label: "Approvals", path: "/admin/approvals", icon: ShieldCheck },
       { key: "student", label: "Student", path: "/admin/student", icon: UserCircle2 },
-      { key: "program-assignments", label: "Program Assignments", path: "/admin/program-assignments", icon: UserCircle2, superOnly: true },
     ],
   },
   {
@@ -50,8 +50,16 @@ const navSections = [
     label: "OVERSIGHT",
     items: [
       { key: "monitor", label: "System Monitor", path: "/admin/monitor", icon: Activity, superOnly: true },
+      { key: "program-assignments", label: "Program Assignments", path: "/admin/program-assignments", icon: UserCircle2, superOnly: true },
       { key: "reports", label: "Reports & Export", path: "/admin/reports", icon: FileText, superOnly: true },
       { key: "analytics", label: "Analytics", path: "/admin/analytics", icon: BarChart3, superOnly: true },
+    ],
+  },
+  {
+    id: "release",
+    label: "RELEASE",
+    items: [
+      { key: "release-management", label: "Release Management", path: "/admin/release-management", icon: ClipboardCheck },
     ],
   },
   {
@@ -63,7 +71,6 @@ const navSections = [
       { key: "class-assignment", label: "Class Assignment", path: "/admin/class-assignment", icon: ClipboardList },
       { key: "academic-year", label: "Evaluation Period", path: "/admin/academic-year", icon: CalendarDays },
       { key: "subject-corrections", label: "Subject Corrections", path: "/admin/subject-corrections", icon: ClipboardCheck },
-      { key: "release-management", label: "Release Management", path: "/admin/release-management", icon: ClipboardCheck },
       { key: "moderation", label: "Moderation & Priority", path: "/admin/moderation", icon: ClipboardCheck },
       { key: "questionnaire", label: "Questionnaire", path: "/admin/questionnaire", icon: FileText },
       { key: "report", label: "Evaluation Report", path: "/admin/report", icon: FileText },
@@ -72,7 +79,7 @@ const navSections = [
   },
 ];
 
-export default function AdminLayout({ title, children }) {
+function AdminLayoutInner({ title, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -143,6 +150,15 @@ export default function AdminLayout({ title, children }) {
   const isActive = (path) => location.pathname === path;
 
   const userFullName = userProfile?.fullName || "Admin";
+  const { scopeDeptId, setScopeDeptId, departments: scopeDepts } = useSuperScope();
+  // Fallback Admin Tools collapse for super (persisted, shut by default).
+  const [fallbackOpen, setFallbackOpen] = useState(() => localStorage.getItem("superFallbackOpen") === "1");
+  const toggleFallback = () => {
+    setFallbackOpen((v) => {
+      localStorage.setItem("superFallbackOpen", v ? "0" : "1");
+      return !v;
+    });
+  };
 
   return (
     <div className={`ad ${sidebarOpen ? "ad--open" : ""} ${mobileOpen ? "ad--mobile-open" : ""}`}>
@@ -158,7 +174,32 @@ export default function AdminLayout({ title, children }) {
           </div>
         </div>
 
-        {navSections.map((section) => (
+        {/* Super program picker: scopes fallback Admin Tools only.
+            Oversight + Dashboard + Release stay global. Default All. */}
+        {superAdmin && (
+          <div style={{ padding: "10px 14px 2px" }}>
+            {sidebarOpen && (
+              <div className="ad-menuLabel" style={{ marginBottom: "4px" }}>Viewing</div>
+            )}
+            <select
+              className="ad-filterSelect"
+              style={{ width: "100%" }}
+              value={scopeDeptId}
+              onChange={(e) => setScopeDeptId(e.target.value)}
+              title="Scope fallback Admin Tools to a program (Oversight stays global)"
+            >
+              <option value="">All Programs</option>
+              {scopeDepts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+        )}
+
+        {navSections.map((section) => {
+          // Super: management screens collapse into a fallback group so
+          // the sidebar stays oversight-focused. Admins see everything flat.
+          const isFallbackSection = superAdmin && (section.id === "system-users" || section.id === "manage-evaluation");
+          if (isFallbackSection) return null;
+          return (
           <div key={section.id}>
             {section.label && <div className="ad-menuLabel">{section.label}</div>}
             <nav className="ad-nav">
@@ -191,7 +232,44 @@ export default function AdminLayout({ title, children }) {
               })}
             </nav>
           </div>
-        ))}
+          );
+        })}
+        {/* Super fallback Admin Tools: same pages, collapsed by default. */}
+        {superAdmin && (
+          <div>
+            <div className="ad-menuLabel">Fallback</div>
+            <nav className="ad-nav">
+              <button
+                className="ad-link"
+                type="button"
+                onClick={toggleFallback}
+                title={!sidebarOpen ? "Admin Tools" : undefined}
+              >
+                <span className="ad-linkIcon"><ChevronRight size={18} style={{ transform: fallbackOpen ? "rotate(90deg)" : "none" }} /></span>
+                <span className="ad-linkText">Admin Tools</span>
+              </button>
+              {fallbackOpen && navSections
+                .filter((s) => s.id === "system-users" || s.id === "manage-evaluation")
+                .flatMap((s) => s.items)
+                .map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.key}
+                      className={`ad-link ${isActive(item.path) ? "ad-link--active" : ""}`}
+                      type="button"
+                      onClick={() => handleNavClick(item.path)}
+                      title={!sidebarOpen ? item.label : undefined}
+                      style={{ paddingLeft: "38px" }}
+                    >
+                      <span className="ad-linkIcon"><Icon size={16} /></span>
+                      <span className="ad-linkText">{item.label}</span>
+                    </button>
+                  );
+                })}
+            </nav>
+          </div>
+        )}
 
         {/* Sidebar Footer User Card */}
         <div className="ad-userFooterCard">
@@ -296,5 +374,14 @@ export default function AdminLayout({ title, children }) {
 
       </main>
     </div>
+  );
+}
+
+export default function AdminLayout(props) {
+  const { userProfile } = useAuth();
+  return (
+    <SuperScopeProvider active={userProfile?.role === "super_admin"}>
+      <AdminLayoutInner {...props} />
+    </SuperScopeProvider>
   );
 }

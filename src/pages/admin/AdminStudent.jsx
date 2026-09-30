@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
+import { useSuperScope } from "../../context/SuperScopeContext";
 
 const YEAR_LEVELS = ["1st", "2nd", "3rd", "4th"];
 const SECTIONS = ["A", "B", "C", "D"];
@@ -13,6 +14,7 @@ const EMPTY_FORM = { schoolId: "", name: "", email: "", password: "", department
 
 export default function AdminStudent() {
   const { isSuper, myDeptIds, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
+  const { scopeDeptId, scopeDeptName } = useSuperScope();
   const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDept, setFilterDept] = useState("");
@@ -33,9 +35,10 @@ export default function AdminStudent() {
     try {
       const { data, error } = await supabase.from('users').select('*').eq('role', 'student');
       if (!error) {
-        const inScope = (s) => isSuper
+        const inScope = (s) => (isSuper && !scopeDeptId)
           || (s.department_id && myDeptIds.includes(s.department_id))
-          || inScopeName(s.department);
+          || inScopeName(s.department)
+          || (scopeDeptId && (s.department_id === scopeDeptId || sameDept(s.department, scopeDeptName)));
         setStudentList(((data || []).map(s => ({
           ...s,
           fullName: s.full_name,
@@ -62,14 +65,17 @@ export default function AdminStudent() {
         if (data) setSectionList(data);
       })
       .catch(() => {});
-  }, [scopeLoading, isSuper, myDeptIds.join("|")]);
+  }, [scopeLoading, isSuper, myDeptIds.join("|"), scopeDeptId, scopeDeptName]);
 
   // Scoped admin: pin program filter to own assignment (same as Report page).
+  // Super with a picked program: pin to the pick.
   useEffect(() => {
     if (!scopeLoading && !isSuper && myDeptNames.length > 0 && !myDeptNames.includes(filterDept)) {
       setFilterDept(myDeptNames[0]);
+    } else if (!scopeLoading && isSuper && scopeDeptName && !sameDept(filterDept, scopeDeptName)) {
+      setFilterDept(scopeDeptName);
     }
-  }, [scopeLoading, isSuper, myDeptNames.join("|")]);
+  }, [scopeLoading, isSuper, myDeptNames.join("|"), scopeDeptId, scopeDeptName]);
 
   const allSectionOptions = useMemo(() => {
     const set = new Set(SECTIONS);
@@ -262,7 +268,7 @@ export default function AdminStudent() {
 
             <select className="ad-filterSelect" value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
               <option value="">{isSuper ? "All Programs" : (myDeptNames.join(", ") || "No program assigned")}</option>
-              {(isSuper ? departmentOptions : departmentOptions.filter(d => inScopeName(d.name))).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+              {(isSuper && !scopeDeptId ? departmentOptions : departmentOptions.filter(d => inScopeName(d.name) || d.id === scopeDeptId)).map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             </select>
 
             <select className="ad-filterSelect" value={filterYear} onChange={(e) => setFilterYear(e.target.value)}>

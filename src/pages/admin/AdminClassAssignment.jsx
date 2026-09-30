@@ -2,14 +2,18 @@ import { useState, useEffect, useMemo } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
+import { useSuperScope } from "../../context/SuperScopeContext";
 
 export default function AdminClassAssignment() {
   const { isSuper, myDeptIds, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
+  const { scopeDeptId, scopeDeptName } = useSuperScope();
   const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
-  // D9 strict: scoped admin sees only own program(s). Super sees all.
-  const inScope = (r) => isSuper
+  // D9 strict: scoped admin sees only own program(s). Super sees all,
+  // or only the picked program when the super scope is set.
+  const inScope = (r) => (isSuper && !scopeDeptId)
     || (r.department_id && myDeptIds.includes(r.department_id))
-    || inScopeName(r.department);
+    || inScopeName(r.department)
+    || (scopeDeptId && (r.department_id === scopeDeptId || sameDept(r.department, scopeDeptName)));
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDept, setFilterDept] = useState("");
   const [filterYear, setFilterYear] = useState("");
@@ -74,14 +78,17 @@ export default function AdminClassAssignment() {
       } catch (err) { console.error("Fetch Error:", err); }
     };
     loadAllData();
-  }, [scopeLoading, isSuper, myDeptIds.join("|")]);
+  }, [scopeLoading, isSuper, myDeptIds.join("|"), scopeDeptId, scopeDeptName]);
 
   // Scoped admin: pin program filter to own assignment (same as Report/Student pages).
+  // Super with a picked program: pin to the pick.
   useEffect(() => {
     if (!scopeLoading && !isSuper && myDeptNames.length > 0 && !myDeptNames.includes(filterDept)) {
       setFilterDept(myDeptNames[0]);
+    } else if (!scopeLoading && isSuper && scopeDeptName && !sameDept(filterDept, scopeDeptName)) {
+      setFilterDept(scopeDeptName);
     }
-  }, [scopeLoading, isSuper, myDeptNames.join("|")]);
+  }, [scopeLoading, isSuper, myDeptNames.join("|"), scopeDeptId, scopeDeptName]);
 
   const handleSave = async () => {
     try {

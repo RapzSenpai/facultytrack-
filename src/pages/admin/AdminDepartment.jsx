@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
+import { useSuperScope } from "../../context/SuperScopeContext";
 import {
   GraduationCap,
   BookOpen,
@@ -28,6 +29,7 @@ export default function AdminDepartment() {
   // D9: scoped admins manage only their assigned program(s);
   // program CRUD stays super-only. RLS enforces the same server-side.
   const { isSuper, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
+  const { scopeDeptId } = useSuperScope();
 
   // Core Data
   const [departments, setDepartments] = useState([]);
@@ -444,10 +446,12 @@ export default function AdminDepartment() {
     return Array.from(set).sort();
   }, [currentProgramSubjects, currentProgramSections, openYears]);
 
-  // Filtered Programs list for main overview (D9: scoped to assignments).
+  // Filtered Programs list for main overview (D9: scoped to assignments;
+  // super with a picked program sees only it).
   const filteredDepartments = useMemo(() => {
     let list = departments;
     if (!isSuper) list = list.filter((d) => inScopeName(d.name));
+    else if (scopeDeptId) list = list.filter((d) => d.id === scopeDeptId);
     if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase();
     return list.filter(
@@ -455,13 +459,13 @@ export default function AdminDepartment() {
         (d.name || "").toLowerCase().includes(q) ||
         (d.description || "").toLowerCase().includes(q),
     );
-  }, [departments, searchQuery, isSuper, inScopeName]);
+  }, [departments, searchQuery, isSuper, inScopeName, scopeDeptId]);
 
   // Scoped total for the "Showing X of Y" count — scoped admins
   // must not see the global program total.
-  const scopedTotal = isSuper
+  const scopedTotal = (isSuper && !scopeDeptId)
     ? departments.length
-    : departments.filter((d) => inScopeName(d.name)).length;
+    : (isSuper ? departments.filter((d) => d.id === scopeDeptId).length : departments.filter((d) => inScopeName(d.name)).length);
 
   return (
     <AdminLayout title={selectedProgram ? `${selectedProgram.name} Curriculum` : "Programs & Curriculum"}>

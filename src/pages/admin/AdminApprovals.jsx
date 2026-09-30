@@ -3,12 +3,17 @@ import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
+import { useSuperScope } from "../../context/SuperScopeContext";
 import { Check, X, Search, AlertCircle, IdCard } from "lucide-react";
 import { logAdminAction } from "../../utils/audit";
 
 export default function AdminApprovals() {
     const { currentUser, userProfile } = useAuth();
     const { isSuper, myDeptIds, inScopeName, loading: scopeLoading } = useScopedAdmin();
+    // Super program picker: All (no pick) sees everything; a pick pins
+    // fallback tools to that program. Oversight screens ignore this.
+    const { scopeDeptId, scopeDeptName } = useSuperScope();
+    const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
     const [activeTab, setActiveTab] = useState("faculty");
     const [searchQuery, setSearchQuery] = useState("");
     const [loading, setLoading] = useState(false);
@@ -40,10 +45,12 @@ export default function AdminApprovals() {
             const fData = (fRes.data || []).map(mapUser);
             const sData = (sRes.data || []).map(mapUser);
 
-            // D9 strict: scoped admin sees only own program(s). Super sees all.
-            const inScope = (u) => isSuper
+            // D9 strict: scoped admin sees only own program(s). Super sees all,
+            // or only the picked program when the super scope is set.
+            const inScope = (u) => (isSuper && !scopeDeptId)
                 || (u.department_id && myDeptIds.includes(u.department_id))
-                || inScopeName(u.department);
+                || inScopeName(u.department)
+                || (scopeDeptId && (u.department_id === scopeDeptId || sameDept(u.department, scopeDeptName)));
             setPendingFaculty(fData.filter(u => u.status === 'pending' && inScope(u)));
             setPendingStudents(sData.filter(u => u.status === 'pending' && inScope(u)));
         } catch (err) {
@@ -115,7 +122,7 @@ export default function AdminApprovals() {
 
     useEffect(() => {
         if (!scopeLoading) fetchApprovals();
-    }, [scopeLoading, isSuper, myDeptIds.join("|")]);
+    }, [scopeLoading, isSuper, myDeptIds.join("|"), scopeDeptId, scopeDeptName]);
 
     const handleApprove = async (uid) => {
         if (window.confirm("Approve this account?")) {

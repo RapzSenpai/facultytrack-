@@ -3,14 +3,18 @@ import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { isPeriodActive, periodStatusLabel } from "../../utils/periodStatus";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
+import { useSuperScope } from "../../context/SuperScopeContext";
 
 export default function AdminAcademicYear() {
   const { isSuper, myDeptIds, loading: scopeLoading } = useScopedAdmin();
+  const { scopeDeptId } = useSuperScope();
   // D9: scoped admin sees own-program + shared (NULL) periods.
-  // Super sees all. Shared rows are read-only for scoped admins.
-  const inScopePeriod = (r) => isSuper
+  // Super sees all, or picked-program + shared when the super scope is set.
+  // Shared rows are read-only for scoped admins.
+  const inScopePeriod = (r) => (isSuper && !scopeDeptId)
     || !r.department_id
-    || myDeptIds.includes(r.department_id);
+    || myDeptIds.includes(r.department_id)
+    || r.department_id === scopeDeptId;
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterSemester, setFilterSemester] = useState("");
@@ -47,7 +51,7 @@ export default function AdminAcademicYear() {
       await fetchAY();
     };
     loadInitialData();
-  }, [scopeLoading, isSuper, myDeptIds.join("|")]); // refetch once scope resolves
+  }, [scopeLoading, isSuper, myDeptIds.join("|"), scopeDeptId]); // refetch once scope resolves
 
   // 3. Modal Handlers
   const handleOpenModal = (ay = null) => {
@@ -89,7 +93,7 @@ export default function AdminAcademicYear() {
     }
     const payload = {
       ...formData,
-      department_id: isEditing ? (editingAY.department_id || null) : (isSuper ? null : myDeptIds[0]),
+      department_id: isEditing ? (editingAY.department_id || null) : (isSuper ? (scopeDeptId || null) : myDeptIds[0]),
     };
 
     try {

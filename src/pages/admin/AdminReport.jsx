@@ -3,6 +3,7 @@ import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
+import { useSuperScope } from "../../context/SuperScopeContext";
 import { parseFunctionError } from "../../utils/audit";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -72,6 +73,7 @@ export default function AdminReport() {
   // D9: scoped admins are locked to their assigned program(s).
   // Backend (export-report + anon view RLS) enforces the same.
   const { isSuper, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
+  const { scopeDeptId, scopeDeptName } = useSuperScope();
   const canExport = userProfile?.role === "admin" || userProfile?.role === "super_admin"; // D11
   const [exporting, setExporting] = useState(false);
   const [evaluations, setEvaluations] = useState([]);
@@ -151,9 +153,10 @@ export default function AdminReport() {
 
   // Deep link from super Reports cards (?department=): preset the
   // program filter once departments load. Super stays unlocked.
+  // Active super scope pick presets the same way.
   useEffect(() => {
     if (scopeLoading || !isSuper || departmentsList.length === 0) return;
-    const want = new URLSearchParams(window.location.search).get("department");
+    const want = new URLSearchParams(window.location.search).get("department") || scopeDeptName;
     if (!want) return;
     const hit = departmentsList.find((d) => sameDept(d.name, want));
     if (hit && !sameDept(filterDept, hit.name)) {
@@ -161,7 +164,7 @@ export default function AdminReport() {
       setFilterFaculty("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeLoading, isSuper, departmentsList]);
+  }, [scopeLoading, isSuper, departmentsList, scopeDeptId, scopeDeptName]);
 
   const uniqueAYs = [...new Set(academicYearsList.map(y => y.year).filter(Boolean))].sort().reverse();
   const uniqueSems = [...new Set(academicYearsList.map(y => y.semester).filter(Boolean))].sort();

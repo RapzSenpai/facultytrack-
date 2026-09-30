@@ -48,6 +48,15 @@ Assumptions: one Superadmin for now; all gates stay role-based
   ratings per program charts, trends across released periods,
   moderation load overview.
 
+## Phase 5 — Super sidebar + program scope (fallback tools)
+- Super-only `SuperScopeContext` (default All Programs, persisted).
+- Sidebar: Oversight cluster (Monitor, Program Assignments, Reports,
+  Analytics) + top-level Release + Dashboard; admin screens collapse
+  under "Admin Tools (fallback)", shut by default. Admins unaffected.
+- "Viewing" picker scopes fallback tools to one program (lists, pins,
+  creates stamp the pick); Oversight + Dashboard + Release stay global.
+- AI Analyst intentionally left global (edge fn scope contract).
+
 ## Execution rules
 - Phase by phase, one phase per approval. No phase starts early.
 - New nav: separate super-only "Oversight" section in `AdminLayout`;

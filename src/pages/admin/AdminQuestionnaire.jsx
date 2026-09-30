@@ -2,14 +2,18 @@ import { useState, useEffect } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
+import { useSuperScope } from "../../context/SuperScopeContext";
 
 export default function AdminQuestionnaire() {
   const { isSuper, myDeptIds, loading: scopeLoading } = useScopedAdmin();
+  const { scopeDeptId } = useSuperScope();
   // D9: scoped admin sees own-program + shared (NULL) criteria.
-  // Super sees all. Shared rows are read-only for scoped admins.
-  const inScopeCriteria = (c) => isSuper
+  // Super sees all, or picked-program + shared when the super scope is set.
+  // Shared rows are read-only for scoped admins.
+  const inScopeCriteria = (c) => (isSuper && !scopeDeptId)
     || !c.department_id
-    || myDeptIds.includes(c.department_id);
+    || myDeptIds.includes(c.department_id)
+    || c.department_id === scopeDeptId;
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState({ show: false, message: "", type: "" });
 
@@ -71,7 +75,7 @@ export default function AdminQuestionnaire() {
     }
   };
 
-  useEffect(() => { fetchData(); }, [scopeLoading, isSuper, myDeptIds.join("|")]);
+  useEffect(() => { fetchData(); }, [scopeLoading, isSuper, myDeptIds.join("|"), scopeDeptId]);
 
   // --- CRITERIA CRUD ---
   const handleSaveCriteria = async () => {
@@ -79,8 +83,9 @@ export default function AdminQuestionnaire() {
       showToast("Please enter a criteria name", "error");
       return;
     }
-    // Scoped admin creates into own program; super creates shared rows.
-    const ownerDeptId = isSuper ? null : (myDeptIds[0] || null);
+    // Scoped admin creates into own program; super creates shared rows,
+    // or into the picked program when the super scope is set.
+    const ownerDeptId = isSuper ? (scopeDeptId || null) : (myDeptIds[0] || null);
     if (!isSuper && !ownerDeptId) {
       showToast("No program assigned — ask a super admin to assign you first.", "error");
       return;
