@@ -84,14 +84,20 @@ export async function notifyFacultyOnRelease({ academicYear, semester, departmen
  * Mark a single notification as read.
  */
 export async function markNotificationAsRead(notificationId) {
-  if (!notificationId) return;
+  if (!notificationId) return false;
   try {
-    await supabase
+    const { error } = await supabase
       .from("notifications")
       .update({ is_read: true })
       .eq("id", notificationId);
+    if (error) {
+      console.error("[notifications] markNotificationAsRead database error:", error.message, error);
+      return false;
+    }
+    return true;
   } catch (err) {
-    console.warn("markNotificationAsRead error:", err);
+    console.error("[notifications] markNotificationAsRead exception:", err);
+    return false;
   }
 }
 
@@ -99,26 +105,42 @@ export async function markNotificationAsRead(notificationId) {
  * Mark all notifications as read for a user.
  */
 export async function markAllNotificationsAsRead(userId) {
-  if (!userId) return;
+  if (!userId) return false;
   try {
-    await supabase
+    const { error } = await supabase
       .from("notifications")
       .update({ is_read: true })
       .eq("user_id", userId)
       .eq("is_read", false);
+    if (error) {
+      console.error("[notifications] markAllNotificationsAsRead database error:", error.message, error);
+      return false;
+    }
+    return true;
   } catch (err) {
-    console.warn("markAllNotificationsAsRead error:", err);
+    console.error("[notifications] markAllNotificationsAsRead exception:", err);
+    return false;
   }
 }
 
 /**
- * Delete a notification.
+ * Delete a notification permanently from database.
  */
 export async function deleteNotification(notificationId) {
-  if (!notificationId) return;
+  if (!notificationId) return false;
   try {
-    await supabase.from("notifications").delete().eq("id", notificationId);
+    const { error } = await supabase
+      .from("notifications")
+      .delete()
+      .eq("id", notificationId);
+
+    if (error) {
+      console.error("[notifications] deleteNotification database error:", error.message, error);
+      return false;
+    }
+    return true;
   } catch (err) {
-    console.warn("deleteNotification error:", err);
+    console.error("[notifications] deleteNotification exception:", err);
+    return false;
   }
 }

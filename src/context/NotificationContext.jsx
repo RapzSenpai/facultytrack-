@@ -122,22 +122,47 @@ export function NotificationProvider({ children }) {
   };
 
   const removeNotification = async (id) => {
+    let previousNotifications;
     setNotifications((prev) => {
+      previousNotifications = prev;
       const next = prev.filter((n) => n.id !== id);
       setUnreadCount(next.filter((n) => !n.is_read).length);
       return next;
     });
-    await apiDeleteNotification(id);
+
+    const success = await apiDeleteNotification(id);
+    if (!success) {
+      console.warn("[notifications] Server delete failed; reverting local state.");
+      if (previousNotifications) {
+        setNotifications(previousNotifications);
+        setUnreadCount(previousNotifications.filter((n) => !n.is_read).length);
+      }
+    }
   };
 
   const clearAllNotifications = async () => {
     if (!currentUser?.id) return;
-    setNotifications([]);
+    let previousNotifications;
+    setNotifications((prev) => {
+      previousNotifications = prev;
+      return [];
+    });
     setUnreadCount(0);
     try {
-      await supabase.from("notifications").delete().eq("user_id", currentUser.id);
+      const { error } = await supabase.from("notifications").delete().eq("user_id", currentUser.id);
+      if (error) {
+        console.error("[notifications] clearAllNotifications database error:", error.message, error);
+        if (previousNotifications) {
+          setNotifications(previousNotifications);
+          setUnreadCount(previousNotifications.filter((n) => !n.is_read).length);
+        }
+      }
     } catch (err) {
-      console.warn("clearAllNotifications error:", err);
+      console.error("[notifications] clearAllNotifications error:", err);
+      if (previousNotifications) {
+        setNotifications(previousNotifications);
+        setUnreadCount(previousNotifications.filter((n) => !n.is_read).length);
+      }
     }
   };
 
