@@ -19,7 +19,7 @@ Assumptions: one Superadmin for now; all gates stay role-based
 - recharts — already a dependency for analytics charts.
 
 ## Phase 1 — Audit read + Monitor viewer
-- Prerequisite migration: super-only SELECT on `audit_log`
+- Prerequisite migration: super-only SELECT on `audit_log` (`029`)
   (writes exist via `018`, reads are service-role-only today).
 - New super-only Audit viewer: filter by actor, action, entity, date.
 - Orphan/duplicate detectors (pure client reads, no new tables):

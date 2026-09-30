@@ -1,5 +1,6 @@
 -- ============================================================
--- FacultyTrack: Migration 027 — super-only audit_log reads
+-- FacultyTrack: Migration 029 — super-only audit_log reads
+-- (Numbered 029: 027/028 taken by academic-period unique fix + notifications.)
 -- Writes already flow via log_admin_action (018, SECURITY DEFINER).
 -- No SELECT policy exists, so the System Monitor audit viewer
 -- needs this read path. Super-only: scoped admins have no business
