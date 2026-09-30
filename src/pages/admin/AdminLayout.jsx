@@ -15,6 +15,7 @@ import {
   ChevronRight,
   ShieldCheck,
   Sparkles,
+  Activity,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
@@ -41,6 +42,13 @@ const navSections = [
       { key: "approvals", label: "Approvals", path: "/admin/approvals", icon: ShieldCheck },
       { key: "student", label: "Student", path: "/admin/student", icon: UserCircle2 },
       { key: "program-assignments", label: "Program Assignments", path: "/admin/program-assignments", icon: UserCircle2, superOnly: true },
+    ],
+  },
+  {
+    id: "oversight",
+    label: "OVERSIGHT",
+    items: [
+      { key: "monitor", label: "System Monitor", path: "/admin/monitor", icon: Activity, superOnly: true },
     ],
   },
   {
