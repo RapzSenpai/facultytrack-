@@ -1,26 +1,24 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { isPeriodActive, periodStatusLabel, pickActivePeriod } from "../../utils/periodStatus";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { is_period_released } from "../../utils/periodRelease";
+import { ResponsiveContainer, PieChart, Pie } from "recharts";
 import "../../styles/dashboard-mockup.css";
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { isSuper, myDeptIds, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
-  const [stats, setStats] = useState({ faculty: 0, students: 0, evaluations: 0, currentPeriodEvals: 0, uniqueParticipants: 0, pendingFaculty: 0, pendingStudents: 0 });
+  const [stats, setStats] = useState({ faculty: 0, students: 0, evaluations: 0, currentPeriodEvals: 0, uniqueParticipants: 0, pendingFaculty: 0, pendingStudents: 0, programs: 0, periodsActive: 0, periodsScheduled: 0, resultsReleased: 0, resultsPending: 0 });
   const [activeYear, setActiveYear] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Phase 2 state
-  const [chartData, setChartData] = useState([]);
   const [deptData, setDeptData] = useState([]);
   const [topFacultyData, setTopFacultyData] = useState([]);
   const [recentRegistrations, setRecentRegistrations] = useState([]);
-  const [recentActivity, setRecentActivity] = useState([]);
-  const [timeRange, setTimeRange] = useState("all"); // "all", "30", "7"
-  const [activeTab, setActiveTab] = useState("department"); // "department" or "faculty"
+  const [sysActivity, setSysActivity] = useState([]);
 
   useEffect(() => {
     if (scopeLoading) return;
@@ -30,8 +28,15 @@ export default function AdminDashboard() {
       supabase.from('admin_evaluations_anon').select('*'),
       supabase.from('academic_years').select('*, departments(name)'),
       supabase.from('class_assignments').select('*'),
+      supabase.from('departments').select('id, name'),
+      supabase.from('evaluation_releases').select('academic_year, semester, department, approved, release_date'),
+      // audit_log is super-readable only (029) — dept admins resolve empty
+      // so the shared load never aborts on their RLS denial.
+      isSuper
+        ? supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(8)
+        : Promise.resolve({ data: [], error: null }),
     ])
-      .then(([facultyRes, studentsRes, evaluationsRes, yearsRes, assignmentsRes]) => {
+      .then(([facultyRes, studentsRes, evaluationsRes, yearsRes, assignmentsRes, deptRes, releaseRes, auditRes]) => {
         // D9: RLS already scopes these server-side for dept admins;
         // client filter is a backstop so mixed-dept rows never render.
         const inScope = (d) => isSuper || inScopeName(d);
@@ -93,13 +98,7 @@ export default function AdminDashboard() {
         const sortedUsers = allUsers.reverse().slice(0, 5);
         setRecentRegistrations(sortedUsers);
 
-        // Extract recent activities (latest evaluations)
-        const sortedEvals = [...evaluationsMapped].sort((a, b) => {
-          const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
-          const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
-          return dateB - dateA;
-        }).slice(0, 5);
-        setRecentActivity(sortedEvals);
+        setSysActivity(auditRes.data || []);
 
         // Find current period
         let active = null;
@@ -127,6 +126,20 @@ export default function AdminDashboard() {
         const periodEvalsCount = periodEvalsRaw.length;
         const uniqueParticipantsCount = new Set(periodEvalsRaw.map(e => e.studentId)).size;
 
+        // Evaluation lifecycle (super overview): period states from
+        // academic_years, release states from evaluation_releases.
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const periodsActive = yearsMapped.filter((y) => isPeriodActive(y)).length;
+        const periodsScheduled = yearsMapped.filter((y) => {
+          if (!y.start_date) return false;
+          const s = new Date(`${String(y.start_date).slice(0, 10)}T00:00:00`);
+          return !Number.isNaN(s.getTime()) && s > now && !isPeriodActive(y);
+        }).length;
+        const releases = releaseRes.data || [];
+        const resultsReleased = releases.filter((r) => is_period_released(r)).length;
+        const resultsPending = releases.length - resultsReleased;
+
         setStats({
           faculty: activeFaculty,
           students: activeStudents,
@@ -134,34 +147,15 @@ export default function AdminDashboard() {
           currentPeriodEvals: periodEvalsCount,
           uniqueParticipants: uniqueParticipantsCount,
           pendingFaculty,
-          pendingStudents
+          pendingStudents,
+          programs: (deptRes.data || []).length,
+          periodsActive,
+          periodsScheduled,
+          resultsReleased,
+          resultsPending
         });
 
-        // 1. Chart Data
-        const dateCounts = {};
-        periodEvalsRaw.forEach(e => {
-          if (e.submittedAt) {
-            try {
-              const d = new Date(e.submittedAt);
-              if (!isNaN(d.getTime())) {
-                const dateStr = d.toISOString().split("T")[0];
-                dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
-              }
-            } catch (err) { console.warn("Date parse error", err); }
-          }
-        });
-        const chartArr = Object.keys(dateCounts).map(date => {
-          const d = new Date(date);
-          return {
-            dateStr: date, // YYYY-MM-DD
-            dateDisplay: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-            submissions: dateCounts[date],
-            rawDate: d
-          };
-        }).sort((a, b) => a.rawDate - b.rawDate);
-        setChartData(chartArr);
-
-        // 2. Department Participation Data
+        // 1. Department Participation Data
         const deptMap = {};
         studentsMapped.filter(s => s.status === "active").forEach(s => {
           const d = s.department || "Unassigned";
@@ -182,7 +176,7 @@ export default function AdminDashboard() {
         })).sort((a, b) => b.rate - a.rate);
         setDeptData(deptArr);
 
-        // 3. Top Rated Faculty Data
+        // 2. Top Rated Faculty Data
         const facMap = {};
         periodEvalsRaw.forEach(e => {
           if (!facMap[e.facultyId]) facMap[e.facultyId] = { totalRating: 0, count: 0 };
@@ -217,15 +211,6 @@ export default function AdminDashboard() {
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeLoading, isSuper, myDeptNames.join("|"), myDeptIds.join("|")]);
-
-  // Filter chart data based on time range
-  const filteredChartData = useMemo(() => {
-    if (timeRange === "all" || chartData.length === 0) return chartData;
-    const now = new Date();
-    const daysToSubtract = timeRange === "7" ? 7 : 30;
-    const cutoff = new Date(now.setDate(now.getDate() - daysToSubtract));
-    return chartData.filter(d => d.rawDate >= cutoff);
-  }, [chartData, timeRange]);
 
   return (
     <AdminLayout title="Dashboard">
@@ -292,7 +277,6 @@ export default function AdminDashboard() {
               </div>
               <div className="mockup-stat-value">{loading ? "—" : stats.faculty}</div>
               <div className="mockup-stat-desc">Active faculty members</div>
-              <div className="mockup-stat-trend"><span>↑ 1</span> This semester</div>
             </div>
 
             <div className="mockup-stat-card">
@@ -304,19 +288,17 @@ export default function AdminDashboard() {
               </div>
               <div className="mockup-stat-value">{loading ? "—" : stats.students}</div>
               <div className="mockup-stat-desc">Active enrolled students</div>
-              <div className="mockup-stat-trend green"><span>↑ 2</span> This semester</div>
             </div>
 
             <div className="mockup-stat-card">
               <div className="mockup-stat-header">
-                <span className="mockup-stat-title">Forms Submitted</span>
+                <span className="mockup-stat-title">Total Programs</span>
                 <div className="mockup-stat-icon purple">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 10L12 5 2 10l10 5 10-5z"></path><polyline points="22 10 22 16"></polyline><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"></path></svg>
                 </div>
               </div>
-              <div className="mockup-stat-value">{loading ? "—" : stats.currentPeriodEvals}</div>
-              <div className="mockup-stat-desc">For the ongoing semester</div>
-              <div className="mockup-stat-trend"><span>↑ 3</span> This semester</div>
+              <div className="mockup-stat-value">{loading ? "—" : stats.programs}</div>
+              <div className="mockup-stat-desc">Programs in the system</div>
             </div>
 
             <div className="mockup-stat-card">
@@ -337,6 +319,46 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
+
+          {/* Evaluation Overview (super only): real lifecycle states */}
+          {isSuper && (
+            <div className="mockup-panel" style={{ marginBottom: '16px' }}>
+              <div className="mockup-panel-header" style={{ marginBottom: '12px' }}>
+                <div>
+                  <h3 className="mockup-panel-title">Evaluation Overview</h3>
+                  <p className="mockup-panel-subtitle">System-wide period and release states.</p>
+                </div>
+                <Link to="/admin/academic-year" className="mockup-panel-action">Manage periods →</Link>
+              </div>
+              <div className="mockup-stats-grid">
+                <div className="mockup-stat-card">
+                  <div className="mockup-stat-header"><span className="mockup-stat-title">Active Periods</span></div>
+                  <div className="mockup-stat-value">{loading ? "—" : stats.periodsActive}</div>
+                  <div className="mockup-stat-desc">On-going evaluations</div>
+                </div>
+                <div className="mockup-stat-card">
+                  <div className="mockup-stat-header"><span className="mockup-stat-title">Scheduled</span></div>
+                  <div className="mockup-stat-value">{loading ? "—" : stats.periodsScheduled}</div>
+                  <div className="mockup-stat-desc">Periods starting later</div>
+                </div>
+                <div className="mockup-stat-card">
+                  <div className="mockup-stat-header"><span className="mockup-stat-title">Results Released</span></div>
+                  <div className="mockup-stat-value">{loading ? "—" : stats.resultsReleased}</div>
+                  <div className="mockup-stat-desc">Approved + date reached</div>
+                </div>
+                <div className="mockup-stat-card">
+                  <div className="mockup-stat-header"><span className="mockup-stat-title">Pending Results</span></div>
+                  <div className="mockup-stat-value">{loading ? "—" : stats.resultsPending}</div>
+                  <div className="mockup-stat-desc">Not yet released</div>
+                </div>
+                <div className="mockup-stat-card">
+                  <div className="mockup-stat-header"><span className="mockup-stat-title">Forms Submitted</span></div>
+                  <div className="mockup-stat-value">{loading ? "—" : stats.currentPeriodEvals}</div>
+                  <div className="mockup-stat-desc">For the ongoing semester</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Middle Row */}
           <div className="mockup-grid-3">
@@ -527,6 +549,46 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            {/* System Activity (super only): latest audit trail, color-coded */}
+            {isSuper && (
+              <div className="mockup-panel">
+                <div className="mockup-panel-header" style={{ marginBottom: '16px' }}>
+                  <div>
+                    <h3 className="mockup-panel-title">System Activity</h3>
+                    <p className="mockup-panel-subtitle">Latest cross-program events.</p>
+                  </div>
+                  <Link to="/admin/monitor" className="mockup-panel-action">View all →</Link>
+                </div>
+                <div className="mockup-tasks-list">
+                  {loading ? (
+                    <div style={{ textAlign: 'center', color: '#6b7280', padding: '20px' }}>Loading...</div>
+                  ) : sysActivity.length === 0 ? (
+                    <div style={{ textAlign: 'center', color: '#6b7280', padding: '20px' }}>No activity yet</div>
+                  ) : (
+                    sysActivity.map((a) => {
+                      const txt = `${a.action || ""} ${a.entity || ""} ${a.entity_id || ""} ${JSON.stringify(a.details || "")}`.toLowerCase();
+                      const color = /release|result/.test(txt) ? "#16a34a"
+                        : /flag|moderation|priority|reject|dismiss/.test(txt) ? "#dc2626"
+                        : /pending|approv|register/.test(txt) ? "#d97706" : "#2563eb";
+                      return (
+                        <div className="mockup-task-item" key={a.id}>
+                          <div className="mockup-task-icon" style={{ background: `${color}1a`, color }}>
+                            <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: color, display: "block" }} />
+                          </div>
+                          <div className="mockup-task-content">
+                            <h4 className="mockup-task-title">{a.action || "Event"}</h4>
+                            <p className="mockup-task-desc">
+                              {a.entity}{a.entity_id ? ` · ${String(a.entity_id).slice(0, 8)}` : ""}
+                              {" · "}{a.created_at ? new Date(a.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ""}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
 
           </div>
 
