@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { Users, Menu, LogOut, ChevronDown, User, FileText, Home } from "lucide-react";
 import logo from "../../assets/logo.jpg";
+import NotificationBell from "../../components/notifications/NotificationBell";
 
 const NAV_ITEMS = [
   {
@@ -139,7 +140,8 @@ export default function FacultyLayout({ children, breadcrumb }) {
             </div>
           </div>
 
-          <div className="fd-topRight">
+          <div className="fd-topRight" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <NotificationBell />
             <div className="fd-userDropdown">
               <button
                 className="fd-topUser"

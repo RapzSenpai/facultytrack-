@@ -20,6 +20,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { supabase } from "../../config/supabase";
 import logo from "../../assets/logo.jpg";
+import NotificationBell from "../../components/notifications/NotificationBell";
 
 // Phase 7 [Req 10]: the Program Assignments page is super-admin-only;
 // RLS enforces the same rule server-side.
@@ -236,7 +237,8 @@ export default function AdminLayout({ title, children }) {
             <div className="ad-breadcrumb"><span>{title}</span></div>
           </div>
 
-          <div className="ad-topRight">
+          <div className="ad-topRight" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <NotificationBell />
             <div className="ad-userDropdown">
               <button
                 className="ad-topUser"

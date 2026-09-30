@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { is_period_released } from "../../utils/periodRelease";
 import { isPeriodActive } from "../../utils/periodStatus";
 import { logAdminAction } from "../../utils/audit";
+import { notifyFacultyOnRelease } from "../../utils/notifications";
 import {
   ClipboardCheck,
   Calendar,
@@ -245,6 +246,15 @@ export default function AdminReleaseManagement() {
         delete next[periodKey];
         return next;
       });
+
+      // Notify faculty if period is live and released
+      if (payload.approved && payload.release_date && payload.release_date <= today) {
+        notifyFacultyOnRelease({
+          academicYear: filterYear,
+          semester: filterSem,
+          department: targetDept,
+        }).catch((err) => console.warn("notifyFacultyOnRelease warning:", err));
+      }
     } catch (err) {
       console.error("Failed to save release:", err);
       alert("Could not save the release settings. Please try again.");

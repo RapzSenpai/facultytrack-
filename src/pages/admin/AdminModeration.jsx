@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
+import { useDialog } from "../../context/DialogContext";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { logAdminAction } from "../../utils/audit";
 
@@ -25,6 +26,7 @@ const MOD_COLORS = {
 
 export default function AdminModeration() {
   const { currentUser } = useAuth();
+  const { showNotice } = useDialog();
   const { isSuper, myDeptIds, inScopeName, loading: scopeLoading } = useScopedAdmin();
   // D9 strict: evaluation belongs to a program via its faculty (primary)
   // or the responding student's department (fallback). Super sees all.
@@ -106,14 +108,20 @@ export default function AdminModeration() {
         .select("id");
       if (error) throw error;
       if (!data || data.length === 0) {
-        alert("No change saved — this case is outside your program scope.");
+        showNotice("No change saved — this case is outside your program scope.", {
+          type: "warning",
+          title: "Program Scope Notice",
+        });
         return;
       }
       setReviews((prev) => prev.map((r) => (r.id === review.id ? { ...r, ...update } : r)));
       logAdminAction("priority_review.update", "priority_reviews", review.id, { status: patch.status });
     } catch (err) {
       console.error("Failed to update review:", err);
-      alert("Could not update the review. Please try again.");
+      showNotice("Could not update the review. Please try again.", {
+        type: "error",
+        title: "Update Failed",
+      });
     } finally {
       setBusyId(null);
     }
@@ -148,17 +156,29 @@ export default function AdminModeration() {
           };
           console.log("[moderation-scope]", JSON.stringify(diag, null, 2));
           if (!facRow) {
-            alert("No change saved — RLS hides the evaluated faculty row entirely (program-less or other program). Open console ([moderation-scope]) for details.");
+            showNotice("No change saved — RLS hides the evaluated faculty row entirely (program-less or other program). Open console ([moderation-scope]) for details.", {
+              type: "warning",
+              title: "Program Scope Notice",
+            });
           } else if (!facRow.department?.trim() && !facRow.department_id) {
-            alert("No change saved — the evaluated faculty has no assigned program. Assign one in Faculty Management first.");
+            showNotice("No change saved — the evaluated faculty has no assigned program. Assign one in Faculty Management first.", {
+              type: "warning",
+              title: "Program Scope Notice",
+            });
           } else {
-            alert(`No change saved — faculty program (${facRow.department || facRow.department_id}) does not match your assignment (${diag.myAssignments.join(", ") || "none"}). Details in console.`);
+            showNotice(`No change saved — faculty program (${facRow.department || facRow.department_id}) does not match your assignment (${diag.myAssignments.join(", ") || "none"}). Details in console.`, {
+              type: "warning",
+              title: "Program Scope Mismatch",
+            });
           }
         } catch {
           const fac = faculty.find((f) => f.id === evaluation.faculty_id);
-          alert(fac && !fac.department?.trim()
+          showNotice(fac && !fac.department?.trim()
             ? "No change saved — the evaluated faculty has no assigned program. Assign one in Faculty Management first."
-            : "No change saved — this comment belongs to a program outside your scope.");
+            : "No change saved — this comment belongs to a program outside your scope.", {
+            type: "warning",
+            title: "Program Scope Notice",
+          });
         }
         return;
       }
@@ -168,7 +188,10 @@ export default function AdminModeration() {
       logAdminAction("evaluation.moderate", "evaluations", evaluation.id, { moderation_status: status });
     } catch (err) {
       console.error("Failed to reclassify:", err);
-      alert("Could not update the moderation status. Please try again.");
+      showNotice("Could not update the moderation status. Please try again.", {
+        type: "error",
+        title: "Update Failed",
+      });
     } finally {
       setBusyId(null);
     }
@@ -187,7 +210,10 @@ export default function AdminModeration() {
         .single();
       if (error) {
         if (error.code === "23505") {
-          alert("That word is already on the list.");
+          showNotice("That word is already on the list.", {
+            type: "warning",
+            title: "Duplicate Word",
+          });
           return;
         }
         throw error;
@@ -197,7 +223,10 @@ export default function AdminModeration() {
       logAdminAction("blocked_words.add", "blocked_words", data.id, { word, severity: newSeverity });
     } catch (err) {
       console.error("Failed to add word:", err);
-      alert("Could not add the word. Please try again.");
+      showNotice("Could not add the word. Please try again.", {
+        type: "error",
+        title: "Action Failed",
+      });
     } finally {
       setSavingWord(false);
     }
@@ -211,7 +240,10 @@ export default function AdminModeration() {
       logAdminAction("blocked_words.remove", "blocked_words", word.id, { word: word.word });
     } catch (err) {
       console.error("Failed to remove word:", err);
-      alert("Could not remove the word. Please try again.");
+      showNotice("Could not remove the word. Please try again.", {
+        type: "error",
+        title: "Action Failed",
+      });
     }
   };
 

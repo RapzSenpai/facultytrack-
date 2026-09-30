@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { Users, Menu, LogOut, ChevronDown, User, FileText, Home } from "lucide-react";
 import logo from "../../assets/logo.jpg";
+import NotificationBell from "../../components/notifications/NotificationBell";
 
 
 const NAV_ITEMS = [
@@ -143,7 +144,8 @@ export default function StudentLayout({ children, breadcrumb }) {
             </div>
           </div>
 
-          <div className="sd-topRight">
+          <div className="sd-topRight" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <NotificationBell />
             <div className="sd-userDropdown">
               <button
                 className="sd-topUser"

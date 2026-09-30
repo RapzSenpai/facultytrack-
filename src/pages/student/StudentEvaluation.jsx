@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Search, X, List, Calendar, CheckCircle, AlertCircle, Info, MessageSquare, BookOpen, FileText, ChevronRight, Clock } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { useDialog } from "../../context/DialogContext";
 import { supabase } from "../../config/supabase";
 import { parseFunctionError } from "../../utils/audit";
 import { isAssignmentMatch } from "../../utils/assignmentMatch";
@@ -9,6 +10,7 @@ import StudentLayout from "./StudentLayout";
 
 
 export default function StudentEvaluation() {
+  const { showNotice } = useDialog();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState("all");
   const [selectedFaculty, setSelectedFaculty] = useState(null);
@@ -155,8 +157,9 @@ export default function StudentEvaluation() {
               assignmentId: a.id,
               facultyId: a.facultyId,
               name: a.facultyName || "— No faculty assigned",
-              subject: `${a.subjectCode} - ${a.subjectName}`,
+              subject: a.subjectCode || a.subjectName || "—",
               subjectCode: a.subjectCode,
+              subjectName: a.subjectName,
               dept: a.department,
               year: a.yearLevel,
               section: a.section,
@@ -232,7 +235,13 @@ export default function StudentEvaluation() {
   // back so the student knows if their comment was flagged/blocked.
   const handleSubmitEvaluation = async () => {
     if (!selectedFaculty || !currentUser) return;
-    if (!activeYear) { alert("No active evaluation period is available."); return; }
+    if (!activeYear) {
+      showNotice("No active evaluation period is available.", {
+        type: "warning",
+        title: "Evaluation Period Notice",
+      });
+      return;
+    }
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke("submit-evaluation", {
@@ -274,14 +283,52 @@ export default function StudentEvaluation() {
       setIsPriority(false);
 
       if (moderationStatus === "flag") {
-        alert(`Evaluation for ${selectedFaculty.name} submitted. Your comment was flagged for review and will be checked by the administrator before release.`);
+        showNotice(`Evaluation for ${selectedFaculty.name} submitted. Your comment was flagged for review and will be checked by the administrator before release.`, {
+          type: "info",
+          title: "Evaluation Submitted",
+        });
       } else if (isPriority) {
-        alert(`Priority evaluation for ${selectedFaculty.name} submitted. The administrator will review it.`);
+        showNotice(`Priority evaluation for ${selectedFaculty.name} submitted. The administrator will review it.`, {
+          type: "info",
+          title: "Priority Evaluation Submitted",
+        });
       } else {
-        alert(`Evaluation for ${selectedFaculty.name} submitted successfully!`);
+        showNotice(`Evaluation for ${selectedFaculty.name} submitted successfully!`, {
+          type: "success",
+          title: "Submission Successful",
+        });
+      }
+
+      // Notify administrators if concern was priority or flagged
+      if (isPriority || moderationStatus === "flag") {
+        try {
+          const { data: adminUsers } = await supabase
+            .from("users")
+            .select("id")
+            .in("role", ["admin", "super_admin"])
+            .neq("status", "deleted");
+
+          if (adminUsers && adminUsers.length > 0) {
+            const notifs = adminUsers.map((adm) => ({
+              user_id: adm.id,
+              title: isPriority ? "Priority Concern Flagged" : "Comment Flagged for Review",
+              message: isPriority
+                ? `A student submitted a priority concern for ${selectedFaculty.name} requiring admin attention.`
+                : `A student comment for ${selectedFaculty.name} was flagged by automated moderation.`,
+              type: "alert",
+              link: "/admin/moderation",
+            }));
+            await supabase.from("notifications").insert(notifs);
+          }
+        } catch (notifErr) {
+          console.warn("Failed to notify admins of priority concern:", notifErr);
+        }
       }
     } catch (error) {
-      alert("Error: " + error.message);
+      showNotice(error.message || "An unexpected error occurred.", {
+        type: "error",
+        title: "Submission Error",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -303,7 +350,10 @@ export default function StudentEvaluation() {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase().trim();
     const nameMatch = (item.name || "").toLowerCase().includes(query);
-    const subjectMatch = (item.subject || "").toLowerCase().includes(query);
+    const subjectMatch =
+      (item.subject || "").toLowerCase().includes(query) ||
+      (item.subjectCode || "").toLowerCase().includes(query) ||
+      (item.subjectName || "").toLowerCase().includes(query);
     const sectionMatch = `${item.dept || ""} ${item.year || ""} ${item.section || ""}`.toLowerCase().includes(query);
     return nameMatch || subjectMatch || sectionMatch;
   });
@@ -516,7 +566,7 @@ export default function StudentEvaluation() {
                     <span className="se-teacher-subject-label">ASSIGNED SUBJECT</span>
                     <div className="se-teacher-subject-row">
                       <BookOpen size={16} className="se-teacher-subject-icon" />
-                      <span className="se-teacher-subject-text">{item.subject}</span>
+                      <span className="se-teacher-subject-text" title={item.subjectName || item.subjectCode}>{item.subjectCode || item.subject}</span>
                     </div>
 
                     <div className="se-teacher-badges-row">
@@ -575,7 +625,7 @@ export default function StudentEvaluation() {
                 <p className="se-modalSubtitle">
                   <span className="se-modalSubtitleTeacher">{selectedFaculty.name}</span>
                   <span className="se-modalSubtitleDivider">—</span>
-                  <span className="se-modalSubtitleSubject">{selectedFaculty.subject}</span>
+                  <span className="se-modalSubtitleSubject" title={selectedFaculty.subjectName || selectedFaculty.subjectCode}>{selectedFaculty.subjectCode || selectedFaculty.subject}</span>
                 </p>
               </div>
               <button type="button" className="se-modalClose" onClick={() => setShowModal(false)} aria-label="Close modal">

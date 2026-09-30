@@ -134,8 +134,9 @@ export default function StudentDashboard() {
               assignmentId: a.id,
               facultyId: a.facultyId,
               name: a.facultyName || null,
-              subject: `${a.subjectCode} - ${a.subjectName}`,
+              subject: a.subjectCode || a.subjectName || "—",
               subjectCode: a.subjectCode,
+              subjectName: a.subjectName,
               dept: a.department,
               year: a.yearLevel,
               section: a.section,
@@ -164,7 +165,7 @@ export default function StudentDashboard() {
           activities.push({
             type: "submitted",
             label: "Submitted evaluation",
-            detail: match ? `${match.subjectCode || ""} (${match.subjectName || ""})` : "Evaluation",
+            detail: match ? (match.subjectCode || match.subjectName || "Evaluation") : "Evaluation",
             date,
           });
         });
@@ -219,6 +220,28 @@ export default function StudentDashboard() {
       setReportMessage("");
       setShowReportIssue(false);
       await loadMyRequests();
+
+      // Notify administrators in real-time
+      try {
+        const { data: adminUsers } = await supabase
+          .from("users")
+          .select("id")
+          .in("role", ["admin", "super_admin"])
+          .neq("status", "deleted");
+
+        if (adminUsers && adminUsers.length > 0) {
+          const notifs = adminUsers.map((adm) => ({
+            user_id: adm.id,
+            title: "New Subject Issue Reported",
+            message: `${displayName} (${dept} ${yearLevel} - ${section}) reported: "${message.substring(0, 80)}${message.length > 80 ? "..." : ""}"`,
+            type: "warning",
+            link: "/admin/subject-corrections",
+          }));
+          await supabase.from("notifications").insert(notifs);
+        }
+      } catch (notifErr) {
+        console.warn("Failed to notify admins of subject issue:", notifErr);
+      }
     } catch (err) {
       setReportError(err.message || "Could not submit your request. Please try again.");
     } finally {
@@ -354,7 +377,7 @@ export default function StudentDashboard() {
                             </div>
                           </div>
                         </td>
-                        <td className="sd-engagement">{item.subject}</td>
+                        <td className="sd-engagement" title={item.subjectName || item.subjectCode}>{item.subjectCode || item.subject}</td>
                         <td>
                           <span className="se-sectionBadge">
                             {item.dept} {item.year} - {item.section}

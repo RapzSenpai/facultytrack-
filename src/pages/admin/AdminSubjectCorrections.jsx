@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { logAdminAction } from "../../utils/audit";
+import { sendNotification } from "../../utils/notifications";
 import {
   AlertTriangle,
   Check,
@@ -123,6 +124,20 @@ export default function AdminSubjectCorrections() {
       setResolving(null);
       setResolutionNote("");
       logAdminAction("correction.resolve", "subject_correction_requests", resolving.id, { status });
+
+      // Notify student
+      if (resolving.student_id) {
+        sendNotification({
+          userId: resolving.student_id,
+          title: status === "resolved" ? "Subject Issue Resolved" : "Subject Issue Update",
+          message: resolutionNote.trim()
+            ? `Admin note: ${resolutionNote.trim()}`
+            : `Your subject list issue has been marked as ${status}.`,
+          type: status === "resolved" ? "success" : "info",
+          link: "/student/dashboard",
+        }).catch((e) => console.warn("Student notification warning:", e));
+      }
+
       fetchData();
     } catch (err) {
       alert("Error: " + err.message);

@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { NotificationProvider } from "./context/NotificationContext";
+import { DialogProvider } from "./context/DialogContext";
+import NotificationToast from "./components/notifications/NotificationToast";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 import Home from "./pages/Home.jsx";
@@ -48,46 +51,51 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          {/* Public routes */}
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/pending-approval" element={<PendingApproval />} />
+        <NotificationProvider>
+          <DialogProvider>
+            <NotificationToast />
+            <Routes>
+              {/* Public routes */}
+              <Route path="/" element={<Home />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/pending-approval" element={<PendingApproval />} />
 
-          {/* Student routes */}
-          <Route path="/student/dashboard" element={<ProtectedRoute role="student"><StudentDashboard /></ProtectedRoute>} />
-          <Route path="/student/evaluate" element={<ProtectedRoute role="student"><StudentEvaluation /></ProtectedRoute>} />
-          <Route path="/student/profile" element={<ProtectedRoute role="student"><StudentProfile /></ProtectedRoute>} />
+              {/* Student routes */}
+              <Route path="/student/dashboard" element={<ProtectedRoute role="student"><StudentDashboard /></ProtectedRoute>} />
+              <Route path="/student/evaluate" element={<ProtectedRoute role="student"><StudentEvaluation /></ProtectedRoute>} />
+              <Route path="/student/profile" element={<ProtectedRoute role="student"><StudentProfile /></ProtectedRoute>} />
 
-          {/* Faculty routes */}
-          <Route path="/faculty/dashboard" element={<ProtectedRoute role="faculty"><FacultyDashboard /></ProtectedRoute>} />
-          <Route path="/faculty/evaluations" element={<ProtectedRoute role="faculty"><FacultyEvalResult /></ProtectedRoute>} />
-          <Route path="/faculty/profile" element={<ProtectedRoute role="faculty"><FacultyProfile /></ProtectedRoute>} />
+              {/* Faculty routes */}
+              <Route path="/faculty/dashboard" element={<ProtectedRoute role="faculty"><FacultyDashboard /></ProtectedRoute>} />
+              <Route path="/faculty/evaluations" element={<ProtectedRoute role="faculty"><FacultyEvalResult /></ProtectedRoute>} />
+              <Route path="/faculty/profile" element={<ProtectedRoute role="faculty"><FacultyProfile /></ProtectedRoute>} />
 
-          {/* Admin routes */}
-          <Route path="/admin/dashboard" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/faculty" element={<ProtectedRoute role="admin"><AdminFaculty /></ProtectedRoute>} />
-          <Route path="/admin/student" element={<ProtectedRoute role="admin"><AdminStudent /></ProtectedRoute>} />
-          <Route path="/admin/department" element={<ProtectedRoute role="admin"><AdminDepartment /></ProtectedRoute>} />
-          <Route path="/admin/subject" element={<ProtectedRoute role="admin"><AdminSubject /></ProtectedRoute>} />
-          <Route path="/admin/class-assignment" element={<ProtectedRoute role="admin"><AdminClassAssignment /></ProtectedRoute>} />
-          <Route path="/admin/academic-year" element={<ProtectedRoute role="admin"><AdminAcademicYear /></ProtectedRoute>} />
-          <Route path="/admin/questionnaire" element={<ProtectedRoute role="admin"><AdminQuestionnaire /></ProtectedRoute>} />
-          <Route path="/admin/criteria" element={<ProtectedRoute role="admin"><AdminCriteria /></ProtectedRoute>} />
-          <Route path="/admin/report" element={<ProtectedRoute role="admin"><AdminReport /></ProtectedRoute>} />
-          <Route path="/admin/profile" element={<ProtectedRoute role="admin"><AdminProfile /></ProtectedRoute>} />
-          <Route path="/admin/approvals" element={<ProtectedRoute role="admin"><AdminApprovals /></ProtectedRoute>} />
-          <Route path="/admin/subject-corrections" element={<ProtectedRoute role="admin"><AdminSubjectCorrections /></ProtectedRoute>} />
-          <Route path="/admin/release-management" element={<ProtectedRoute role="admin"><AdminReleaseManagement /></ProtectedRoute>} />
-          <Route path="/admin/moderation" element={<ProtectedRoute role="admin"><AdminModeration /></ProtectedRoute>} />
-          <Route path="/admin/program-assignments" element={<ProtectedRoute role="admin"><AdminProgramAssignments /></ProtectedRoute>} />
-          <Route path="/admin/ai-analyst" element={<ProtectedRoute role="admin"><AdminAIAnalyst /></ProtectedRoute>} />
+              {/* Admin routes */}
+              <Route path="/admin/dashboard" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
+              <Route path="/admin/faculty" element={<ProtectedRoute role="admin"><AdminFaculty /></ProtectedRoute>} />
+              <Route path="/admin/student" element={<ProtectedRoute role="admin"><AdminStudent /></ProtectedRoute>} />
+              <Route path="/admin/department" element={<ProtectedRoute role="admin"><AdminDepartment /></ProtectedRoute>} />
+              <Route path="/admin/subject" element={<ProtectedRoute role="admin"><AdminSubject /></ProtectedRoute>} />
+              <Route path="/admin/class-assignment" element={<ProtectedRoute role="admin"><AdminClassAssignment /></ProtectedRoute>} />
+              <Route path="/admin/academic-year" element={<ProtectedRoute role="admin"><AdminAcademicYear /></ProtectedRoute>} />
+              <Route path="/admin/questionnaire" element={<ProtectedRoute role="admin"><AdminQuestionnaire /></ProtectedRoute>} />
+              <Route path="/admin/criteria" element={<ProtectedRoute role="admin"><AdminCriteria /></ProtectedRoute>} />
+              <Route path="/admin/report" element={<ProtectedRoute role="admin"><AdminReport /></ProtectedRoute>} />
+              <Route path="/admin/profile" element={<ProtectedRoute role="admin"><AdminProfile /></ProtectedRoute>} />
+              <Route path="/admin/approvals" element={<ProtectedRoute role="admin"><AdminApprovals /></ProtectedRoute>} />
+              <Route path="/admin/subject-corrections" element={<ProtectedRoute role="admin"><AdminSubjectCorrections /></ProtectedRoute>} />
+              <Route path="/admin/release-management" element={<ProtectedRoute role="admin"><AdminReleaseManagement /></ProtectedRoute>} />
+              <Route path="/admin/moderation" element={<ProtectedRoute role="admin"><AdminModeration /></ProtectedRoute>} />
+              <Route path="/admin/program-assignments" element={<ProtectedRoute role="admin"><AdminProgramAssignments /></ProtectedRoute>} />
+              <Route path="/admin/ai-analyst" element={<ProtectedRoute role="admin"><AdminAIAnalyst /></ProtectedRoute>} />
 
-          {/* 404 fallback */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+              {/* 404 fallback */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </DialogProvider>
+        </NotificationProvider>
       </AuthProvider>
     </BrowserRouter>
   );
