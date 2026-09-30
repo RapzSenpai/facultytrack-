@@ -20,7 +20,8 @@ export function SuperScopeProvider({ active, children }) {
 
   useEffect(() => {
     localStorage.setItem("superScopeDept", scopeDeptId);
-  }, [scopeDeptId]);
+    console.log("[super-scope]", scopeDeptId ? `${scopeDeptName || scopeDeptId} (${scopeDeptId})` : "all");
+  }, [scopeDeptId, scopeDeptName]);
 
   // A deleted program id falls back to All instead of breaking filters.
   const validId = departments.some((d) => d.id === scopeDeptId) ? scopeDeptId : "";

@@ -151,6 +151,7 @@ function AdminLayoutInner({ title, children }) {
 
   const userFullName = userProfile?.fullName || "Admin";
   const { scopeDeptId, setScopeDeptId, departments: scopeDepts } = useSuperScope();
+  const scopeDeptName = scopeDepts.find((d) => d.id === scopeDeptId)?.name || "";
   // Fallback Admin Tools collapse for super (persisted, shut by default).
   const [fallbackOpen, setFallbackOpen] = useState(() => localStorage.getItem("superFallbackOpen") === "1");
   const toggleFallback = () => {
@@ -324,6 +325,16 @@ function AdminLayoutInner({ title, children }) {
               <Menu size={20} />
             </button>
             <div className="ad-breadcrumb"><span>{title}</span></div>
+            {superAdmin && scopeDeptId && (
+              <button
+                type="button"
+                onClick={() => setScopeDeptId("")}
+                title="Clear program scope (back to All Programs)"
+                style={{ marginLeft: "10px", fontSize: "12px", fontWeight: 800, color: "#1e3a5f", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "999px", padding: "4px 12px", cursor: "pointer" }}
+              >
+                Viewing: {scopeDeptName || "…"} ✕
+              </button>
+            )}
           </div>
 
           <div className="ad-topRight" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
