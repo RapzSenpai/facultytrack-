@@ -18,14 +18,14 @@ export function SuperScopeProvider({ active, children }) {
       .catch(() => {});
   }, [active]);
 
+  // A deleted program id falls back to All instead of breaking filters.
+  const validId = departments.some((d) => d.id === scopeDeptId) ? scopeDeptId : "";
+  const scopeDeptName = departments.find((d) => d.id === validId)?.name || "";
+
   useEffect(() => {
     localStorage.setItem("superScopeDept", scopeDeptId);
     console.log("[super-scope]", scopeDeptId ? `${scopeDeptName || scopeDeptId} (${scopeDeptId})` : "all");
   }, [scopeDeptId, scopeDeptName]);
-
-  // A deleted program id falls back to All instead of breaking filters.
-  const validId = departments.some((d) => d.id === scopeDeptId) ? scopeDeptId : "";
-  const scopeDeptName = departments.find((d) => d.id === validId)?.name || "";
 
   return (
     <SuperScopeContext.Provider value={{ scopeDeptId: validId, setScopeDeptId, scopeDeptName, departments }}>
