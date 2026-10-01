@@ -328,6 +328,10 @@
   gap: 20px;
 }
 
+.mockup-grid-3-bottom.super-three-col {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .mockup-panel {
   background: #fff;
   border-radius: 18px;
@@ -869,6 +873,9 @@
   .mockup-grid-3 {
     grid-template-columns: 1fr 1fr;
   }
+  .mockup-grid-3-bottom.super-three-col {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 992px) {
@@ -877,7 +884,8 @@
   }
 
   .mockup-grid-3,
-  .mockup-grid-3-bottom {
+  .mockup-grid-3-bottom,
+  .mockup-grid-3-bottom.super-three-col {
     grid-template-columns: 1fr;
   }
 }

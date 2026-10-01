@@ -252,27 +252,29 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
+  transform: translateY(-10px);
 }
 
 .hero__logoWrap {
-  width: 260px;
-  height: 260px;
-  border-radius: 999px;
+  width: 340px;
+  height: 340px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.22);
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px);
+  overflow: hidden;
 }
 
 .hero__logo {
-  width: 240px;
-  height: 240px;
-  border-radius: 999px;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
   object-fit: cover;
-  background: #fff;
-  padding: 0px;
+  transform: scale(1.08);
 }
 
 /* Mobile-only elements (hidden by default on desktop/large screens) */
@@ -842,13 +844,13 @@ body {
   }
 
   .hero__logoWrap {
-    width: 220px;
-    height: 220px;
+    width: 270px;
+    height: 270px;
   }
 
   .hero__logo {
-    width: 200px;
-    height: 200px;
+    width: 100%;
+    height: 100%;
   }
 
   .why-grid {
@@ -905,24 +907,27 @@ body {
   /* Crest placed at top center */
   .hero__right {
     order: -1;
+    margin-top: -16px;
     margin-bottom: 2px;
     justify-content: center;
   }
 
   .hero__logoWrap {
-    width: 90px;
-    height: 90px;
+    width: 135px;
+    height: 135px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.12);
-    border: 2px solid rgba(255, 255, 255, 0.28);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(8px);
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid rgba(255, 255, 255, 0.22);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(6px);
+    overflow: hidden;
   }
 
   .hero__logo {
-    width: 82px;
-    height: 82px;
+    width: 100%;
+    height: 100%;
     border-radius: 50%;
+    transform: scale(1.08);
   }
 
   .hero__left {

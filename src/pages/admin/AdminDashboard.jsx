@@ -360,132 +360,134 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* Middle Row */}
-          <div className="mockup-grid-3">
-            <div className="mockup-panel">
-              <div className="mockup-panel-header">
-                <div>
-                  <h3 className="mockup-panel-title">Recent Registrations</h3>
-                  <p className="mockup-panel-subtitle">Latest faculty and student accounts.</p>
+          {/* Middle Row (Scoped Admins only) */}
+          {!isSuper && (
+            <div className="mockup-grid-3">
+              <div className="mockup-panel">
+                <div className="mockup-panel-header">
+                  <div>
+                    <h3 className="mockup-panel-title">Recent Registrations</h3>
+                    <p className="mockup-panel-subtitle">Latest faculty and student accounts.</p>
+                  </div>
+                  <Link to="/admin/approvals" className="mockup-panel-action">View all →</Link>
                 </div>
-                <Link to="/admin/approvals" className="mockup-panel-action">View all →</Link>
+                <div className="mockup-table-wrapper">
+                  <table className="mockup-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Role</th>
+                        <th>Department</th>
+                        <th>Status</th>
+                        <th>Registered On</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentRegistrations.length === 0 ? (
+                        <tr><td colSpan="5" style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>No recent registrations</td></tr>
+                      ) : (
+                        recentRegistrations.map((user, i) => (
+                          <tr key={user.id || user.uid || i}>
+                            <td><span className="mockup-avatar">{(user.fullName || user.firstName || 'U').substring(0, 2).toUpperCase()}</span> {user.fullName || `${user.firstName} ${user.lastName}`}</td>
+                            <td>{user.role}</td>
+                            <td>{user.department || '—'}</td>
+                            <td><span className={`mockup-badge ${user.status?.toLowerCase() === 'pending' ? 'pending' : 'approved'}`}>{user.status || 'Active'}</span></td>
+                            <td>{user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently'}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div className="mockup-table-wrapper">
-                <table className="mockup-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Role</th>
-                      <th>Department</th>
-                      <th>Status</th>
-                      <th>Registered On</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentRegistrations.length === 0 ? (
-                      <tr><td colSpan="5" style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>No recent registrations</td></tr>
-                    ) : (
-                      recentRegistrations.map((user, i) => (
-                        <tr key={user.id || user.uid || i}>
-                          <td><span className="mockup-avatar">{(user.fullName || user.firstName || 'U').substring(0, 2).toUpperCase()}</span> {user.fullName || `${user.firstName} ${user.lastName}`}</td>
-                          <td>{user.role}</td>
-                          <td>{user.department || '—'}</td>
-                          <td><span className={`mockup-badge ${user.status?.toLowerCase() === 'pending' ? 'pending' : 'approved'}`}>{user.status || 'Active'}</span></td>
-                          <td>{user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently'}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
 
-            <div className="mockup-panel">
-              <div className="mockup-panel-header">
-                <div>
-                  <h3 className="mockup-panel-title">Evaluation Summary</h3>
-                  <p className="mockup-panel-subtitle">Overview of the ongoing semester.</p>
+              <div className="mockup-panel">
+                <div className="mockup-panel-header">
+                  <div>
+                    <h3 className="mockup-panel-title">Evaluation Summary</h3>
+                    <p className="mockup-panel-subtitle">Overview of the ongoing semester.</p>
+                  </div>
+                  <Link to="/admin/report" className="mockup-panel-action">View details →</Link>
                 </div>
-                <Link to="/admin/report" className="mockup-panel-action">View details →</Link>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '100%' }}>
+                  <div className="mockup-donut-container" style={{ width: '120px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: 'Participated', value: stats.uniqueParticipants, fill: '#0f1f3a' },
+                            { name: 'Remaining', value: Math.max(0, stats.students - stats.uniqueParticipants), fill: '#e5e7eb' }
+                          ]}
+                          innerRadius={50}
+                          outerRadius={60}
+                          paddingAngle={0}
+                          dataKey="value"
+                          stroke="none"
+                        >
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="mockup-donut-text">
+                      <div className="mockup-donut-pct">{stats.students > 0 ? Math.round((stats.uniqueParticipants / stats.students) * 100) : 0}%</div>
+                      <div className="mockup-donut-lbl">Participation</div>
+                    </div>
+                  </div>
+                  <div className="mockup-donut-legend" style={{ flex: 1, paddingLeft: '20px' }}>
+                    <div className="mockup-legend-item">
+                      <span className="mockup-legend-label">Total Students</span>
+                      <span className="mockup-legend-value">{stats.students}</span>
+                    </div>
+                    <div className="mockup-legend-item">
+                      <span className="mockup-legend-label">Students Participated</span>
+                      <span className="mockup-legend-value">{stats.uniqueParticipants}</span>
+                    </div>
+                    <div className="mockup-legend-item">
+                      <span className="mockup-legend-label">Forms Submitted</span>
+                      <span className="mockup-legend-value">{stats.currentPeriodEvals}</span>
+                    </div>
+                    <div className="mockup-legend-item">
+                      <span className="mockup-legend-label">Remaining</span>
+                      <span className="mockup-legend-value">{Math.max(0, stats.students - stats.uniqueParticipants)}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '100%' }}>
-                <div className="mockup-donut-container" style={{ width: '120px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Participated', value: stats.uniqueParticipants, fill: '#0f1f3a' },
-                          { name: 'Remaining', value: Math.max(0, stats.students - stats.uniqueParticipants), fill: '#e5e7eb' }
-                        ]}
-                        innerRadius={50}
-                        outerRadius={60}
-                        paddingAngle={0}
-                        dataKey="value"
-                        stroke="none"
-                      >
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="mockup-donut-text">
-                    <div className="mockup-donut-pct">{stats.students > 0 ? Math.round((stats.uniqueParticipants / stats.students) * 100) : 0}%</div>
-                    <div className="mockup-donut-lbl">Participation</div>
-                  </div>
-                </div>
-                <div className="mockup-donut-legend" style={{ flex: 1, paddingLeft: '20px' }}>
-                  <div className="mockup-legend-item">
-                    <span className="mockup-legend-label">Total Students</span>
-                    <span className="mockup-legend-value">{stats.students}</span>
-                  </div>
-                  <div className="mockup-legend-item">
-                    <span className="mockup-legend-label">Students Participated</span>
-                    <span className="mockup-legend-value">{stats.uniqueParticipants}</span>
-                  </div>
-                  <div className="mockup-legend-item">
-                    <span className="mockup-legend-label">Forms Submitted</span>
-                    <span className="mockup-legend-value">{stats.currentPeriodEvals}</span>
-                  </div>
-                  <div className="mockup-legend-item">
-                    <span className="mockup-legend-label">Remaining</span>
-                    <span className="mockup-legend-value">{Math.max(0, stats.students - stats.uniqueParticipants)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            <div className="mockup-panel">
-              <div className="mockup-panel-header" style={{ marginBottom: '12px' }}>
-                <div>
-                  <h3 className="mockup-panel-title">Upcoming Tasks</h3>
-                  <p className="mockup-panel-subtitle">Tasks that require your attention.</p>
+              <div className="mockup-panel">
+                <div className="mockup-panel-header" style={{ marginBottom: '12px' }}>
+                  <div>
+                    <h3 className="mockup-panel-title">Upcoming Tasks</h3>
+                    <p className="mockup-panel-subtitle">Tasks that require your attention.</p>
+                  </div>
                 </div>
-              </div>
-              <div className="mockup-tasks-list">
-                <div className="mockup-task-item">
-                  <div className="mockup-task-icon blue">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                <div className="mockup-tasks-list">
+                  <div className="mockup-task-item">
+                    <div className="mockup-task-icon blue">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    </div>
+                    <div className="mockup-task-content">
+                      <h4 className="mockup-task-title">Review faculty accounts</h4>
+                      <p className="mockup-task-desc">{stats.pendingFaculty} new registration{stats.pendingFaculty !== 1 ? 's' : ''}</p>
+                    </div>
+                    <div className={`mockup-task-count ${stats.pendingFaculty > 0 ? 'blue' : ''}`}>{stats.pendingFaculty}</div>
                   </div>
-                  <div className="mockup-task-content">
-                    <h4 className="mockup-task-title">Review faculty accounts</h4>
-                    <p className="mockup-task-desc">{stats.pendingFaculty} new registration{stats.pendingFaculty !== 1 ? 's' : ''}</p>
+                  <div className="mockup-task-item">
+                    <div className="mockup-task-icon green">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    </div>
+                    <div className="mockup-task-content">
+                      <h4 className="mockup-task-title">Review student accounts</h4>
+                      <p className="mockup-task-desc">{stats.pendingStudents} new registration{stats.pendingStudents !== 1 ? 's' : ''}</p>
+                    </div>
+                    <div className={`mockup-task-count ${stats.pendingStudents > 0 ? 'green' : ''}`} style={stats.pendingStudents > 0 ? { background: '#dcfce7', color: '#16a34a' } : {}}>{stats.pendingStudents}</div>
                   </div>
-                  <div className={`mockup-task-count ${stats.pendingFaculty > 0 ? 'blue' : ''}`}>{stats.pendingFaculty}</div>
-                </div>
-                <div className="mockup-task-item">
-                  <div className="mockup-task-icon green">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                  </div>
-                  <div className="mockup-task-content">
-                    <h4 className="mockup-task-title">Review student accounts</h4>
-                    <p className="mockup-task-desc">{stats.pendingStudents} new registration{stats.pendingStudents !== 1 ? 's' : ''}</p>
-                  </div>
-                  <div className={`mockup-task-count ${stats.pendingStudents > 0 ? 'green' : ''}`} style={stats.pendingStudents > 0 ? { background: '#dcfce7', color: '#16a34a' } : {}}>{stats.pendingStudents}</div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Bottom Row */}
-          <div className="mockup-grid-3-bottom">
+          <div className={`mockup-grid-3-bottom ${isSuper ? 'super-three-col' : ''}`}>
             <div className="mockup-panel">
               <div className="mockup-panel-header" style={{ marginBottom: '24px' }}>
                 <div>
