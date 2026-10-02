@@ -183,12 +183,17 @@ export default function Login() {
       <div className="auth-card">
         <div style={{ marginBottom: "16px", textAlign: "left" }}>
           {activeTab !== "admin" ? (
-            <Link to="/" className="auth-back-link" style={{ color: '#475569', fontWeight: '500' }}>
-              <ArrowLeft size={16} style={{ marginRight: '4px' }} /> Back to Home
+            <Link to="/" className="auth-back-link">
+              <ArrowLeft size={16} /> Back to Home
             </Link>
           ) : (
-            <button type="button" onClick={() => switchTab("student")} className="auth-back-link" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', color: '#2563EB', fontWeight: '500' }}>
-              <ArrowLeft size={16} style={{ marginRight: '4px' }} /> Back to User Login
+            <button
+              type="button"
+              onClick={() => switchTab("student")}
+              className="auth-back-link"
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              <ArrowLeft size={16} /> Back to User Login
             </button>
           )}
         </div>
@@ -199,7 +204,7 @@ export default function Login() {
           </div>
         ) : (
           <div className="admin-header-icon-container">
-            <Shield size={56} strokeWidth={1.5} className="admin-header-icon" />
+            <Shield size={48} strokeWidth={1.5} className="admin-header-icon" />
           </div>
         )}
 
@@ -208,19 +213,22 @@ export default function Login() {
 
         {activeTab !== "admin" && (
           <div className="auth-tabs" role="tablist" aria-label="Select your role">
-            {ROLE_TABS.map(({ key, label, Icon }) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === key}
-                className={`auth-tab ${activeTab === key ? "active" : ""}`}
-                onClick={() => switchTab(key)}
-              >
-                <Icon size={16} aria-hidden="true" />
-                {label}
-              </button>
-            ))}
+            {ROLE_TABS.map((tab) => {
+              const TabIcon = tab.Icon;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab.key}
+                  className={`auth-tab ${activeTab === tab.key ? "active" : ""}`}
+                  onClick={() => switchTab(tab.key)}
+                >
+                  <TabIcon size={16} aria-hidden="true" />
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -278,7 +286,7 @@ export default function Login() {
             </div>
             {content.showForgot && (
               <div className="auth-forgot-row">
-                <Link to="/forgot-password" className="auth-link auth-link--sm" style={{ color: '#2563EB', fontWeight: '500' }}>
+                <Link to="/forgot-password" className="auth-link auth-link--sm">
                   Forgot Password?
                 </Link>
               </div>
@@ -292,23 +300,23 @@ export default function Login() {
 
         {activeTab !== "admin" && (
           <>
-            <p className="auth-footer-text" style={{ marginTop: '20px', color: '#64748B' }}>
+            <p className="auth-footer-text">
               Don't have an account?{" "}
-              <Link to="/register" className="auth-link" style={{ color: '#2563EB', fontWeight: '600' }}>Sign Up</Link>
+              <Link to="/register" className="auth-link">Sign Up</Link>
             </p>
             
             <div className="auth-or-divider">or</div>
             
             <div className="admin-prompt-box">
               <div className="admin-prompt-content">
-                <Shield className="admin-prompt-icon" size={24} />
+                <Shield className="admin-prompt-icon" size={22} />
                 <div className="admin-prompt-text">
                   <strong>Administrator?</strong>
                   <span>For system administrators only.</span>
                 </div>
               </div>
               <button type="button" onClick={() => switchTab("admin")} className="admin-prompt-link">
-                Admin Login <ArrowRight size={14} style={{ marginLeft: '4px' }} />
+                Admin Login <ArrowRight size={14} />
               </button>
             </div>
           </>

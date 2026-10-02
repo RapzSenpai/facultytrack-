@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Clock, CheckCircle2, RefreshCw, ArrowRight, Upload } from "lucide-react";
+import { Clock, CheckCircle2, RefreshCw, ArrowRight, ArrowLeft, Upload } from "lucide-react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
 import { validateIdPhoto, uploadSchoolIdPhoto } from "../utils/idPhoto";
@@ -147,44 +147,37 @@ export default function PendingApproval() {
 
   return (
     <div className="auth-page">
-      <div style={{ width: "100%", maxWidth: 440 }}>
-        <div className="auth-card auth-card--center" style={{ maxWidth: "none", padding: "40px 40px" }}>
+      <div style={{ width: "100%", maxWidth: 460 }}>
+        <div className="auth-card auth-card--center" style={{ maxWidth: "none", padding: "36px 32px" }}>
           {isApproved ? (
             <>
-              <div className="auth-icon-circle" style={{ background: '#dcfce7', color: '#16a34a', marginBottom: '16px' }}>
-                <CheckCircle2 size={32} strokeWidth={2} aria-hidden="true" />
+              <div className="auth-icon-circle" style={{ width: 64, height: 64, background: '#dcfce7', border: '3.5px solid #bbf7d0', color: '#16a34a', marginBottom: '16px', boxShadow: '0 4px 14px rgba(22, 163, 74, 0.15)' }}>
+                <CheckCircle2 size={32} strokeWidth={2.2} aria-hidden="true" />
               </div>
 
-              <h1 className="auth-title auth-title--status" style={{ color: '#111827' }}>Account Approved!</h1>
-              <p className="auth-subtitle" style={{ marginTop: 12, color: '#374151', fontSize: '14.5px', lineHeight: '1.5' }}>
+              <h1 className="auth-title auth-title--status">Account Approved!</h1>
+              <p className="auth-subtitle" style={{ marginTop: 10, fontSize: '14px', lineHeight: '1.55' }}>
                 Great news! Your account has been reviewed and approved by the Administrator. You can now log in to access your dashboard.
               </p>
 
-              <div className="auth-status-pill-row" style={{ marginTop: 16 }}>
+              <div className="auth-status-pill-row">
                 <span className="auth-status-pill" style={{ background: '#dcfce7', color: '#15803d', borderColor: '#bbf7d0' }}>
-                  <span className="dot" style={{ background: '#22c55e' }} aria-hidden="true" />
+                  <span className="dot" style={{ background: '#22c55e', animation: 'none' }} aria-hidden="true" />
                   Status: Approved & Active
                 </span>
               </div>
 
-              <hr className="auth-divider" style={{ marginTop: 24, borderColor: "#F3F4F6" }} />
+              <hr className="auth-divider" />
 
               <Link
                 to="/login"
-                className="auth-btn-link"
+                className="auth-btn auth-btn-yellow"
                 style={{
-                  background: '#2563eb',
-                  color: '#ffffff',
                   textDecoration: 'none',
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
-                  padding: '12px 20px',
-                  borderRadius: '10px',
-                  fontWeight: '700',
-                  marginTop: '20px',
-                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)'
                 }}
               >
                 Proceed to Log In <ArrowRight size={18} />
@@ -193,24 +186,24 @@ export default function PendingApproval() {
           ) : (
             <>
               <div className="auth-icon-circle auth-icon-circle--amber" style={{ marginBottom: '16px' }}>
-                <Clock size={28} strokeWidth={1.8} aria-hidden="true" />
+                <Clock size={30} strokeWidth={2} aria-hidden="true" />
               </div>
 
               <h1 className="auth-title auth-title--status">Account Pending Approval</h1>
-              <p className="auth-subtitle" style={{ marginTop: 12, lineHeight: '1.5' }}>
+              <p className="auth-subtitle" style={{ marginTop: 10, lineHeight: '1.55' }}>
                 Thanks for signing up! Your account has been created and is awaiting review.
-                An admin needs to approve your account before you can log in.
+                An admin will verify your credentials before access is granted.
               </p>
 
-              <div className="auth-status-pill-row" style={{ marginTop: 16 }}>
+              <div className="auth-status-pill-row">
                 <span className="auth-status-pill">
                   <span className="dot" aria-hidden="true" />
                   Status: Pending Approval
                 </span>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '16px', fontSize: '12.5px', color: '#6b7280', fontWeight: '500' }}>
-                <RefreshCw size={13} style={{ animation: 'spin 2s linear infinite' }} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '16px', fontSize: '12.5px', color: '#64748b', fontWeight: '500' }}>
+                <RefreshCw size={13} style={{ animation: 'spin 2s linear infinite', color: '#2563eb' }} />
                 <span>Checking status in real-time...</span>
               </div>
 
@@ -249,15 +242,17 @@ export default function PendingApproval() {
                 </div>
               )}
 
-              <hr className="auth-divider" style={{ marginTop: 20, borderColor: "#F3F4F6" }} />
+              <hr className="auth-divider" />
 
-              <p className="auth-muted-note" style={{ marginTop: 16, fontSize: 13, color: '#6b7280' }}>
+              <p className="auth-muted-note">
                 This page will update automatically once the admin approves your account.
               </p>
 
-              <Link to="/login" className="auth-btn-link" style={{ marginTop: '16px', display: 'inline-block', color: '#2563eb', fontWeight: '600' }}>
-                Back to Login
-              </Link>
+              <div style={{ marginTop: '20px' }}>
+                <Link to="/login" className="auth-back-link">
+                  <ArrowLeft size={16} /> Back to Login
+                </Link>
+              </div>
             </>
           )}
         </div>

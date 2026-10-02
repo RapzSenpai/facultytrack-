@@ -167,7 +167,7 @@ export default function Home() {
       </section>
 
       {/* ── HOW IT WORKS ─────────────────────────────────────────── */}
-      <section className="how-section">
+      <section className="how-section" id="how-it-works">
         <div className="container">
           <div className="section-header">
             <span className="section-tag">Simple Process</span>

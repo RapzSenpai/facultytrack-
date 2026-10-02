@@ -90,82 +90,76 @@ export default function FacultyDashboard() {
     };
   }, [activeYear]);
 
+  const getPerformanceLabel = (rating) => {
+    if (!rating) return "N/A";
+    if (rating >= 4.5) return "Outstanding";
+    if (rating >= 4.0) return "Excellent";
+    if (rating >= 3.5) return "Very Good";
+    if (rating >= 3.0) return "Good";
+    return "Needs Improvement";
+  };
+
   return (
     <FacultyLayout breadcrumb="Dashboard">
       <section className="fd-content">
+        {/* Modern Integrated Executive Header */}
         <div className="fd-welcomeHeader">
-          <div>
-            <h2 className="fd-title">Welcome, {firstName}!</h2>
-            <p className="fd-subtitle">Overview of your evaluation results for the current period</p>
+          <div className="fd-welcomeText">
+            <span className="fd-welcomeBadge">Faculty Portal</span>
+            <h2 className="fd-title">Welcome back, {firstName}!</h2>
+            <p className="fd-subtitle">Overview of your teaching evaluation results and academic performance</p>
+          </div>
+          <div className="fd-periodCard">
+            <div className="fd-periodHeader">
+              <span className={`fd-periodDot ${!activeReleased ? "fd-periodDot--pending" : ""}`} />
+              <span className="fd-periodLabel">Active Evaluation Period</span>
+            </div>
+            <div className="fd-periodTitle">
+              {activeYear ? `${activeYear.year} • ${activeYear.semester}` : "No Active Period"}
+            </div>
+            {activeYear && (
+              <div className="fd-periodMeta">
+                {activeReleased ? "✓ Results Released" : "⏳ Pending Admin Release"}
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="fd-periodCard">
-          <div className="fd-periodLabel">CURRENT PERIOD</div>
-          <div className="fd-periodTitle">
-            {activeYear
-              ? `Academic Year: ${activeYear.year} ${activeYear.semester}`
-              : "Academic Year: —"}
-          </div>
-        </div>
-
-        {/* Phase 6 [D6]: neutral escalation banner — no comment
-            content, ever. Copy stays non-specific by design. */}
+        {/* Phase 6 [D6]: neutral escalation banner */}
         {escalation?.has_escalation && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              borderRadius: "10px",
-              padding: "14px 18px",
-              marginBottom: "20px",
-              color: "#991b1b",
-              fontSize: "14px",
-            }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            <span>
+          <div className="fd-alertBanner fd-alertBanner--escalation">
+            <div className="fd-alertBannerIcon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+            </div>
+            <div>
+              <strong style={{ color: "#1e293b" }}>Evaluation Notice: </strong>
               {escalation.all_resolved
                 ? "A concern raised through the evaluation system has been reviewed and resolved by the administrator. No action is needed from you."
                 : "A concern raised through the evaluation system is being reviewed by the administrator. You do not need to take any action."}
-            </span>
+            </div>
           </div>
         )}
 
-        {/* Phase 5 [D4]: pending-release notice for the active period. */}
+        {/* Phase 5 [D4]: pending-release notice for active period */}
         {activeYear && !activeReleased && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              background: "#fffbeb",
-              border: "1px solid #fcd34d",
-              borderRadius: "10px",
-              padding: "14px 18px",
-              marginBottom: "20px",
-              color: "#92400e",
-              fontSize: "14px",
-            }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            <span>
-              Results for {activeYear.year} {activeYear.semester} are not yet released. They will appear automatically once the admin approves the release.
-            </span>
+          <div className="fd-alertBanner fd-alertBanner--warning">
+            <div className="fd-alertBannerIcon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            </div>
+            <div>
+              <strong style={{ color: "#78350f" }}>Results Pending Release: </strong>
+              Evaluation results for <strong>{activeYear.year} {activeYear.semester}</strong> are currently finalized in the system. They will automatically unlock and display here once approved and published by the administration.
+            </div>
           </div>
         )}
 
-
-
+        {/* 3-Card Executive Stats Grid */}
         <div className="fd-statsGrid">
+          {/* Card 1: Overall Rating */}
           <div className="fd-statCard">
             <div className="fd-statCard--header">
               <div className="fd-statLabel">OVERALL RATING</div>
@@ -177,15 +171,23 @@ export default function FacultyDashboard() {
             </div>
             <div className="fd-statNum">
               {loading ? "—" : activeReleased ? (overallRating !== null ? overallRating.toFixed(1) : "N/A") : "Pending"}
+              {activeReleased && overallRating !== null && (
+                <span style={{ fontSize: "16px", color: "#94a3b8", fontWeight: 600, marginLeft: "4px" }}>/ 5.0</span>
+              )}
             </div>
             <div className="fd-statTitle">
-              {activeReleased ? "Average evaluation score" : "Awaiting admin release"}
+              {loading
+                ? "Calculating ratings..."
+                : activeReleased && overallRating !== null
+                  ? `${getPerformanceLabel(overallRating)} performance standing`
+                  : "Awaiting admin release approval"}
             </div>
           </div>
 
+          {/* Card 2: Student Responses */}
           <div className="fd-statCard">
             <div className="fd-statCard--header">
-              <div className="fd-statLabel">ASSIGNED</div>
+              <div className="fd-statLabel">STUDENT RESPONSES</div>
               <div className="fd-statIcon fd-statIcon--responses">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
@@ -194,63 +196,73 @@ export default function FacultyDashboard() {
               </div>
             </div>
             <div className="fd-statNum">{loading ? "—" : totalResponses ?? 0}</div>
-            <div className="fd-statTitle">Total evaluations assigned</div>
+            <div className="fd-statTitle">Total evaluation forms submitted</div>
+          </div>
+
+          {/* Card 3: Release Status */}
+          <div className="fd-statCard">
+            <div className="fd-statCard--header">
+              <div className="fd-statLabel">PERIOD STATUS</div>
+              <div className="fd-statIcon fd-statIcon--period">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+              </div>
+            </div>
+            <div className="fd-statNum" style={{ fontSize: "24px", paddingTop: "6px", paddingBottom: "6px" }}>
+              {loading ? "—" : activeReleased ? "Published" : "Pending"}
+            </div>
+            <div className="fd-statTitle">
+              {activeReleased
+                ? "Results are live and visible to faculty"
+                : "Awaiting admin release publication"}
+            </div>
           </div>
         </div>
 
-        <div className="fd-tableCard">
-          <div className="fd-tableHeader">
-            <h3 className="fd-tableTitle">EVALUATION DETAILS</h3>
+        {/* Modern Active Period Overview Card */}
+        <div className="fd-overviewCard">
+          <div className="fd-overviewHeader">
+            <h3 className="fd-overviewTitle">Current Evaluation Overview</h3>
+            <span className="fd-criteriaPillMain" style={{ background: activeReleased ? "#dcfce7" : "#fef3c7", color: activeReleased ? "#15803d" : "#b45309" }}>
+              {activeReleased ? "✓ Published" : "⏳ Pending Release"}
+            </span>
           </div>
-          <div className="fd-tableWrap">
-            <table className="ad-table">
-              <thead>
-                <tr>
-                  <th>FACULTY NAME</th>
-                  <th>REVIEW PERIOD</th>
-                  <th style={{ textAlign: 'right' }}>STATUS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!loading && activeHasEvaluations && activeReleased && activeYear ? (
-                  <tr>
-                    <td>
-                      <div className="ad-avatarCell">
-                        <div className="ad-avatar ad-avatar--blue">
-                          {(displayName || '??').substring(0, 2).toUpperCase()}
-                        </div>
-                        <div className="ad-cellLines">
-                          <span className="ad-cellPrimary">{displayName}</span>
-                          <span className="ad-cellSecondary">Faculty Member</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="ad-engagement">{activeYear.semester} | {activeYear.year}</td>
-                    <td className="ad-tableActions" style={{ justifyContent: 'flex-end' }}>
-                      <button
-                        type="button"
-                        className="ad-actionBtn--approve"
-                        onClick={() => navigate("/faculty/evaluations")}
-                      >
-                        View Result
-                      </button>
-                    </td>
-                  </tr>
-                ) : (
-                  <tr>
-                    <td colSpan="3" style={{ textAlign: "center", padding: "20px", color: "#9ca3af" }}>
-                      {loading
-                        ? "Loading..."
-                        : !activeReleased
-                          ? "Results for the current period are pending admin release."
-                          : activeHasEvaluations
-                            ? "No evaluations yet for the current period."
-                            : "No evaluations yet for the current period."}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+
+          <div className="fd-overviewGrid">
+            {/* Faculty Info */}
+            <div className="fd-overviewUserCell">
+              <div className="fd-overviewAvatar">
+                {(displayName || "FC").substring(0, 2).toUpperCase()}
+              </div>
+              <div>
+                <div className="fd-overviewName">{displayName}</div>
+                <div className="fd-overviewRole">{userProfile?.department ? `${userProfile.department} Department` : "Faculty Member"}</div>
+              </div>
+            </div>
+
+            {/* Academic Period */}
+            <div className="fd-overviewMetaBlock">
+              <span className="fd-overviewMetaLabel">Evaluation Cycle</span>
+              <span className="fd-overviewMetaValue">
+                {activeYear ? `${activeYear.year} • ${activeYear.semester}` : "—"}
+              </span>
+            </div>
+
+            {/* CTA Action */}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="fd-overviewBtn"
+                onClick={() => navigate("/faculty/evaluations")}
+              >
+                <span>View Full Results</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </section>

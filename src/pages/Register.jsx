@@ -249,9 +249,9 @@ export default function Register() {
   return (
     <div className="auth-page">
       <div className="auth-card auth-card--wide">
-        <div style={{ marginBottom: "12px", textAlign: "left" }}>
-          <Link to="/login" className="auth-back-link" style={{ color: '#475569', fontWeight: '500' }}>
-            <ArrowLeft size={16} style={{ marginRight: '4px' }} /> Back to Login
+        <div style={{ marginBottom: "16px", textAlign: "left" }}>
+          <Link to="/login" className="auth-back-link">
+            <ArrowLeft size={16} /> Back to Login
           </Link>
         </div>
 
@@ -513,14 +513,14 @@ export default function Register() {
             </AuthField>
           </div>
 
-          <button type="submit" className="auth-btn auth-btn-yellow" disabled={loading} style={{ marginTop: '0px' }}>
+          <button type="submit" className="auth-btn auth-btn-yellow" disabled={loading} style={{ marginTop: '8px' }}>
             {loading ? "Creating account..." : "Sign Up"}
           </button>
         </form>
 
-        <p className="auth-footer-text" style={{ marginTop: '16px', color: '#64748B' }}>
+        <p className="auth-footer-text">
           Already have an account?{" "}
-          <Link to="/login" className="auth-link" style={{ color: '#2563EB', fontWeight: '600' }}>Log In</Link>
+          <Link to="/login" className="auth-link">Log In</Link>
         </p>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Mail, Info, AlertCircle } from "lucide-react";
+import { Mail, Info, AlertCircle, ArrowLeft } from "lucide-react";
 import { supabase } from "../config/supabase";
 import AuthField from "../components/auth/AuthField";
 import "../styles/auth.css";
@@ -40,10 +40,14 @@ export default function ForgotPassword() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-          <div style={{ background: '#EFF6FF', padding: '12px', borderRadius: '50%', color: '#2563EB' }}>
-            <Mail size={24} />
-          </div>
+        <div style={{ marginBottom: "16px", textAlign: "left" }}>
+          <Link to="/login" className="auth-back-link">
+            <ArrowLeft size={16} /> Back to Login
+          </Link>
+        </div>
+
+        <div className="admin-header-icon-container">
+          <Mail size={44} strokeWidth={1.5} className="admin-header-icon" />
         </div>
 
         <h1 className="auth-title">Forgot your Password?</h1>
@@ -65,10 +69,10 @@ export default function ForgotPassword() {
             </div>
           )}
 
-          <AuthField label="EMAIL ADDRESS" htmlFor="reset-identifier" required>
+          <AuthField label="EMAIL ADDRESS" htmlFor="reset-identifier" required icon={Mail}>
             <input
               id="reset-identifier"
-              type="text"
+              type="email"
               className="auth-input"
               placeholder="e.g. juan@email.com"
               value={identifier}
@@ -76,14 +80,15 @@ export default function ForgotPassword() {
             />
           </AuthField>
 
-          <button type="submit" className="auth-btn" disabled={loading} style={{ marginTop: '8px' }}>
+          <button type="submit" className="auth-btn auth-btn-yellow" disabled={loading} style={{ marginTop: '8px' }}>
             {loading ? "Sending..." : "Send Reset Link"}
           </button>
         </form>
 
         <p className="auth-footer-text">
-          <Link to="/login" className="auth-link" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-            <span>←</span> Back to Login
+          Remember your password?{" "}
+          <Link to="/login" className="auth-link">
+            Log In
           </Link>
         </p>
       </div>

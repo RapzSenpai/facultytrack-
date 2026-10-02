@@ -497,17 +497,21 @@ section.fd-content {
   }
 }
 
-/* ── Welcome Header Card (matches sdb-welcomeCard) ── */
+/* ── Welcome Header Card (Modern responsive executive header) ── */
 .fd-welcomeHeader {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  background: #ffffff;
-  border: 1px solid #edf2f7;
-  padding: 28px;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-left: 5px solid var(--accent, #f59e0b);
+  padding: 24px 28px;
   border-radius: 18px;
-  box-shadow: 0 8px 30px rgba(16, 20, 27, 0.06);
-  transition: 0.25s ease;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.04);
+  transition: all 0.25s ease;
   position: relative;
   overflow: hidden;
   animation: fd-fadeUp 0.5s ease;
@@ -515,72 +519,110 @@ section.fd-content {
 }
 
 .fd-welcomeHeader:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 20px 45px rgba(15, 31, 58, 0.10);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
 }
 
-
+.fd-welcomeBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
 
 /* Left text block */
 .fd-welcomeText {
   z-index: 1;
   position: relative;
+  flex: 1;
+  min-width: 260px;
 }
 
 .fd-title {
   margin: 0;
   font-size: 24px;
   font-weight: 800;
-  color: #111827;
-  letter-spacing: -0.3px;
+  color: #0f172a;
+  letter-spacing: -0.4px;
 }
 
 .fd-subtitle {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   font-size: 13.5px;
-  color: #6b7280;
+  color: #64748b;
   font-weight: 500;
+  line-height: 1.5;
 }
 
-/* Right actions block */
-.fd-welcomeActions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  z-index: 1;
-  position: relative;
-}
-
-/* Period Card — visually floats inside welcome banner on the right */
+/* Period Card — integrated responsive badge inside welcome banner */
 .fd-periodCard {
-  position: absolute;
-  top: 48px;
-  right: 54px;
-  background: #f9fafb;
-  border: 1.5px solid #e5e7eb;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 14px;
-  padding: 14px 20px;
+  padding: 14px 18px;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  min-width: 240px;
   z-index: 2;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.fd-periodLabel {
-  font-size: 10px;
-  font-weight: 800;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+.fd-periodCard:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+.fd-periodHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 4px;
 }
 
-.fd-periodTitle {
-  font-size: 15px;
+.fd-periodDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.fd-periodDot--pending {
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+}
+
+.fd-periodLabel {
+  font-size: 10.5px;
   font-weight: 800;
-  color: #111827;
-  margin-bottom: 0;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.fd-periodTitle {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 2px;
+}
+
+.fd-periodMeta {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
 }
 
 /* ── Stats Grid (matches sdb-metrics) ── */
@@ -2141,3 +2183,876 @@ section.fd-content {
   letter-spacing: 0.8px !important;
   padding: 14px 24px !important;
 }
+
+/* ============================================================
+   ENHANCED FACULTY UI SUITE (MODERN TOKENS & COMPONENTS)
+   ============================================================ */
+
+/* ── Modern Alert Banners ── */
+.fd-alertBanner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  transition: all 0.2s ease;
+  animation: fd-fadeUp 0.3s ease;
+}
+
+.fd-alertBanner--warning {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.fd-alertBanner--escalation {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #64748b;
+  color: #334155;
+}
+
+.fd-alertBannerIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ── Stat Card Radial Gauge & Badges ── */
+.fd-statTopGroup {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.fd-statBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.fd-statBadge--success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.fd-statBadge--warning {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.fd-statBadge--blue {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.fd-statCard:has(.fd-statIcon--period)::before {
+  background: #10b981;
+}
+
+.fd-statCard:has(.fd-statIcon--period) .fd-statLabel {
+  color: #059669;
+}
+
+.fd-statCard:has(.fd-statIcon--period) .fd-statNum {
+  color: #064e3b;
+}
+
+.fd-statIcon--period {
+  background: #ecfdf5;
+  color: #10b981;
+}
+
+/* ── Active Period Action Overview Card ── */
+.fd-overviewCard {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  padding: 24px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  transition: all 0.25s ease;
+  animation: fd-fadeUp 0.4s ease;
+}
+
+.fd-overviewCard:hover {
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+  border-color: #cbd5e1;
+}
+
+.fd-overviewHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.fd-overviewTitle {
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #0f172a;
+  margin: 0;
+}
+
+.fd-overviewGrid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr;
+  align-items: center;
+  gap: 20px;
+}
+
+@media (max-width: 768px) {
+  .fd-overviewGrid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+.fd-overviewUserCell {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.fd-overviewAvatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1e3a8a, #2563eb);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 800;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+  flex-shrink: 0;
+}
+
+.fd-overviewName {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.fd-overviewRole {
+  font-size: 12.5px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.fd-overviewMetaBlock {
+  display: flex;
+  flex-direction: column;
+}
+
+.fd-overviewMetaLabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #94a3b8;
+  letter-spacing: 0.5px;
+}
+
+.fd-overviewMetaValue {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-top: 2px;
+}
+
+.fd-overviewBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #0f172a;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15);
+  text-decoration: none;
+}
+
+.fd-overviewBtn:hover {
+  background: #1e293b;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.25);
+  color: #fff;
+}
+
+/* ── Interactive Criteria Accordion ── */
+.fd-trCriteriaParent {
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.fd-trCriteriaParent:hover {
+  background: #f8fafc !important;
+}
+
+.fd-chevronToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+  color: #64748b;
+  margin-left: 8px;
+}
+
+.fd-chevronToggle--open {
+  transform: rotate(180deg);
+  color: #0f172a;
+}
+
+.fd-subItemsContainer {
+  background: #f8fafc;
+  padding: 14px 20px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.fd-subItemRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.fd-subItemRow:hover {
+  background: #f1f5f9;
+}
+
+.fd-subItemText {
+  font-size: 13px;
+  color: #334155;
+  font-weight: 500;
+  flex: 1;
+}
+
+.fd-subItemRating {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-left: 16px;
+}
+
+/* ── Clickable Keyword Chips ── */
+.fd-keywordChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-transform: capitalize;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.fd-keywordChip:hover {
+  background: #dcfce7;
+  border-color: #86efac;
+  transform: translateY(-1px);
+}
+
+.fd-keywordChip--active {
+  background: #16a34a;
+  color: #ffffff;
+  border-color: #15803d;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
+}
+
+/* ── Sentiment Filter Tabs ── */
+.fd-sentimentTabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.fd-sentimentTab {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.fd-sentimentTab:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.fd-sentimentTab--active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+}
+
+/* ── Executive Profile Redesign ── */
+.fd-profileCard--executive {
+  background: #ffffff;
+  border-radius: 18px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
+  padding: 28px;
+  max-width: 780px;
+  animation: fd-fadeUp 0.4s ease;
+}
+
+.fd-badgeVerified {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.fd-copyBtn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.fd-copyBtn:hover {
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+/* ── Print / PDF Export Styles ── */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .fd-sidebar,
+  .fd-topbar,
+  .fd-overlay,
+  .fd-periodSelectorWrapper button,
+  .fd-keywordChip,
+  .fd-sentimentTabs,
+  .no-print,
+  button {
+    display: none !important;
+  }
+
+  .fd-main,
+  .fd-content {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .fd-tableCard,
+  .fd-remarksCard,
+  .fd-detailsCard,
+  .fd-insightCard,
+  .fd-feedbackCard {
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    break-inside: avoid;
+    margin-bottom: 24px !important;
+  }
+
+  .fd-insightsGrid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .fd-detailsCard--screenHidden {
+    display: block !important;
+  }
+
+  .fd-printHeader {
+    display: block !important;
+    text-align: center;
+    border-bottom: 2px solid #0f172a;
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+  }
+}
+
+.fd-printHeader {
+  display: none;
+}
+
+/* ========================= EXECUTIVE EVALUATION RESULTS ENHANCEMENTS ========================= */
+
+.fd-expandAllBtn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fd-expandAllBtn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+/* 2-Column Insights Grid */
+.fd-insightsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-bottom: 24px;
+  animation: fadeIn 0.3s ease;
+}
+
+.fd-insightCard {
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.fd-insightCard:hover {
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.08);
+}
+
+.fd-insightCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 22px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fafbfc;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.fd-insightHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fd-insightIconBox {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fd-insightIconBox--amber {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.fd-insightIconBox--emerald {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.fd-insightIconBox--blue {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.fd-insightTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+.fd-insightSubtitle {
+  margin: 2px 0 0 0;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.fd-standingBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.fd-insightCardBody {
+  padding: 22px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.fd-insightCardBody--split {
+  justify-content: flex-start;
+  gap: 20px;
+}
+
+/* Quote Callout */
+.fd-quoteContainer {
+  background: linear-gradient(180deg, #fffdfa 0%, #fffbeb 100%);
+  border: 1px solid #fef08a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 10px;
+  padding: 16px 18px;
+  position: relative;
+}
+
+.fd-quoteMark {
+  font-size: 28px;
+  line-height: 1;
+  color: #f59e0b;
+  opacity: 0.5;
+  font-family: Georgia, serif;
+  margin-bottom: 4px;
+}
+
+.fd-quoteText {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #334155;
+  font-weight: 500;
+}
+
+/* Evaluation Meta Strip */
+.fd-standingFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.fd-standingItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fd-standingLabel {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #94a3b8;
+  letter-spacing: 0.4px;
+}
+
+.fd-standingValue {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.fd-standingDivider {
+  width: 1px;
+  height: 24px;
+  background: #e2e8f0;
+}
+
+/* Strengths & Growth Areas Matrix */
+.fd-matrixSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fd-matrixSectionHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fd-matrixHeading {
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+.fd-matrixDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.fd-matrixDot--emerald {
+  background: #10b981;
+  box-shadow: 0 0 0 3px #d1fae5;
+}
+
+.fd-matrixDot--amber {
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px #fef3c7;
+}
+
+.fd-matrixList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fd-strengthChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.fd-improvementChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.fd-matrixPassCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.fd-passIcon {
+  color: #16a34a;
+  margin-top: 1px;
+}
+
+.fd-passTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #15803d;
+  margin-bottom: 2px;
+}
+
+.fd-passSubtitle {
+  font-size: 12px;
+  color: #166534;
+  line-height: 1.45;
+}
+
+.fd-matrixEmptyNote {
+  font-size: 12.5px;
+  color: #94a3b8;
+  font-style: italic;
+  padding: 6px 0;
+}
+
+/* ========================= STUDENT FEEDBACK CARD ========================= */
+.fd-feedbackCard {
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+  margin-bottom: 24px;
+  animation: fadeIn 0.3s ease;
+}
+
+.fd-feedbackCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 22px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fafbfc;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.fd-feedbackBadges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fd-badgeAnonymized {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.fd-commentCountBadge {
+  display: inline-flex;
+  align-items: center;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.fd-feedbackCardBody {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Empty State for Student Feedback */
+.fd-feedbackEmptyCard {
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 36px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 580px;
+  margin: 10px auto;
+  width: 100%;
+}
+
+.fd-feedbackEmptyIcon {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  color: #64748b;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.fd-feedbackEmptyTitle {
+  margin: 0 0 6px 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.fd-feedbackEmptyDesc {
+  margin: 0 0 16px 0;
+  font-size: 13px;
+  color: #64748b;
+  max-width: 440px;
+  line-height: 1.5;
+}
+
+.fd-feedbackEmptyTrust {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #059669;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 5px 14px;
+  border-radius: 999px;
+}
+
+/* Screen Hide for Redundant Duplicate Detailed Breakdown */
+.fd-detailsCard--screenHidden {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .fd-insightsGrid {
+    grid-template-columns: 1fr;
+  }
+}
