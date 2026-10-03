@@ -13,6 +13,13 @@ import {
   ClipboardList,
   RefreshCw,
   Trash2,
+  Clock,
+  CheckCircle2,
+  Tag,
+  LayoutGrid,
+  List,
+  BookOpen,
+  SlidersHorizontal,
 } from "lucide-react";
 
 // Phase 3 (Req 2 / D5): students can no longer build their own
@@ -24,6 +31,20 @@ import {
 //   from either mode. Every save is idempotent (UNIQUE triple).
 const YEAR_LEVELS = ["1st", "2nd", "3rd", "4th"];
 const SECTIONS = ["A", "B", "C", "D", "E"];
+
+const parseReportMessage = (rawMessage) => {
+  const text = rawMessage || "";
+  const bracketMatches = [...text.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1]);
+  const categoryTag = bracketMatches[0] || null;
+  const subjectTag = bracketMatches.length > 1 ? bracketMatches[1] : null;
+
+  let cleanMsg = text;
+  if (bracketMatches.length > 0) {
+    cleanMsg = text.replace(/^(\[[^\]]+\]\s*)+:?\s*/, "");
+  }
+
+  return { categoryTag, subjectTag, cleanMsg };
+};
 
 const statusBadgeStyle = (status) => {
   if (status === "resolved") return { background: "#dcfce7", color: "#166534" };
@@ -47,6 +68,18 @@ export default function AdminSubjectCorrections() {
   // Filters for the requests queue
   const [statusFilter, setStatusFilter] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
+  const [viewMode, setViewMode] = useState("cards"); // 'cards' | 'table'
+
+  // Request deletion confirmation modal
+  const [deletingRequest, setDeletingRequest] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  // In-app toast feedback
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+  const showToast = (message, type = "success") => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: "", type: "success" }), 3500);
+  };
 
   // Request resolution modal
   const [resolving, setResolving] = useState(null); // request row
@@ -110,11 +143,13 @@ export default function AdminSubjectCorrections() {
       );
     });
 
-  const newCount = requests.filter((r) => {
-    if (r.status !== "new") return false;
+  const scopedRequests = requests.filter((r) => {
     const s = students.find((x) => x.id === r.student_id);
     return !s || inScopeStudent(s);
-  }).length;
+  });
+  const newCount = scopedRequests.filter((r) => r.status === "new").length;
+  const resolvedCount = scopedRequests.filter((r) => r.status === "resolved").length;
+  const totalCount = scopedRequests.length;
 
   // ---------------- Request resolution ----------------
 
@@ -155,26 +190,32 @@ export default function AdminSubjectCorrections() {
       }
 
       fetchData();
+      showToast(status === "resolved" ? "Ticket resolved successfully." : "Ticket marked as dismissed.", "success");
     } catch (err) {
-      alert("Error: " + err.message);
+      showToast(err.message || "Failed to update report status.", "error");
     } finally {
       setResolvingBusy(false);
     }
   };
 
-  const handleDeleteRequest = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this correction request?")) return;
+  const confirmDeleteRequest = async () => {
+    if (!deletingRequest) return;
+    setDeleteBusy(true);
     try {
       const { error } = await supabase
         .from("subject_correction_requests")
         .delete()
-        .eq("id", id);
+        .eq("id", deletingRequest.id);
       if (error) throw error;
-      logAdminAction("correction.delete", "subject_correction_requests", id);
+      logAdminAction("correction.delete", "subject_correction_requests", deletingRequest.id);
+      showToast("Correction report deleted successfully.", "success");
+      setDeletingRequest(null);
       fetchData();
     } catch (err) {
       console.error("Delete error:", err);
-      alert("Failed to delete request: " + (err.message || "Unknown error"));
+      showToast("Failed to delete request: " + (err.message || "Unknown error"), "error");
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -339,8 +380,9 @@ export default function AdminSubjectCorrections() {
       );
       setExcludedIds(new Set());
       setAdjustMsg("Overrides cleared — the student follows their section list again.");
+      showToast("Overrides cleared — student restored to section list.", "success");
     } catch (err) {
-      alert("Error: " + err.message);
+      showToast(err.message || "Failed to clear overrides.", "error");
     } finally {
       setAdjustBusy(false);
     }
@@ -365,12 +407,13 @@ export default function AdminSubjectCorrections() {
       if (error) throw new Error(error.message);
       setExistingKind("admin");
       setAdjustMsg("Saved — the student now evaluates exactly the subjects selected above.");
+      showToast("Subject list saved successfully!", "success");
       logAdminAction("enrollment.override", "student_enrollments", adjusting.id, {
         academic_year: adjustYear,
         semester: adjustSemester,
       });
     } catch (err) {
-      alert("Error: " + err.message);
+      showToast(err.message || "Failed to save subject adjustments.", "error");
     } finally {
       setAdjustBusy(false);
     }
@@ -379,16 +422,6 @@ export default function AdminSubjectCorrections() {
   const addableExtras = activeAssignments.filter(
     (a) => !selectedIds.has(a.id) && !excludedIds.has(a.id)
   );
-
-  const studentSuggestions = students
-    .filter((s) => (s.status || "") !== "pending")
-    .filter((s) => inScopeStudent(s))
-    .filter((s) => {
-      if (!studentSearch) return true;
-      const hay = `${s.full_name || ""} ${s.school_id || ""}`.toLowerCase();
-      return hay.includes(studentSearch.toLowerCase());
-    })
-    .slice(0, 6);
 
   return (
     <AdminLayout title="Subject Corrections">
@@ -404,6 +437,60 @@ export default function AdminSubjectCorrections() {
             <RefreshCw size={16} style={{ marginRight: 6 }} />
             Refresh
           </button>
+        </div>
+
+        {/* 3-Card Executive KPI Strip */}
+        <div className="ad-kpiGrid">
+          <div className="ad-kpiCard ad-kpiCard--amber">
+            <div className="ad-kpiHeader">
+              <span className="ad-kpiLabel">New Reports</span>
+              <span className="ad-kpiIcon">
+                <Clock size={18} />
+              </span>
+            </div>
+            <div className="ad-kpiBody">
+              <span className="ad-kpiValue" style={{ color: "#d97706" }}>
+                {loading ? "—" : newCount}
+              </span>
+              <span className="ad-kpiBadge ad-kpiBadge--warning">
+                Awaiting Review
+              </span>
+            </div>
+          </div>
+
+          <div className="ad-kpiCard ad-kpiCard--success">
+            <div className="ad-kpiHeader">
+              <span className="ad-kpiLabel">Resolved Reports</span>
+              <span className="ad-kpiIcon">
+                <CheckCircle2 size={18} />
+              </span>
+            </div>
+            <div className="ad-kpiBody">
+              <span className="ad-kpiValue" style={{ color: "#059669" }}>
+                {loading ? "—" : resolvedCount}
+              </span>
+              <span className="ad-kpiBadge ad-kpiBadge--success">
+                Resolved
+              </span>
+            </div>
+          </div>
+
+          <div className="ad-kpiCard ad-kpiCard--info">
+            <div className="ad-kpiHeader">
+              <span className="ad-kpiLabel">Total Reports</span>
+              <span className="ad-kpiIcon">
+                <ClipboardList size={18} />
+              </span>
+            </div>
+            <div className="ad-kpiBody">
+              <span className="ad-kpiValue">
+                {loading ? "—" : totalCount}
+              </span>
+              <span className="ad-kpiBadge ad-kpiBadge--info">
+                All Records
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="ad-tableCard ad-tableCard--padded">
@@ -431,123 +518,303 @@ export default function AdminSubjectCorrections() {
             <span className="ad-filterCount">
               <strong>{newCount}</strong> new report{newCount === 1 ? "" : "s"} waiting
             </span>
-          </div>
 
-          {/* REQUESTS TABLE */}
-          <div className="ad-tableWrap ad-tableWrap--bordered">
-            <table className="ad-table ad-table--plain">
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Report</th>
-                  <th>Sent</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: "right" }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan="5" style={{ textAlign: "center", padding: "40px", color: "#6b7280" }}>Loading...</td></tr>
-                ) : filteredRequests.length === 0 ? (
-                  <tr>
-                    <td colSpan="5" style={{ textAlign: "center", padding: "48px 20px", color: "#6b7280" }}>
-                      <ClipboardList size={36} style={{ display: "block", margin: "0 auto 12px", color: "#9ca3af" }} />
-                      <span style={{ fontSize: "15px", fontWeight: 500 }}>No correction requests</span>
-                      <p style={{ margin: "4px 0 0", fontSize: "13px" }}>
-                        Student reports about their subject lists will appear here.
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredRequests.map((r) => (
-                    <tr key={r.id}>
-                      <td>
-                        <div className="ad-avatarCell">
-                          <div className="ad-avatar ad-avatar--blue">
-                            {(studentName(r.student_id) || "??").substring(0, 2).toUpperCase()}
-                          </div>
-                          <div className="ad-cellLines">
-                            <span className="ad-cellPrimary">{studentName(r.student_id)}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ maxWidth: "420px" }}>
-                        <div style={{ fontSize: "13px", color: "#1f2937", whiteSpace: "pre-wrap" }}>{r.message}</div>
-                        {r.resolution_note && (
-                          <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>
-                            Note: {r.resolution_note}
-                          </div>
-                        )}
-                      </td>
-                      <td className="ad-code">
-                        {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                      </td>
-                      <td>
-                        <span className="ad-badge" style={{ ...statusBadgeStyle(r.status), borderRadius: "6px", padding: "4px 10px", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                          {r.status}
-                        </span>
-                      </td>
-                      <td className="ad-tableActions" style={{ justifyContent: "flex-end" }}>
-                        <button className="ad-actionBtn ad-actionBtn--view" title="View / respond" onClick={() => openResolve(r)}>
-                          <Eye size={16} />
-                        </button>
-                        <button
-                          className="ad-actionBtn ad-actionBtn--edit"
-                          title="Adjust this student's subjects"
-                          onClick={() => {
-                            const s = students.find((x) => x.id === r.student_id);
-                            if (s) openAdjust(s);
-                          }}
-                        >
-                          <ClipboardList size={16} />
-                        </button>
-                        <button
-                          className="ad-actionBtn ad-actionBtn--delete"
-                          title="Delete request"
-                          onClick={() => handleDeleteRequest(r.id)}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* QUICK PER-STUDENT ADJUSTMENT */}
-        <div className="ad-tableCard ad-tableCard--padded" style={{ marginTop: "20px" }}>
-          <div className="ad-filterBar">
-            <div>
-              <h3 style={{ margin: 0, fontSize: "15px", color: "#1e3a5f" }}>Adjust a student's subject list</h3>
-              <p style={{ margin: "2px 0 0", fontSize: "13px", color: "#6b7280" }}>
-                Search a student below, then pick the subjects they should evaluate this period.
-              </p>
+            {/* View Mode Toggle */}
+            <div className="asc-viewToggle">
+              <button
+                type="button"
+                className={`asc-toggleBtn ${viewMode === "cards" ? "active" : ""}`}
+                onClick={() => setViewMode("cards")}
+                title="Interactive Cards View"
+              >
+                <LayoutGrid size={15} />
+                <span>Cards</span>
+              </button>
+              <button
+                type="button"
+                className={`asc-toggleBtn ${viewMode === "table" ? "active" : ""}`}
+                onClick={() => setViewMode("table")}
+                title="Compact Table View"
+              >
+                <List size={15} />
+                <span>Table</span>
+              </button>
             </div>
           </div>
-          <div className="ad-filterBar">
-            {studentSuggestions.length === 0 ? (
-              <span style={{ fontSize: "13px", color: "#6b7280" }}>
-                {studentSearch ? "No students match your search." : "Type a student name or ID above to search."}
-              </span>
-            ) : (
-              studentSuggestions.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className="ad-filterClear"
-                  style={{ border: "1px solid #e5e7eb", background: "#fff", borderRadius: "8px", padding: "8px 12px" }}
-                  onClick={() => openAdjust(s)}
-                  title={`${s.department || ""} ${s.year_level || ""} - ${s.section || ""}`}
-                >
-                  <ClipboardList size={14} style={{ marginRight: 6, verticalAlign: "-2px" }} />
-                  {s.full_name || s.school_id}
-                </button>
-              ))
-            )}
-          </div>
+
+          {/* CARDS VIEW */}
+          {viewMode === "cards" ? (
+            <div className="asc-cardGrid">
+              {loading ? (
+                <div className="asc-emptyState">
+                  <RefreshCw size={32} className="ft-spin" style={{ display: "block", margin: "0 auto 12px", color: "#64748b" }} />
+                  <div style={{ fontSize: "15px", fontWeight: 600, color: "#475569" }}>Loading correction reports...</div>
+                </div>
+              ) : filteredRequests.length === 0 ? (
+                <div className="asc-emptyState">
+                  <ClipboardList size={40} style={{ display: "block", margin: "0 auto 12px", color: "#94a3b8" }} />
+                  <h4 style={{ margin: "0 0 6px", fontSize: "16px", fontWeight: 700, color: "#1e293b" }}>
+                    No correction requests found
+                  </h4>
+                  <p style={{ margin: 0, fontSize: "13px", color: "#64748b" }}>
+                    {statusFilter || studentSearch
+                      ? "Try changing or clearing your search and filter options."
+                      : "Student reports about their subject lists will appear here."}
+                  </p>
+                </div>
+              ) : (
+                filteredRequests.map((r) => {
+                  const s = students.find((x) => x.id === r.student_id);
+                  const { categoryTag, subjectTag, cleanMsg } = parseReportMessage(r.message);
+                  const initials = ((s?.full_name || "ST").substring(0, 2)).toUpperCase();
+                  const cardModClass =
+                    r.status === "resolved"
+                      ? "asc-card--resolved"
+                      : r.status === "dismissed"
+                      ? "asc-card--dismissed"
+                      : "asc-card--new";
+
+                  return (
+                    <div
+                      key={r.id}
+                      className={`asc-card ${cardModClass}`}
+                      onClick={() => openResolve(r)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openResolve(r);
+                        }
+                      }}
+                    >
+                      {/* Top Header: Student Avatar & Info + Status Pill */}
+                      <div className="asc-cardHeader">
+                        <div className="asc-studentInfo">
+                          <div className="asc-avatar">
+                            {initials}
+                          </div>
+                          <div className="asc-studentMeta">
+                            <span className="asc-studentName" title={s?.full_name || studentName(r.student_id)}>
+                              {s?.full_name || studentName(r.student_id)}
+                            </span>
+                            <div className="asc-studentSubMeta">
+                              {s?.school_id && (
+                                <span className="asc-schoolId">ID: {s.school_id}</span>
+                              )}
+                              {s?.department && (
+                                <span className="asc-deptBadge">
+                                  {s.department} {s.year_level ? `${s.year_level}` : ""}{s.section ? `-${s.section}` : ""}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <span className={`asc-statusBadge asc-statusBadge--${r.status || "new"}`}>
+                          <span className={`asc-dot ${r.status === "new" ? "asc-dot--pulse" : ""}`} />
+                          {r.status === "new" ? "Pending Review" : r.status === "resolved" ? "Resolved" : "Dismissed"}
+                        </span>
+                      </div>
+
+                      {/* Tags Row */}
+                      {(categoryTag || subjectTag) && (
+                        <div className="asc-tagsRow">
+                          {categoryTag && (
+                            <span className="asc-tag asc-tag--category">
+                              <Tag size={11} /> {categoryTag}
+                            </span>
+                          )}
+                          {subjectTag && (
+                            <span className="asc-tag asc-tag--subject" title={subjectTag}>
+                              <BookOpen size={11} /> {subjectTag}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Message Box */}
+                      <div className="asc-msgBox">
+                        <p className="asc-msgText">{cleanMsg}</p>
+                      </div>
+
+                      {/* Admin Note if resolved */}
+                      {r.resolution_note && (
+                        <div className="asc-adminCallout">
+                          <CheckCircle2 size={15} className="asc-adminCalloutIcon" />
+                          <div className="asc-adminCalloutText">
+                            <strong>Admin Note:</strong> {r.resolution_note}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Footer Actions */}
+                      <div className="asc-cardFooter">
+                        <span className="asc-cardTime">
+                          <Clock size={12} />
+                          {new Date(r.created_at).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </span>
+
+                        <div className="asc-cardActions">
+                          <button
+                            type="button"
+                            className="asc-btnRespond"
+                            title="Review & Respond"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openResolve(r);
+                            }}
+                          >
+                            <Eye size={13} />
+                            <span>Review</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="asc-btnAdjust"
+                            title="Adjust this student's subjects"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (s) openAdjust(s);
+                            }}
+                          >
+                            <SlidersHorizontal size={13} />
+                            <span>Adjust</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="asc-btnDelete"
+                            title="Delete request"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletingRequest(r);
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          ) : (
+            /* TABLE VIEW */
+            <div className="ad-tableWrap ad-tableWrap--bordered">
+              <table className="ad-table ad-table--plain">
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Report</th>
+                    <th>Sent</th>
+                    <th>Status</th>
+                    <th style={{ textAlign: "right" }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan="5" style={{ textAlign: "center", padding: "40px", color: "#6b7280" }}>Loading...</td></tr>
+                  ) : filteredRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: "center", padding: "48px 20px", color: "#6b7280" }}>
+                        <ClipboardList size={36} style={{ display: "block", margin: "0 auto 12px", color: "#9ca3af" }} />
+                        <span style={{ fontSize: "15px", fontWeight: 500 }}>No correction requests</span>
+                        <p style={{ margin: "4px 0 0", fontSize: "13px" }}>
+                          Student reports about their subject lists will appear here.
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRequests.map((r) => {
+                      const s = students.find((x) => x.id === r.student_id);
+                      const { categoryTag, subjectTag, cleanMsg } = parseReportMessage(r.message);
+
+                      return (
+                        <tr key={r.id}>
+                          <td>
+                            <div className="ad-avatarCell">
+                              <div className="ad-avatar ad-avatar--blue">
+                                {((s?.full_name || "ST").substring(0, 2)).toUpperCase()}
+                              </div>
+                              <div className="ad-cellLines">
+                                <span className="ad-cellPrimary">{s?.full_name || studentName(r.student_id)}</span>
+                                <div style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "3px", flexWrap: "wrap" }}>
+                                  {s?.school_id && (
+                                    <span style={{ fontSize: "11px", color: "#64748b" }}>{s.school_id}</span>
+                                  )}
+                                  {s?.department && (
+                                    <span style={{ background: "#eff6ff", color: "#1e40af", padding: "1px 6px", borderRadius: "4px", fontSize: "11px", fontWeight: "600" }}>
+                                      {s.department} {s.year_level ? `${s.year_level}` : ""}{s.section ? `-${s.section}` : ""}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ maxWidth: "420px" }}>
+                            {(categoryTag || subjectTag) && (
+                              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "4px" }}>
+                                {categoryTag && (
+                                  <span style={{ background: "#fef2f2", color: "#991b1b", border: "1px solid #fee2e2", padding: "1px 7px", borderRadius: "999px", fontSize: "11px", fontWeight: "700", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                                    <Tag size={10} /> {categoryTag}
+                                  </span>
+                                )}
+                                {subjectTag && (
+                                  <span style={{ background: "#f0f9ff", color: "#0369a1", border: "1px solid #e0f2fe", padding: "1px 7px", borderRadius: "999px", fontSize: "11px", fontWeight: "700", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                                    <BookOpen size={10} /> {subjectTag}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            <div style={{ fontSize: "13px", color: "#1f2937", whiteSpace: "pre-wrap" }}>{cleanMsg}</div>
+                            {r.resolution_note && (
+                              <div style={{ fontSize: "12px", color: "#16a34a", marginTop: "6px", background: "#f0fdf4", padding: "4px 8px", borderRadius: "4px", border: "1px solid #bbf7d0" }}>
+                                <strong>Admin:</strong> {r.resolution_note}
+                              </div>
+                            )}
+                          </td>
+                          <td className="ad-code">
+                            {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </td>
+                          <td>
+                            <span className="ad-badge" style={{ ...statusBadgeStyle(r.status), borderRadius: "6px", padding: "4px 10px", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                              {r.status}
+                            </span>
+                          </td>
+                          <td className="ad-tableActions" style={{ justifyContent: "flex-end" }}>
+                            <button className="ad-actionBtn ad-actionBtn--view" title="View / respond" onClick={() => openResolve(r)}>
+                              <Eye size={16} />
+                            </button>
+                            <button
+                              className="ad-actionBtn ad-actionBtn--edit"
+                              title="Adjust this student's subjects"
+                              onClick={() => {
+                                const s = students.find((x) => x.id === r.student_id);
+                                if (s) openAdjust(s);
+                              }}
+                            >
+                              <ClipboardList size={16} />
+                            </button>
+                            <button
+                              className="ad-actionBtn ad-actionBtn--delete"
+                              title="Delete request"
+                              onClick={() => setDeletingRequest(r)}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </section>
 
@@ -570,13 +837,64 @@ export default function AdminSubjectCorrections() {
                 </div>
               </div>
               <div className="ad-formGroup" style={{ marginBottom: "12px" }}>
-                <label className="ad-label" style={{ marginBottom: "4px" }}>Report</label>
-                <div style={{ padding: "8px 12px", background: "#f9fafb", borderRadius: "6px", border: "1px solid #e5e7eb", fontSize: "14px", whiteSpace: "pre-wrap" }}>
-                  {resolving.message}
+                <label className="ad-label" style={{ marginBottom: "4px" }}>Report Details</label>
+                <div style={{ padding: "12px 14px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                  {(() => {
+                    const { categoryTag, subjectTag, cleanMsg } = parseReportMessage(resolving.message);
+                    return (
+                      <>
+                        {(categoryTag || subjectTag) && (
+                          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px" }}>
+                            {categoryTag && (
+                              <span className="asc-tag asc-tag--category">
+                                <Tag size={11} /> {categoryTag}
+                              </span>
+                            )}
+                            {subjectTag && (
+                              <span className="asc-tag asc-tag--subject">
+                                <BookOpen size={11} /> {subjectTag}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        <div style={{ fontSize: "13.5px", color: "#1e293b", lineHeight: "1.5", whiteSpace: "pre-wrap" }}>
+                          {cleanMsg}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
               <div className="ad-formGroup" style={{ marginBottom: "12px" }}>
                 <label className="ad-label" style={{ marginBottom: "4px" }}>Response note (visible to the student)</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "11.5px", fontWeight: "700", color: "#64748b", alignSelf: "center", marginRight: "4px" }}>
+                    Quick replies:
+                  </span>
+                  {[
+                    "Subject added to your evaluation list.",
+                    "Section assignment updated to reflect current enrollment.",
+                    "Evaluation list verified and corrected.",
+                    "This course does not require evaluation this semester.",
+                  ].map((canned) => (
+                    <button
+                      key={canned}
+                      type="button"
+                      onClick={() => setResolutionNote(canned)}
+                      style={{
+                        fontSize: "11px",
+                        background: "#f1f5f9",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "6px",
+                        padding: "3px 8px",
+                        color: "#334155",
+                        cursor: "pointer",
+                      }}
+                    >
+                      + {canned}
+                    </button>
+                  ))}
+                </div>
                 <textarea
                   className="ad-input"
                   rows="3"
@@ -585,9 +903,25 @@ export default function AdminSubjectCorrections() {
                   onChange={(e) => setResolutionNote(e.target.value)}
                 />
               </div>
-              <div className="ad-formNote" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <AlertTriangle size={16} />
-                Tip: use the clipboard button on this report (or the section below) to change the student's subjects, then mark this report resolved.
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px", background: "#f8fafc", padding: "10px 12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                <div className="ad-formNote" style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                  <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+                  <span>Use the subject adjuster to modify classes, then mark resolved.</span>
+                </div>
+                <button
+                  type="button"
+                  className="ad-btnSecondary"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "#2563eb", borderColor: "#bfdbfe", background: "#eff6ff", fontSize: "12.5px", padding: "6px 12px" }}
+                  onClick={() => {
+                    const stu = students.find((x) => x.id === resolving.student_id);
+                    if (stu) {
+                      setResolving(null);
+                      openAdjust(stu);
+                    }
+                  }}
+                >
+                  <ClipboardList size={14} /> Open Subject Adjuster
+                </button>
               </div>
             </div>
             <div className="ad-modalFooter">
@@ -748,6 +1082,130 @@ export default function AdminSubjectCorrections() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {deletingRequest && (
+        <div className="ad-modal">
+          <div
+            className="ad-modalOverlay"
+            onClick={() => !deleteBusy && setDeletingRequest(null)}
+          />
+          <div className="ad-modalContent" style={{ maxWidth: "460px" }}>
+            <div className="ad-modalHeader" style={{ borderBottom: "none", paddingBottom: "4px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div
+                  style={{
+                    width: "40px",
+                    height: "40px",
+                    borderRadius: "10px",
+                    background: "#fee2e2",
+                    color: "#dc2626",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <Trash2 size={20} />
+                </div>
+                <div>
+                  <h3 className="ad-modalTitle" style={{ fontSize: "17px" }}>
+                    Delete Correction Report
+                  </h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#64748b" }}>
+                    Permanent deletion confirmation
+                  </p>
+                </div>
+              </div>
+              <button
+                className="ad-modalClose"
+                onClick={() => !deleteBusy && setDeletingRequest(null)}
+                disabled={deleteBusy}
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="ad-modalBody" style={{ paddingTop: "8px", paddingBottom: "16px" }}>
+              <p style={{ margin: "0 0 14px", fontSize: "14px", color: "#334155", lineHeight: "1.5" }}>
+                Are you sure you want to delete this correction report? This ticket will be permanently removed from the records.
+              </p>
+
+              {/* Preview Ticket Info */}
+              <div
+                style={{
+                  background: "#f8fafc",
+                  border: "1.5px solid #e2e8f0",
+                  borderRadius: "10px",
+                  padding: "12px 14px",
+                  fontSize: "13px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                  <span style={{ fontWeight: "700", color: "#0f172a" }}>
+                    {studentName(deletingRequest.student_id)}
+                  </span>
+                  <span
+                    style={{
+                      ...statusBadgeStyle(deletingRequest.status),
+                      borderRadius: "999px",
+                      padding: "2px 8px",
+                      fontSize: "10px",
+                      fontWeight: "800",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {deletingRequest.status}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    color: "#64748b",
+                    lineHeight: "1.4",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
+                >
+                  {deletingRequest.message}
+                </div>
+              </div>
+            </div>
+
+            <div className="ad-modalFooter" style={{ background: "#f8fafc" }}>
+              <button
+                type="button"
+                className="ad-btnSecondary"
+                onClick={() => setDeletingRequest(null)}
+                disabled={deleteBusy}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ad-btnDanger"
+                onClick={confirmDeleteRequest}
+                disabled={deleteBusy}
+              >
+                <Trash2 size={14} style={{ marginRight: 6 }} />
+                {deleteBusy ? "Deleting..." : "Delete Ticket"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TOAST NOTIFICATION */}
+      {toast.show && (
+        <div className={`ad-toast ad-toast--${toast.type}`}>
+          <div className="ad-toastIcon">
+            {toast.type === "success" ? <Check size={18} /> : <AlertTriangle size={18} />}
+          </div>
+          <div className="ad-toastMessage">{toast.message}</div>
         </div>
       )}
     </AdminLayout>

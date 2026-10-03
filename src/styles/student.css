@@ -6309,3 +6309,450 @@
     transform: none;
   }
 }
+
+/* ============================================================
+   Subject Report Issue (.sri-) Enhanced Modal Styles
+   Matches approved high-fidelity design mockups
+   ============================================================ */
+
+.sri-modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 1060;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: sri-fadeIn 0.2s ease-out;
+}
+
+@keyframes sri-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sri-scaleUp {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.sri-modalCard {
+  background: #ffffff;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 540px;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(226, 232, 240, 0.8);
+  overflow: hidden;
+  animation: sri-scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+
+.sri-header {
+  padding: 20px 24px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.sri-headerTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sri-headerIconBadge {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #38bdf8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 8px rgba(15, 23, 42, 0.15);
+}
+
+.sri-headerTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.sri-headerCloseBtn {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  color: #64748b;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sri-headerCloseBtn:hover {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #dc2626;
+  transform: rotate(90deg);
+}
+
+.sri-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Student profile banner */
+.sri-profileBanner {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e40af;
+}
+
+.sri-profileBannerIcon {
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+/* Segmented tab switcher */
+.sri-tabNav {
+  display: flex;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 12px;
+  gap: 4px;
+}
+
+.sri-tabBtn {
+  flex: 1;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.sri-tabBtn--active {
+  background: #ffffff;
+  color: #1e3a8a;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+.sri-tabBadge {
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.sri-tabBtn--active .sri-tabBadge {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+/* Form section labels */
+.sri-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+/* Category Chips */
+.sri-chipsGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sri-chip {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sri-chip:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+
+.sri-chip--selected {
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #1d4ed8;
+  box-shadow: 0 0 0 1px #2563eb;
+}
+
+/* Dropdown select */
+.sri-select {
+  width: 100%;
+  padding: 9px 12px;
+  font-size: 13.5px;
+  color: #1e293b;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.sri-select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+/* Textarea input wrapper */
+.sri-textareaWrap {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.sri-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 14px;
+  color: #1e293b;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  outline: none;
+  resize: vertical;
+  min-height: 95px;
+  line-height: 1.5;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.sri-textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.sri-textareaFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+.sri-charCounter {
+  font-weight: 500;
+}
+
+/* Error message banner */
+.sri-errorAlert {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* History Cards View */
+.sri-historyList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.sri-reportCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.sri-reportCard:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+.sri-reportCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sri-statusBadge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sri-statusBadge--new {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.sri-statusBadge--resolved {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.sri-statusBadge--dismissed {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.sri-reportDate {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.sri-reportMsg {
+  margin: 0;
+  font-size: 13.5px;
+  color: #334155;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.sri-adminNoteCallout {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  color: #166534;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sri-adminNoteIcon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.sri-emptyHistory {
+  text-align: center;
+  padding: 36px 16px;
+  color: #94a3b8;
+}
+
+.sri-emptyHistoryIcon {
+  margin: 0 auto 10px;
+  display: block;
+  opacity: 0.6;
+}
+
+/* Modal Footer */
+.sri-footer {
+  padding: 14px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.sri-btnCancel {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  padding: 9px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sri-btnCancel:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.sri-btnSubmit {
+  background: #2563eb;
+  border: 1px solid #1d4ed8;
+  color: #ffffff;
+  padding: 9px 20px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+  transition: all 0.15s ease;
+}
+
+.sri-btnSubmit:hover:not(:disabled) {
+  background: #1d4ed8;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.35);
+  transform: translateY(-1px);
+}
+
+.sri-btnSubmit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}

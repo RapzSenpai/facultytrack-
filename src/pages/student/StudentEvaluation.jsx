@@ -6,6 +6,7 @@ import { supabase } from "../../config/supabase";
 import { parseFunctionError } from "../../utils/audit";
 import { isAssignmentMatch } from "../../utils/assignmentMatch";
 import { pickActivePeriod } from "../../utils/periodStatus";
+import { notifyAdminsForDepartment } from "../../utils/notifications";
 import StudentLayout from "./StudentLayout";
 
 
@@ -14,7 +15,6 @@ export default function StudentEvaluation() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState("all");
   const [selectedFaculty, setSelectedFaculty] = useState(null);
-  const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [ratings, setRatings] = useState({});
   const [comment, setComment] = useState("");
@@ -177,7 +177,6 @@ export default function StudentEvaluation() {
           const target = matchedFaculty.find((f) => f.assignmentId === initialAssignmentId);
           if (target && target.status !== "submitted") {
             setSelectedFaculty(target);
-            setSelectedSubjectId(target.assignmentId);
             setSearchQuery(target.name || "");
           }
         } else {
@@ -188,7 +187,6 @@ export default function StudentEvaluation() {
             );
             if (target) {
               setSelectedFaculty(target);
-              setSelectedSubjectId(target.assignmentId);
               setSearchQuery(target.name || "");
             }
           }
@@ -203,7 +201,6 @@ export default function StudentEvaluation() {
 
   const handleEvaluate = (faculty) => {
     setSelectedFaculty(faculty);
-    setSelectedSubjectId(faculty.assignmentId);
     setRatings({});
     setComment("");
     setIsPriority(false);
@@ -275,51 +272,45 @@ export default function StudentEvaluation() {
           : f)
       );
 
+      const evaluatedFaculty = selectedFaculty;
+      const targetDept = evaluatedFaculty?.dept || evaluatedFaculty?.department || userProfile?.department || null;
+      const facultyName = evaluatedFaculty?.name || "a faculty member";
+
       setShowModal(false);
       setSelectedFaculty(null);
-      setSelectedSubjectId("");
       setRatings({});
       setComment("");
       setIsPriority(false);
 
       if (moderationStatus === "flag") {
-        showNotice(`Evaluation for ${selectedFaculty.name} submitted. Your comment was flagged for review and will be checked by the administrator before release.`, {
+        showNotice(`Evaluation for ${facultyName} submitted. Your comment was flagged for review and will be checked by the administrator before release.`, {
           type: "info",
           title: "Evaluation Submitted",
         });
       } else if (isPriority) {
-        showNotice(`Priority evaluation for ${selectedFaculty.name} submitted. The administrator will review it.`, {
+        showNotice(`Priority evaluation for ${facultyName} submitted. The administrator will review it.`, {
           type: "info",
           title: "Priority Evaluation Submitted",
         });
       } else {
-        showNotice(`Evaluation for ${selectedFaculty.name} submitted successfully!`, {
+        showNotice(`Evaluation for ${facultyName} submitted successfully!`, {
           type: "success",
           title: "Submission Successful",
         });
       }
 
-      // Notify administrators if concern was priority or flagged
+      // Notify administrators if concern was priority or flagged (department-scoped + super_admin)
       if (isPriority || moderationStatus === "flag") {
         try {
-          const { data: adminUsers } = await supabase
-            .from("users")
-            .select("id")
-            .in("role", ["admin", "super_admin"])
-            .neq("status", "deleted");
-
-          if (adminUsers && adminUsers.length > 0) {
-            const notifs = adminUsers.map((adm) => ({
-              user_id: adm.id,
-              title: isPriority ? "Priority Concern Flagged" : "Comment Flagged for Review",
-              message: isPriority
-                ? `A student submitted a priority concern for ${selectedFaculty.name} requiring admin attention.`
-                : `A student comment for ${selectedFaculty.name} was flagged by automated moderation.`,
-              type: "alert",
-              link: "/admin/moderation",
-            }));
-            await supabase.from("notifications").insert(notifs);
-          }
+          await notifyAdminsForDepartment({
+            department: targetDept,
+            title: isPriority ? "Priority Concern Flagged" : "Comment Flagged for Review",
+            message: isPriority
+              ? `A student submitted a priority concern for ${facultyName} requiring admin attention.`
+              : `A student comment for ${facultyName} was flagged by automated moderation.`,
+            type: "alert",
+            link: "/admin/moderation",
+          });
         } catch (notifErr) {
           console.warn("Failed to notify admins of priority concern:", notifErr);
         }
@@ -362,31 +353,8 @@ export default function StudentEvaluation() {
   const endDate = activeYear?.endDate ? new Date(activeYear.endDate + "T23:59:59") : null;
   const isEvaluationOpen = !loading && activeYear !== null && (!endDate || now <= endDate);
 
-  const uniqueFacultyNames = [...new Set(assignedFaculty.map((f) => f.name))].sort();
-  const filteredFacultyNames = uniqueFacultyNames.filter((name) =>
-    name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const subjectsForFaculty = selectedFaculty
-    ? assignedFaculty.filter((f) => f.name === selectedFaculty.name)
-    : [];
-
-  const chosenAssignment = subjectsForFaculty.find((f) => f.assignmentId === selectedSubjectId) || null;
-
   const hoursLeft = endDate ? Math.max(0, Math.floor((endDate - now) / 1000 / 3600)) : null;
   const showUrgencyBanner = isEvaluationOpen && hoursLeft !== null && hoursLeft <= 72;
-
-  const handleSelectFaculty = (name) => {
-    const match = assignedFaculty.find((f) => f.name === name);
-    setSelectedFaculty(match || null);
-    setSelectedSubjectId(match?.assignmentId || "");
-    setSearchQuery(name);
-  };
-
-  const handleBeginEvaluation = () => {
-    if (!chosenAssignment) return;
-    handleEvaluate(chosenAssignment);
-  };
 
   const formatDate = (ts) => {
     if (!ts) return "—";

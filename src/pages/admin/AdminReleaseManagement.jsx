@@ -68,6 +68,12 @@ export default function AdminReleaseManagement() {
   const [filterSem, setFilterSem] = useState("");
   const [filterDept, setFilterDept] = useState("");
   const [drafts, setDrafts] = useState({});
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -132,7 +138,7 @@ export default function AdminReleaseManagement() {
       }
     }
     return out;
-  }, [years, isSuper, myDeptIds.join("|")]);
+  }, [years, isSuper, myDeptIds]);
 
   // Scope [D9/D10]: super admin manages the global row
   // (department NULL); a scoped admin manages rows for their own
@@ -202,11 +208,11 @@ export default function AdminReleaseManagement() {
     // never the global (NULL department) row, which is super-only.
     const targetDept = isSuper ? null : (scopeDept || "");
     if (!isSuper && !targetDept) {
-      alert("Your account has no program assignment yet. Ask a super admin to assign you a program first.");
+      showToast("Your account has no program assignment yet. Ask a super admin to assign you a program first.", "error");
       return;
     }
-    if (currentDraft.approved && !currentDraft.release_date) {
-      alert("Set a release date before saving an approval. Approved without a date stays hidden from faculty.");
+    if (needsDate) {
+      showToast("Set a release date before saving an approval. Approved without a date stays hidden from faculty.", "error");
       return;
     }
     setSaving(true);
@@ -247,6 +253,8 @@ export default function AdminReleaseManagement() {
         return next;
       });
 
+      showToast("Release settings saved successfully.", "success");
+
       // Notify faculty if period is live and released
       if (payload.approved && payload.release_date && payload.release_date <= today) {
         notifyFacultyOnRelease({
@@ -257,7 +265,7 @@ export default function AdminReleaseManagement() {
       }
     } catch (err) {
       console.error("Failed to save release:", err);
-      alert("Could not save the release settings. Please try again.");
+      showToast("Could not save release settings: " + (err.message || "Please try again."), "error");
     } finally {
       setSaving(false);
     }
@@ -306,18 +314,13 @@ export default function AdminReleaseManagement() {
   const StatusIcon = statusInfo.icon;
 
   return (
-    <AdminLayout title="Release Management">
+    <AdminLayout title={<span style={{ color: "#9ca3af" }}>Admin &gt; <strong style={{ color: "#111827" }}>Release Management</strong></span>}>
       <section className="ad-content">
-        {/* Page Header with Context Pill */}
-        <div className="ad-rel-header-row">
-          <div className="ad-rel-header-left">
-            <h2 className="ad-title" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <ClipboardCheck size={26} color="#1e3a5f" />
-              Release Management
-            </h2>
-            <p className="ad-subtitle">
-              Schedule and authorize evaluation result visibility for faculty members, and monitor compliance with grade submission requirements.
-            </p>
+        {/* Welcome Header */}
+        <div className="ad-welcomeHeader" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", marginBottom: "22px" }}>
+          <div>
+            <h2 className="ad-title">Release Management</h2>
+            <p className="ad-subtitle">Manage evaluation result visibility and publication schedule</p>
           </div>
           <div className="ad-rel-period-badge">
             <span className="ad-rel-period-dot" />
@@ -328,6 +331,28 @@ export default function AdminReleaseManagement() {
           </div>
         </div>
 
+        {/* In-app Toast Banner */}
+        {toast && (
+          <div
+            style={{
+              background: toast.type === "error" ? "#fef2f2" : "#ecfdf5",
+              color: toast.type === "error" ? "#991b1b" : "#065f46",
+              border: `1px solid ${toast.type === "error" ? "#fecaca" : "#a7f3d0"}`,
+              padding: "12px 18px",
+              borderRadius: "10px",
+              fontWeight: "700",
+              fontSize: "13.5px",
+              marginBottom: "20px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            {toast.type === "error" ? <X size={18} /> : <Check size={18} />}
+            <span>{toast.message}</span>
+          </div>
+        )}
+
         {loading ? (
           <div className="ad-tableCard" style={{ padding: "60px 20px", textAlign: "center", color: "#64748b" }}>
             <ClipboardCheck size={36} style={{ margin: "0 auto 12px", opacity: 0.5 }} />
@@ -335,413 +360,269 @@ export default function AdminReleaseManagement() {
           </div>
         ) : (
           <>
-            <div className="ad-filterCard">
-              <div className="ad-filterGroup" style={{ gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}>
-                <select
-                  className="ad-filterSelect"
-                  value={periodSelectorValue}
-                  onChange={(e) => {
-                    const [year, sem] = e.target.value.split("__");
-                    setFilterYear(year);
-                    setFilterSem(sem);
-                  }}
-                >
-                  {periodOptions.map((p) => (
-                    <option key={`${p.year}__${p.semester}`} value={`${p.year}__${p.semester}`}>
-                      {p.year} — {p.semester}{isPeriodActive(p) ? " (active)" : ""}
-                    </option>
-                  ))}
-                </select>
-
-                <div
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: "8px 16px",
-                    borderRadius: "999px",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    color: STATUS_COLORS[releaseRow ? effectiveStatus : "draft"],
-                    background: `${STATUS_COLORS[releaseRow ? effectiveStatus : "draft"]}15`,
-                  }}
-                >
-                  {(releaseRow ? effectiveStatus : "draft").toUpperCase()}
-                </div>
-
-                {!isSuper && (
+            {/* Filter Bar */}
+            <div className="ad-filterCard" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap", marginBottom: "20px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span className="ad-label" style={{ fontWeight: 700, fontSize: "12.5px", color: "#475569" }}>Academic Period:</span>
                   <select
                     className="ad-filterSelect"
-                    value={scopeDept}
-                    onChange={(e) => setFilterDept(e.target.value)}
-                    title="Your assigned program"
+                    style={{ minWidth: "250px", fontWeight: 600 }}
+                    value={periodSelectorValue}
+                    onChange={(e) => {
+                      const [year, sem] = e.target.value.split("__");
+                      setFilterYear(year);
+                      setFilterSem(sem);
+                    }}
                   >
-                    {myDeptNames.length === 0 && <option value="">No program assigned</option>}
-                    {myDeptNames.map((n) => (
-                      <option key={n} value={n}>{n}</option>
+                    {periodOptions.map((p) => (
+                      <option key={`${p.year}__${p.semester}`} value={`${p.year}__${p.semester}`}>
+                        {p.year} — {p.semester}{isPeriodActive(p) ? " (Active)" : ""}
+                      </option>
                     ))}
                   </select>
-                )}
-              </div>
-
-              {!isSuper && myDeptNames.length === 0 && (
-                <div style={{ marginTop: "12px", fontSize: "13px", color: "#b45309" }}>
-                  Your account has no program assignment yet — release controls stay disabled until a super admin assigns you a program.
                 </div>
-              )}
 
-              <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "flex-end", marginTop: "16px" }}>
-                <div>
-                  <label className="ad-label" style={{ display: "block", marginBottom: "4px" }}>Release date</label>
-                  <input
-                    type="date"
-                    className="ad-filterSelect"
-                    value={currentDraft.release_date || ""}
-                    onChange={(e) => setDraft({ release_date: e.target.value })}
-                  />
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span className="ad-label" style={{ fontWeight: 700, fontSize: "12.5px", color: "#475569" }}>Department Scope:</span>
+                  {isSuper ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 12px", borderRadius: "8px", background: "#f1f5f9", border: "1px solid #e2e8f0", fontSize: "12.5px", fontWeight: 600, color: "#334155" }}>
+                      🏢 All Programs (Global Super Admin)
+                    </span>
+                  ) : (
+                    <select
+                      className="ad-filterSelect"
+                      style={{ fontWeight: 600 }}
+                      value={scopeDept}
+                      onChange={(e) => setFilterDept(e.target.value)}
+                      title="Your assigned program"
+                    >
+                      {myDeptNames.length === 0 && <option value="">No program assigned</option>}
+                      {myDeptNames.map((n) => (
+                        <option key={n} value={n}>🏢 {n}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 600, color: "#374151", paddingBottom: "8px" }}>
-                  <input
-                    type="checkbox"
-                    checked={currentDraft.approved || false}
-                    onChange={(e) => handleApproveToggle(e.target.checked)}
-                  />
-                  Approved for release
-                </label>
-                <button
-                  type="button"
-                  className="ad-btnSearch"
-                  disabled={saving || !filterYear || (!isSuper && !scopeDept)}
-                  onClick={handleSave}
-                  style={{ opacity: saving ? 0.6 : 1 }}
-                >
-                  {saving ? "Saving..." : "Save Release Settings"}
-                </button>
-              </div>
-
-              {needsDate && (
-                <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: 700, color: "#b45309" }}>
-                  Approved without a release date stays hidden from faculty. Pick a date before saving.
-                </div>
-              )}
-
-              {unassignedCount > 0 && (
-                <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: 700, color: "#b45309" }}>
-                  {unassignedCount} facult{unassignedCount === 1 ? "y has" : "ies have"} no program assigned — scoped releases never reach them. Assign programs under Faculty Management first.
-                </div>
-              )}
-
-              <div style={{ marginTop: "12px", fontSize: "13px", color: "#6b7280" }}>
-                Scope: <strong>{isSuper ? "All programs (global)" : (scopeDept || "—")}</strong>
-                {" · "}
-                {releaseRow
-                  ? `Saved: ${releaseRow.approved ? "approved" : "not approved"}, release date ${releaseRow.release_date || "—"}`
-                  : "No release row saved for this period yet."}
-                {releaseRow && releaseRow.approved && !releaseRow.release_date && (
-                  <span style={{ marginLeft: "8px", fontWeight: 700, color: "#b45309" }}>
-                    → Still hidden: approval needs a release date
-                  </span>
-                )}
-                {releaseRow && releaseRow.approved && releaseRow.release_date && (
-                  <span style={{ marginLeft: "8px", fontWeight: 700, color: STATUS_COLORS[derivedStatus(releaseRow)] }}>
-                    {is_period_released(releaseRow)
-                      ? "→ RELEASED — faculty can see results"
-                      : `→ Waiting: date passes on ${releaseRow.release_date}`}
-                  </span>
-                )}
               </div>
             </div>
 
-            <div className="ad-rel-stats">
-              <div className="ad-rel-stat-card">
-                <div className="ad-rel-stat-top">
-                  <span className="ad-rel-stat-label">Evaluation Visibility</span>
-                  <div
-                    className={`ad-rel-stat-icon-wrap ${
-                      effectiveStatus === "released"
-                        ? "ad-rel-stat-icon-wrap--green"
-                        : effectiveStatus === "scheduled"
-                        ? "ad-rel-stat-icon-wrap--blue"
-                        : "ad-rel-stat-icon-wrap--amber"
-                    }`}
-                  >
-                    <StatusIcon size={20} />
-                  </div>
+            {/* 3-Card Executive KPI Strip */}
+            <div className="ad-kpiGrid">
+              <div className={`ad-kpiCard ${effectiveStatus === "released" ? "ad-kpiCard--success" : effectiveStatus === "scheduled" ? "ad-kpiCard--primary" : "ad-kpiCard--amber"}`}>
+                <div className="ad-kpiHeader">
+                  <span className="ad-kpiLabel">Evaluation Visibility</span>
+                  <span className="ad-kpiIcon">
+                    <StatusIcon size={18} />
+                  </span>
                 </div>
-                <div className="ad-rel-stat-val" style={{ color: statusInfo.color }}>
-                  {statusInfo.label}
-                </div>
-                <div className="ad-rel-stat-desc">
-                  {effectiveStatus === "released"
-                    ? "Results active for faculty"
-                    : effectiveStatus === "scheduled"
-                    ? `Queued for ${formatDateDisplay(releaseRow?.release_date)}`
-                    : "Admin approval required"}
+                <div className="ad-kpiBody">
+                  <span className="ad-kpiValue" style={{ fontSize: "22px", color: statusInfo.color }}>
+                    {statusInfo.label}
+                  </span>
+                  <span className={`ad-kpiBadge ${effectiveStatus === "released" ? "ad-kpiBadge--success" : effectiveStatus === "scheduled" ? "ad-kpiBadge--info" : "ad-kpiBadge--warning"}`}>
+                    {effectiveStatus === "released" ? "Live" : effectiveStatus === "scheduled" ? "Queued" : "Restricted"}
+                  </span>
                 </div>
               </div>
 
-              <div className="ad-rel-stat-card">
-                <div className="ad-rel-stat-top">
-                  <span className="ad-rel-stat-label">Scheduled Release Date</span>
-                  <div className="ad-rel-stat-icon-wrap ad-rel-stat-icon-wrap--blue">
-                    <Calendar size={20} />
-                  </div>
+              <div className="ad-kpiCard ad-kpiCard--info">
+                <div className="ad-kpiHeader">
+                  <span className="ad-kpiLabel">Scheduled Release Date</span>
+                  <span className="ad-kpiIcon">
+                    <Calendar size={18} />
+                  </span>
                 </div>
-                <div className="ad-rel-stat-val" style={{ fontSize: "20px" }}>
-                  {formatDateDisplay(releaseRow?.release_date)}
-                </div>
-                <div className="ad-rel-stat-desc">
-                  <Clock size={13} />
-                  {getRelativeDateLabel(releaseRow?.release_date)}
+                <div className="ad-kpiBody">
+                  <span className="ad-kpiValue" style={{ fontSize: "22px" }}>
+                    {formatDateDisplay(releaseRow?.release_date)}
+                  </span>
+                  {releaseRow?.release_date && (
+                    <span className="ad-kpiBadge ad-kpiBadge--info">
+                      {getRelativeDateLabel(releaseRow?.release_date)}
+                    </span>
+                  )}
                 </div>
               </div>
 
+              <div className="ad-kpiCard ad-kpiCard--primary">
+                <div className="ad-kpiHeader">
+                  <span className="ad-kpiLabel">Program Scope</span>
+                  <span className="ad-kpiIcon">
+                    <ShieldCheck size={18} />
+                  </span>
+                </div>
+                <div className="ad-kpiBody">
+                  <span className="ad-kpiValue" style={{ fontSize: "22px" }}>
+                    {isSuper ? "All Programs" : (scopeDept || "Unassigned")}
+                  </span>
+                  <span className="ad-kpiBadge ad-kpiBadge--info">
+                    {isSuper ? "Global" : "Scoped"}
+                  </span>
+                </div>
+              </div>
             </div>
 
+            {/* Scoped / Super Admin Context Alerts */}
             {isSuper && globalReleasedRow && (
-              <div className="ad-rel-unsaved-alert" style={{ borderColor: "#fca5a5", background: "#fef2f2" }}>
+              <div className="ad-rel-unsaved-alert" style={{ borderColor: "#fca5a5", background: "#fef2f2", color: "#991b1b", marginBottom: "16px" }}>
                 <div>
                   <span className="ad-rel-unsaved-pulse" style={{ background: "#dc2626" }} />
-                  Global release is live for <strong>{filterYear} {filterSem}</strong> — visible to <strong>ALL programs</strong>. Restrict per program or revoke it to stop cross-department visibility.
+                  Global release is live for <strong>{filterYear} {filterSem}</strong> across all programs.
                 </div>
               </div>
             )}
 
-            <div className="ad-rel-console">
-              <div className="ad-rel-panel">
-                <div className="ad-rel-panel-header">
-                  <div className="ad-rel-panel-icon">
-                    <Calendar size={20} />
-                  </div>
-                  <div>
-                    <h3 className="ad-rel-panel-title">Academic Period & Policy</h3>
-                    <p className="ad-rel-panel-sub">Select evaluation term and review release prerequisites.</p>
-                  </div>
-                </div>
-
-                <label className="ad-rel-field-label" htmlFor="periodSelect">
-                  Evaluation Period
-                </label>
-                <select
-                  id="periodSelect"
-                  className="ad-filterSelect"
-                  style={{ width: "100%", marginBottom: "16px", fontWeight: 600 }}
-                  value={periodSelectorValue}
-                  onChange={(e) => {
-                    const [year, sem] = e.target.value.split("__");
-                    setFilterYear(year);
-                    setFilterSem(sem);
-                  }}
-                >
-                  {periodOptions.map((p) => (
-                    <option key={`${p.year}__${p.semester}`} value={`${p.year}__${p.semester}`}>
-                      {p.year} — {p.semester}
-                      {isPeriodActive(p) ? " (Active Semester)" : ""}
-                    </option>
-                  ))}
-                </select>
-
-                <label className="ad-rel-field-label">Institutional Release Criteria</label>
-                <div className="ad-rel-policy-list">
-                  <div
-                    className={`ad-rel-policy-item ${
-                      currentDraft.approved ? "ad-rel-policy-item--met" : "ad-rel-policy-item--unmet"
-                    }`}
-                  >
-                    <div
-                      className={`ad-rel-policy-check ${
-                        currentDraft.approved ? "ad-rel-policy-check--met" : "ad-rel-policy-check--unmet"
-                      }`}
-                    >
-                      {currentDraft.approved ? <Check size={14} /> : <X size={14} />}
-                    </div>
-                    <div className="ad-rel-policy-content">
-                      <div className="ad-rel-policy-heading">1. Administrative Approval</div>
-                      <div className="ad-rel-policy-desc">
-                        {currentDraft.approved
-                          ? "Approved by administration. Release authorized."
-                          : "Awaiting administrative authorization switch."}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`ad-rel-policy-item ${
-                      currentDraft.release_date && currentDraft.release_date <= today
-                        ? "ad-rel-policy-item--met"
-                        : "ad-rel-policy-item--unmet"
-                    }`}
-                  >
-                    <div
-                      className={`ad-rel-policy-check ${
-                        currentDraft.release_date && currentDraft.release_date <= today
-                          ? "ad-rel-policy-check--met"
-                          : "ad-rel-policy-check--unmet"
-                      }`}
-                    >
-                      {currentDraft.release_date && currentDraft.release_date <= today ? (
-                        <Check size={14} />
-                      ) : (
-                        <Clock size={14} />
-                      )}
-                    </div>
-                    <div className="ad-rel-policy-content">
-                      <div className="ad-rel-policy-heading">2. Scheduled Release Date Reached</div>
-                      <div className="ad-rel-policy-desc">
-                        {!currentDraft.release_date
-                          ? "No release date specified. Results will not publish."
-                          : currentDraft.release_date <= today
-                          ? `Target date (${formatDateDisplay(currentDraft.release_date)}) reached.`
-                          : `Scheduled for ${formatDateDisplay(currentDraft.release_date)}. Results remain gated until then.`}
-                      </div>
-                    </div>
-                  </div>
+            {!isSuper && myDeptNames.length === 0 && (
+              <div className="ad-rel-unsaved-alert" style={{ borderColor: "#fde68a", background: "#fffbeb", color: "#92400e", marginBottom: "16px" }}>
+                <div>
+                  <span className="ad-rel-unsaved-pulse" style={{ background: "#d97706" }} />
+                  Your account has no program assignment yet — controls remain disabled until assigned.
                 </div>
               </div>
+            )}
 
-              <div className="ad-rel-panel">
-                <div className="ad-rel-panel-header">
-                  <div className="ad-rel-panel-icon">
-                    <ShieldCheck size={20} />
-                  </div>
-                  <div>
-                    <h3 className="ad-rel-panel-title">Release Authorization Controls</h3>
-                    <p className="ad-rel-panel-sub">Set approval toggle and target publication schedule.</p>
-                  </div>
+            {unassignedCount > 0 && (
+              <div className="ad-rel-unsaved-alert" style={{ borderColor: "#bfdbfe", background: "#eff6ff", color: "#1e40af", marginBottom: "16px" }}>
+                <div>
+                  <span className="ad-rel-unsaved-pulse" style={{ background: "#2563eb" }} />
+                  {unassignedCount} faculty member{unassignedCount === 1 ? " has" : "s have"} no program assigned and won't match scoped releases.
                 </div>
+              </div>
+            )}
 
-                <div
-                  className={`ad-rel-approval-card ${
-                    currentDraft.approved ? "ad-rel-approval-card--active" : ""
-                  }`}
-                >
-                  <div className="ad-rel-switch-info">
-                    <span className="ad-rel-switch-title">Administrative Approval</span>
-                    <span className="ad-rel-switch-sub">
-                      {currentDraft.approved
-                        ? "Results authorized to release on the target date."
-                        : "Evaluation visibility restricted from faculty."}
-                    </span>
-                  </div>
-                  <label className="ad-rel-switch-label" title="Toggle administrative approval">
-                    <input
-                      type="checkbox"
-                      className="ad-rel-switch-input"
-                      checked={currentDraft.approved || false}
-                      onChange={(e) => handleApproveToggle(e.target.checked)}
-                    />
-                    <span className="ad-rel-switch-slider" />
-                  </label>
-                </div>
+            {/* Focused Release Settings Card */}
+            <div className="ad-rel-settings-card">
+              <div className="ad-rel-settings-header">
+                <h3 className="ad-rel-settings-title">Release Settings</h3>
+              </div>
 
-                <div className="ad-rel-date-section">
-                  <label className="ad-rel-field-label" htmlFor="releaseDateInput">
-                    Target Release Date
-                  </label>
-                  <div className="ad-rel-date-input-wrap">
-                    <input
-                      id="releaseDateInput"
-                      type="date"
-                      className="ad-rel-date-input"
-                      value={currentDraft.release_date || ""}
-                      min={today}
-                      onChange={(e) => setDraft({ release_date: e.target.value })}
-                    />
-                  </div>
-                  <div className="ad-rel-presets">
-                    <button
-                      type="button"
-                      className={`ad-rel-preset-btn ${currentDraft.release_date === today ? "ad-rel-preset-btn--active" : ""}`}
-                      onClick={() => setDatePreset(0)}
-                    >
-                      Release Today
-                    </button>
-                    <button
-                      type="button"
-                      className="ad-rel-preset-btn"
-                      onClick={() => setDatePreset(1)}
-                    >
-                      Tomorrow
-                    </button>
-                    <button
-                      type="button"
-                      className="ad-rel-preset-btn"
-                      onClick={() => setDatePreset(7)}
-                    >
-                      In 1 Week
-                    </button>
-                    {currentDraft.release_date && (
-                      <button
-                        type="button"
-                        className="ad-rel-preset-btn"
-                        style={{ color: "#ef4444" }}
-                        onClick={() => setDatePreset(null)}
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className={`ad-rel-status-callout ad-rel-status-callout--${draftStatus}`}>
-                  <StatusIcon size={18} style={{ flexShrink: 0, marginTop: "1px" }} />
-                  <div>
-                    <strong>
-                      {draftStatus === "released"
-                        ? "Live Access Enabled"
-                        : draftStatus === "scheduled"
-                        ? "Release Scheduled"
-                        : "Evaluation Results Gated"}
-                    </strong>
-                    <div style={{ marginTop: "2px", opacity: 0.9 }}>
-                      {draftStatus === "released"
-                        ? "Faculty members who have submitted their grades can now view their evaluation ratings."
-                        : draftStatus === "scheduled"
-                        ? (currentDraft.release_date
-                          ? `Results will become automatically accessible on ${formatDateDisplay(currentDraft.release_date)}.`
-                          : "Approved, but no date set — still hidden. Pick a release date.")
-                        : "Faculty cannot view ratings until approved AND scheduled date arrives."}
-                    </div>
-                  </div>
-                </div>
-
-                {hasUnsavedChanges && (
-                  <div className="ad-rel-unsaved-alert">
-                    <div>
-                      <span className="ad-rel-unsaved-pulse" />
-                      Unsaved changes for <strong>{filterYear} {filterSem}</strong>
-                    </div>
-                    <button
-                      type="button"
-                      className="ad-rel-discard-btn"
-                      style={{ padding: "6px 12px", fontSize: "12px" }}
-                      onClick={handleDiscard}
-                    >
-                      <RotateCcw size={13} style={{ marginRight: 4 }} />
-                      Reset
-                    </button>
-                  </div>
-                )}
-
-                <div className="ad-rel-action-bar">
-                  <button
-                    type="button"
-                    className="ad-rel-save-btn"
-                    disabled={saving || !filterYear || (!isSuper && !scopeDept)}
-                    onClick={handleSave}
-                  >
-                    <Save size={16} />
-                    {saving ? "Saving settings..." : "Save Release Settings"}
-                  </button>
-                  <span style={{ fontSize: "12.5px", color: "#64748b" }}>
-                    {releaseRow
-                      ? `Last updated: ${new Date(releaseRow.updated_at || Date.now()).toLocaleDateString()}`
-                      : "No release record saved yet"}
+              {/* Approval Switch */}
+              <div
+                className={`ad-rel-approval-card ${
+                  currentDraft.approved ? "ad-rel-approval-card--active" : ""
+                }`}
+              >
+                <div className="ad-rel-switch-info">
+                  <span className="ad-rel-switch-title">Administrative Approval</span>
+                  <span className="ad-rel-switch-sub">
+                    {currentDraft.approved
+                      ? "Results authorized to release on the scheduled date"
+                      : "Visibility restricted from faculty"}
                   </span>
                 </div>
+                <label className="ad-rel-switch-label" title="Toggle administrative approval">
+                  <input
+                    type="checkbox"
+                    className="ad-rel-switch-input"
+                    checked={currentDraft.approved || false}
+                    onChange={(e) => handleApproveToggle(e.target.checked)}
+                  />
+                  <span className="ad-rel-switch-slider" />
+                </label>
+              </div>
+
+              {/* Target Release Date */}
+              <div className="ad-rel-date-section">
+                <label className="ad-rel-field-label" htmlFor="releaseDateInput">
+                  Target Release Date
+                </label>
+                <div className="ad-rel-date-input-wrap">
+                  <input
+                    id="releaseDateInput"
+                    type="date"
+                    className="ad-rel-date-input"
+                    value={currentDraft.release_date || ""}
+                    min={today}
+                    onChange={(e) => setDraft({ release_date: e.target.value })}
+                  />
+                </div>
+                <div className="ad-rel-presets">
+                  <button
+                    type="button"
+                    className={`ad-rel-preset-btn ${currentDraft.release_date === today ? "ad-rel-preset-btn--active" : ""}`}
+                    onClick={() => setDatePreset(0)}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    className="ad-rel-preset-btn"
+                    onClick={() => setDatePreset(1)}
+                  >
+                    Tomorrow
+                  </button>
+                  <button
+                    type="button"
+                    className="ad-rel-preset-btn"
+                    onClick={() => setDatePreset(7)}
+                  >
+                    In 1 Week
+                  </button>
+                  {currentDraft.release_date && (
+                    <button
+                      type="button"
+                      className="ad-rel-preset-btn"
+                      style={{ color: "#ef4444" }}
+                      onClick={() => setDatePreset(null)}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Concise 1-line Alert Banner */}
+              <div className={`ad-rel-status-callout ad-rel-status-callout--${draftStatus}`}>
+                <StatusIcon size={18} style={{ flexShrink: 0, marginTop: "1px" }} />
+                <span style={{ fontWeight: 600 }}>
+                  {draftStatus === "released"
+                    ? "Evaluation results are currently published and visible to faculty."
+                    : draftStatus === "scheduled"
+                    ? (currentDraft.release_date
+                      ? `Results will automatically become visible on ${formatDateDisplay(currentDraft.release_date)}.`
+                      : "Approval is granted, but a release date is required to publish.")
+                    : "Results remain hidden until administrative approval and scheduled date are reached."}
+                </span>
+              </div>
+
+              {/* Unsaved Changes Banner */}
+              {hasUnsavedChanges && (
+                <div className="ad-rel-unsaved-alert">
+                  <div>
+                    <span className="ad-rel-unsaved-pulse" />
+                    Unsaved changes for <strong>{filterYear} {filterSem}</strong>
+                  </div>
+                  <button
+                    type="button"
+                    className="ad-rel-discard-btn"
+                    style={{ padding: "6px 12px", fontSize: "12px" }}
+                    onClick={handleDiscard}
+                  >
+                    <RotateCcw size={13} style={{ marginRight: 4 }} />
+                    Reset
+                  </button>
+                </div>
+              )}
+
+              {/* Card Footer with Save button */}
+              <div className="ad-rel-action-bar">
+                <button
+                  type="button"
+                  className="ad-rel-save-btn"
+                  disabled={saving || !filterYear || (!isSuper && !scopeDept)}
+                  onClick={handleSave}
+                >
+                  <Save size={16} />
+                  {saving ? "Saving settings..." : "Save Release Settings"}
+                </button>
+                <span style={{ fontSize: "12.5px", color: "#64748b" }}>
+                  {releaseRow
+                    ? `Last saved: ${new Date(releaseRow.updated_at || Date.now()).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                    : "No release record saved yet"}
+                </span>
               </div>
             </div>
-
           </>
         )}
       </section>

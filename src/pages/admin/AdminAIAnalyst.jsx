@@ -1,89 +1,49 @@
-import { useState, useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import AdminLayout from "./AdminLayout";
-import { supabase } from "../../config/supabase";
+import {
+  useAIAnalyst,
+  SUGGESTED_QUESTIONS,
+  QUICK_CHIPS,
+} from "../../context/AIAnalystContext";
+import {
+  Sparkles,
+  Send,
+  RotateCcw,
+  Copy,
+  Check,
+  BarChart3,
+  Users,
+  Target,
+  PieChart,
+} from "lucide-react";
 
-// Phase 8 (Req 4 / Req 6): admin AI chatbox. The chat talks to the
-// admin-analyst Edge Function, which computes a FIXED aggregate
-// digest server-side — the model never touches the database, never
-// sees comments or student identity. Every Q&A is audit-logged.
-// Scope [D9] is enforced in the function from the caller's program
-// assignments; the scope banner shows what the AI may see.
-
-const SUGGESTED_QUESTIONS = [
-  "Which program has the lowest average rating and how big is the gap to the next one?",
-  "List the faculty who need the most attention right now.",
-  "Which evaluation criteria are our weakest overall?",
-  "Where are the biggest participation gaps this period?",
-  "How do the averages trend across the periods we have released?",
-  "Summarize the moderation picture: how many flagged and priority cases?",
-];
-
-const SUGGESTION_CHIPS = SUGGESTED_QUESTIONS.map((q) => {
-  const idx = q.indexOf("and");
-  const short = idx > 0 ? q.slice(0, idx).replace(/[?.]$/, "") : q.replace(/[?.]$/, "");
-  return { full: q, short: short.length <= 46 ? short : short.slice(0, 46) + "…" };
-});
-
-let localId = 0;
+const CARD_ICONS = [BarChart3, Users, Target, PieChart];
 
 export default function AdminAIAnalyst() {
-  const [messages, setMessages] = useState([
-    {
-      id: (localId += 1),
-      role: "assistant",
-      text:
-        "Ask me anything about your evaluation data. I can only analyze aggregate statistics from RELEASED periods — ratings, programs, criteria, participation, and moderation counts. I never have access to comments or student identity.",
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [thinking, setThinking] = useState(false);
-  const [scope, setScope] = useState(null);
+  const {
+    messages,
+    input,
+    setInput,
+    thinking,
+    scope,
+    ask,
+    clearChat,
+    copiedId,
+    copyText,
+  } = useAIAnalyst();
+
   const scrollRef = useRef(null);
 
   useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, [messages, thinking]);
 
-  const ask = async (question) => {
-    const q = (question ?? "").trim();
-    if (!q || thinking) return;
-    setInput("");
-    setMessages((m) => [
-      ...m,
-      { id: (localId += 1), role: "user", text: q },
-    ]);
-    setThinking(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("admin-analyst", {
-        body: { question: q },
-      });
-      if (error) {
-        let msg = "The AI analyst is temporarily unavailable. Please try again.";
-        try {
-          const errBody = await error.context.json();
-          if (errBody?.error) msg = errBody.error;
-        } catch {
-          /* keep default */
-        }
-        setMessages((m) => [
-          ...m,
-          { id: (localId += 1), role: "assistant", text: msg, isError: true },
-        ]);
-      } else if (data) {
-        if (data.scope) setScope(data.scope);
-        setMessages((m) => [
-          ...m,
-          { id: (localId += 1), role: "assistant", text: data.answer },
-        ]);
-      }
-    } catch {
-      setMessages((m) => [
-        ...m,
-        { id: (localId += 1), role: "assistant", text: "Could not reach the AI analyst service.", isError: true },
-      ]);
-    } finally {
-      setThinking(false);
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      ask(input);
     }
   };
 
@@ -91,170 +51,169 @@ export default function AdminAIAnalyst() {
     ? typeof scope.programs === "string"
       ? scope.programs
       : Array.isArray(scope.programs) && scope.programs.length > 0
-        ? scope.programs.join(", ")
-        : "your assigned programs"
-    : "your assigned programs";
+      ? scope.programs.join(", ")
+      : "Assigned Programs"
+    : "Assigned Programs";
 
   return (
-    <AdminLayout title="AI Analyst">
-      <section style={{ padding: "24px", maxWidth: "900px", margin: "0 auto" }}>
-        {/* Scope + disclosure header */}
-        <div
-          style={{
-            background: "#0f172a",
-            color: "#e2e8f0",
-            borderRadius: "12px",
-            padding: "16px 20px",
-            marginBottom: "16px",
-            display: "flex",
-            gap: "14px",
-            alignItems: "flex-start",
-            flexWrap: "wrap",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ maxWidth: "620px" }}>
-            <div style={{ fontWeight: 800, fontSize: "14px", marginBottom: "4px", display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ background: "#4f46e5", borderRadius: "999px", padding: "3px 10px", fontSize: "10.5px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                AI-generated answers
-              </span>
-            </div>
-            <div style={{ fontSize: "12.5px", color: "#94a3b8", lineHeight: 1.55 }}>
-              The analyst answers over a fixed set of pre-computed statistics only — it cannot query raw records,
-              read comments, or see student identity. Every question and answer is recorded in the audit log.
-            </div>
-          </div>
-          <div style={{ fontSize: "12.5px", color: "#94a3b8", textAlign: "right" }}>
-            <div style={{ fontWeight: 700, color: "#e2e8f0", marginBottom: "2px" }}>Data scope</div>
-            <div>{scopeLabel}</div>
-            <div style={{ marginTop: "2px" }}>Released periods only</div>
-          </div>
-        </div>
-
-        {/* Chat window */}
-        <div
-          ref={scrollRef}
-          style={{
-            background: "#fff",
-            border: "1px solid #e5e7eb",
-            borderRadius: "12px",
-            height: "56vh",
-            minHeight: "360px",
-            overflowY: "auto",
-            padding: "20px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "14px",
-          }}
-        >
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              style={{
-                display: "flex",
-                justifyContent: m.role === "user" ? "flex-end" : "flex-start",
-              }}
-            >
-              <div
-                style={{
-                  maxWidth: "78%",
-                  padding: "12px 16px",
-                  borderRadius: "12px",
-                  fontSize: "13.5px",
-                  lineHeight: 1.6,
-                  whiteSpace: "pre-wrap",
-                  ...(m.role === "user"
-                    ? { background: "#0f172a", color: "#fff", borderBottomRightRadius: "4px" }
-                    : m.isError
-                      ? { background: "#fef2f2", color: "#b91c1c", border: "1px solid #fecaca", borderBottomLeftRadius: "4px" }
-                      : { background: "#f1f5f9", color: "#1f2937", borderBottomLeftRadius: "4px" }),
-                }}
-              >
-                {m.role === "assistant" && !m.isError && (
-                  <div style={{ fontSize: "10.5px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.5px", color: "#6366f1", marginBottom: "6px" }}>
-                    AI-generated
-                  </div>
-                )}
-                {m.text}
+    <AdminLayout title="EvalIQ">
+      <div className="ad-content" style={{ display: "flex", flexDirection: "column", height: "100%", padding: "16px 24px", overflowY: "auto" }}>
+        <div className="ad-aiStudio">
+          {/* Executive Header & Scope Bar */}
+          <section className="ad-aiHeader">
+            <div className="ad-aiHeaderLeft">
+              <div className="ad-aiTitleRow">
+                <span className="ad-aiTitle">EvalIQ Studio</span>
+                <span className="ad-aiBadge">
+                  <Sparkles size={11} /> Released Aggregate Engine
+                </span>
+              </div>
+              <div className="ad-aiSub">
+                Direct intelligence query over released faculty evaluations. Student
+                identities, tokens, and qualitative comments are strictly redacted by
+                server-side RLS.
               </div>
             </div>
-          ))}
-          {thinking && (
-            <div style={{ display: "flex", justifyContent: "flex-start" }}>
-              <div style={{ background: "#f1f5f9", color: "#6b7280", borderRadius: "12px", borderBottomLeftRadius: "4px", padding: "12px 16px", fontSize: "13px" }}>
-                Analyzing released statistics…
-              </div>
-            </div>
-          )}
-        </div>
 
-        {/* Suggestions */}
-        {messages.length <= 2 && !thinking && (
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "14px" }}>
-            {SUGGESTION_CHIPS.map((chip) => (
+            <div className="ad-aiHeaderRight">
+              <div className="ad-aiScopeTag">
+                <span className="ad-aiScopeDot" />
+                <strong>Scope:</strong> {scopeLabel}
+              </div>
               <button
-                key={chip.full}
                 type="button"
-                onClick={() => ask(chip.full)}
-                style={{
-                  background: "#eef2ff",
-                  color: "#4f46e5",
-                  border: "1px solid #c7d2fe",
-                  borderRadius: "999px",
-                  padding: "6px 14px",
-                  fontSize: "12.5px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
+                className="ad-aiBtnClear"
+                onClick={clearChat}
+                title="Reset conversation"
               >
-                {chip.short}
+                <RotateCcw size={12} />
+                <span>Reset Session</span>
               </button>
-            ))}
-          </div>
-        )}
+            </div>
+          </section>
 
-        {/* Composer */}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            ask(input);
-          }}
-          style={{ display: "flex", gap: "10px", marginTop: "14px" }}
-        >
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about program averages, weak criteria, participation, moderation counts…"
-            maxLength={1000}
-            disabled={thinking}
-            style={{
-              flex: 1,
-              border: "1px solid #d1d5db",
-              borderRadius: "10px",
-              padding: "12px 16px",
-              fontSize: "14px",
-              outline: "none",
-            }}
-          />
-          <button
-            type="submit"
-            disabled={thinking || !input.trim()}
-            style={{
-              background: thinking || !input.trim() ? "#94a3b8" : "#0f172a",
-              color: "#fff",
-              border: "none",
-              borderRadius: "10px",
-              padding: "12px 22px",
-              fontSize: "14px",
-              fontWeight: 700,
-              cursor: thinking ? "wait" : "pointer",
-            }}
-          >
-            {thinking ? "…" : "Ask"}
-          </button>
-        </form>
-      </section>
+          {/* Chat Window */}
+          <section className="ad-aiChatContainer">
+            <div className="ad-aiMessages" ref={scrollRef}>
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={
+                    m.role === "user"
+                      ? "ad-aiMsgUser"
+                      : `ad-aiMsgAssistant ${m.isError ? "ad-aiMsgError" : ""}`
+                  }
+                >
+                  {m.role === "assistant" && !m.isError && (
+                    <div className="ad-aiMsgHeader">
+                      <span>EvalIQ Assistant</span>
+                      <button
+                        type="button"
+                        className="ad-aiMsgCopyBtn"
+                        onClick={() => copyText(m.id, m.text)}
+                      >
+                        {copiedId === m.id ? (
+                          <>
+                            <Check size={12} color="#10b981" />
+                            <span>Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={12} />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                  {m.text}
+                </div>
+              ))}
+
+              {/* 4 Interactive Starter Cards (Inside the chat view when fresh) */}
+              {messages.length <= 1 && (
+                <div className="ad-aiLaunchpad">
+                  {SUGGESTED_QUESTIONS.map((card, idx) => {
+                    const Icon = CARD_ICONS[idx % CARD_ICONS.length];
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        className="ad-aiLaunchCard"
+                        onClick={() => ask(card.prompt)}
+                        disabled={thinking}
+                      >
+                        <div className="ad-aiLaunchCardTop">
+                          <span className="ad-aiLaunchBadge">{card.category}</span>
+                          <Icon size={15} color="#2563eb" />
+                        </div>
+                        <div className="ad-aiLaunchTitle">{card.title}</div>
+                        <div className="ad-aiLaunchPrompt">“{card.prompt}”</div>
+                        <div className="ad-aiLaunchDesc">{card.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {thinking && (
+                <div className="ad-aiThinking">
+                  <span className="ad-aiDots">
+                    <span className="ad-aiDot" />
+                    <span className="ad-aiDot" />
+                    <span className="ad-aiDot" />
+                  </span>
+                  <span>Synthesizing aggregate statistics…</span>
+                </div>
+              )}
+            </div>
+
+            {/* Unified Composer */}
+            <div className="ad-aiComposerArea">
+              <div className="ad-aiChipsRow">
+                {QUICK_CHIPS.map((chip, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className="ad-aiChip"
+                    onClick={() => ask(chip)}
+                    disabled={thinking}
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+
+              <div className="ad-aiInputBar">
+                <input
+                  type="text"
+                  className="ad-aiInput"
+                  placeholder="Ask EvalIQ about program averages, criteria weaknesses, participation gaps, or moderation…"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={thinking}
+                  maxLength={1000}
+                />
+                <button
+                  type="button"
+                  className="ad-aiSendBtn"
+                  onClick={() => ask(input)}
+                  disabled={thinking || !input.trim()}
+                >
+                  <Send size={14} />
+                  <span>Send</span>
+                </button>
+              </div>
+
+              <div className="ad-aiDisclaimer">
+                All queries and digests are securely logged in the admin audit trail.
+                Answers are generated strictly over released periods.
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
     </AdminLayout>
   );
 }

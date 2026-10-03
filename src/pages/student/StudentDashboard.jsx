@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import { isAssignmentMatch } from "../../utils/assignmentMatch";
 import { pickActivePeriod } from "../../utils/periodStatus";
+import { notifyAdminsForDepartment } from "../../utils/notifications";
 import {
   Calendar,
   Check,
@@ -14,20 +15,31 @@ import {
   ArrowRight,
   AlertCircle,
   CheckCircle2,
+  X,
+  Send,
+  FileText,
 } from "lucide-react";
 import StudentLayout from "./StudentLayout";
+
+const ISSUE_CATEGORIES = [
+  { id: "missing_subject", label: "Missing Subject", icon: "➕" },
+  { id: "wrong_section", label: "Wrong Section", icon: "👥" },
+  { id: "irregular", label: "Irregular Course", icon: "🔄" },
+  { id: "duplicate", label: "Duplicate Subject", icon: "📑" },
+  { id: "other", label: "Other", icon: "💬" },
+];
 
 export default function StudentDashboard() {
   const [stats, setStats] = useState({ total: 0, evaluated: 0, pending: 0, open: 0 });
   const [activeYear, setActiveYear] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [recentActivity, setRecentActivity] = useState([]);
-
   const [assignedFaculty, setAssignedFaculty] = useState([]);
-  const [submissionsData, setSubmissionsData] = useState(new Map());
 
   // Phase 3 [Req 2 / D5]: in-app subject-list correction requests.
   const [showReportIssue, setShowReportIssue] = useState(false);
+  const [reportTab, setReportTab] = useState("submit"); // "submit" | "history"
+  const [reportCategory, setReportCategory] = useState("missing_subject");
+  const [reportSubjectId, setReportSubjectId] = useState("");
   const [reportMessage, setReportMessage] = useState("");
   const [reportBusy, setReportBusy] = useState(false);
   const [reportError, setReportError] = useState("");
@@ -87,14 +99,13 @@ export default function StudentDashboard() {
           status: y.status,
         }));
 
-        const active = pickActivePeriod(yearsRes.data || [], studentDept) || null;
+        const active = pickActivePeriod(years, studentDept) || null;
         setActiveYear(active);
 
         const subMap = new Map();
         submissions.forEach((s) => {
           subMap.set(s.assignmentId, s);
         });
-        setSubmissionsData(subMap);
 
         if (!active) {
           setStats({ total: 0, evaluated: 0, pending: 0, open: 0 });
@@ -155,28 +166,6 @@ export default function StudentDashboard() {
           pending: matchedFaculty.length - evaluatedCount,
           open: openCount,
         });
-
-        // Recent activity feed from submitted evaluations
-        const activities = [];
-        subMap.forEach((sub, assignmentId) => {
-          const match = assignments.find((a) => a.id === assignmentId);
-          const ts = sub.submittedAt;
-          const date = ts ? new Date(ts) : null;
-          activities.push({
-            type: "submitted",
-            label: "Submitted evaluation",
-            detail: match ? (match.subjectCode || match.subjectName || "Evaluation") : "Evaluation",
-            date,
-          });
-        });
-
-        activities.sort((a, b) => {
-          if (!a.date && !b.date) return 0;
-          if (!a.date) return 1;
-          if (!b.date) return -1;
-          return b.date - a.date;
-        });
-        setRecentActivity(activities.slice(0, 5));
       } catch (err) {
         console.error("StudentDashboard fetch error:", err);
       } finally {
@@ -204,41 +193,51 @@ export default function StudentDashboard() {
   }, [currentUser]);
 
   const submitCorrectionRequest = async () => {
-    const message = reportMessage.trim();
-    if (!message) {
-      setReportError("Please describe the issue with your subject list.");
+    const trimmed = reportMessage.trim();
+    if (!trimmed) {
+      setReportError("Please enter a description of the issue.");
       return;
     }
+    if (trimmed.length < 10) {
+      setReportError("Please provide a little more detail (at least 10 characters).");
+      return;
+    }
+
     setReportBusy(true);
     setReportError("");
+
+    const categoryObj = ISSUE_CATEGORIES.find((c) => c.id === reportCategory) || ISSUE_CATEGORIES[0];
+    const selectedSub = assignedFaculty.find((f) => f.assignmentId === reportSubjectId);
+    const subDesc = selectedSub
+      ? `${selectedSub.subjectCode || selectedSub.subjectName} (${selectedSub.name || "No faculty"})`
+      : reportSubjectId === "not_listed"
+      ? "Subject not listed"
+      : "";
+
+    const payloadMessage = `[${categoryObj.label}]${subDesc ? ` [${subDesc}]` : ""}: ${trimmed}`;
+
     try {
       const { error } = await supabase.from("subject_correction_requests").insert({
         student_id: currentUser.id,
-        message,
+        message: payloadMessage,
       });
       if (error) throw error;
+
       setReportMessage("");
-      setShowReportIssue(false);
+      setReportSubjectId("");
       await loadMyRequests();
+      setReportTab("history");
 
-      // Notify administrators in real-time
+      // Notify administrators in real-time (department-scoped + super_admin)
       try {
-        const { data: adminUsers } = await supabase
-          .from("users")
-          .select("id")
-          .in("role", ["admin", "super_admin"])
-          .neq("status", "deleted");
-
-        if (adminUsers && adminUsers.length > 0) {
-          const notifs = adminUsers.map((adm) => ({
-            user_id: adm.id,
-            title: "New Subject Issue Reported",
-            message: `${displayName} (${dept} ${yearLevel} - ${section}) reported: "${message.substring(0, 80)}${message.length > 80 ? "..." : ""}"`,
-            type: "warning",
-            link: "/admin/subject-corrections",
-          }));
-          await supabase.from("notifications").insert(notifs);
-        }
+        await notifyAdminsForDepartment({
+          department: dept,
+          departmentId: userProfile?.department_id || null,
+          title: "New Subject Issue Reported",
+          message: `${displayName} (${dept} ${yearLevel} - ${section}) reported: "${payloadMessage.substring(0, 80)}${payloadMessage.length > 80 ? "..." : ""}"`,
+          type: "warning",
+          link: "/admin/subject-corrections",
+        });
       } catch (notifErr) {
         console.warn("Failed to notify admins of subject issue:", notifErr);
       }
@@ -490,72 +489,219 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      {/* Phase 3: report a wrong subject list; admin resolves it. */}
+      {/* Phase 3: Enhanced Subject Report Issue Modal */}
       {showReportIssue && (
-        <div className="se-modal" role="dialog" aria-modal="true">
-          <div className="se-modalOverlay" onClick={() => setShowReportIssue(false)} />
-          <div className="se-modalContent" style={{ maxWidth: "520px" }}>
-            <div className="se-modalHeader">
-              <div>
-                <h3 className="se-modalTitle">Report Subject Issue</h3>
-                <p className="se-modalSubtitle" style={{ margin: "4px 0 0", fontSize: "13px", color: "#6b7280" }}>
-                  Wrong subject or teacher on your list? Tell your admin — they will correct it.
-                </p>
+        <div className="sri-modalOverlay" role="dialog" aria-modal="true" onClick={() => setShowReportIssue(false)}>
+          <div className="sri-modalCard" onClick={(e) => e.stopPropagation()}>
+            <div className="sri-header">
+              <div className="sri-headerTitleRow">
+                <div className="sri-headerIconBadge">
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <h3 className="sri-headerTitle">Report Subject Issue</h3>
+                </div>
               </div>
-              <button type="button" className="se-modalClose" onClick={() => setShowReportIssue(false)}>
-                ✕
+              <button
+                type="button"
+                className="sri-headerCloseBtn"
+                onClick={() => setShowReportIssue(false)}
+                aria-label="Close"
+              >
+                <X size={16} />
               </button>
             </div>
-            <div className="se-modalBody">
-              <textarea
-                value={reportMessage}
-                onChange={(e) => setReportMessage(e.target.value)}
-                rows={4}
-                maxLength={1000}
-                placeholder="Example: I am in BSIT 2-A but I see subjects for BSIT 2-B…"
-                style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "14px", resize: "vertical" }}
-              />
-              {reportError && (
-                <p style={{ color: "#dc2626", fontSize: "13px", margin: "8px 0 0" }}>{reportError}</p>
-              )}
-              {myRequests.length > 0 && (
-                <div style={{ marginTop: "16px" }}>
-                  <h4 style={{ fontSize: "13px", fontWeight: 700, color: "#374151", marginBottom: "8px" }}>
-                    My reports
-                  </h4>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "220px", overflowY: "auto" }}>
-                    {myRequests.map((r) => (
-                      <div key={r.id} style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "10px 12px", fontSize: "13px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
-                          <span style={{ fontWeight: 600, textTransform: "capitalize", color: r.status === "new" ? "#d97706" : r.status === "resolved" ? "#16a34a" : "#6b7280" }}>
-                            {r.status}
-                          </span>
-                          <span style={{ color: "#9ca3af", fontSize: "12px" }}>
-                            {r.created_at ? new Date(r.created_at).toLocaleDateString() : ""}
-                          </span>
-                        </div>
-                        <p style={{ margin: "6px 0 0", color: "#374151" }}>{r.message}</p>
-                        {r.resolution_note && (
-                          <p style={{ margin: "6px 0 0", color: "#16a34a" }}>Admin: {r.resolution_note}</p>
-                        )}
-                      </div>
-                    ))}
+
+            <div className="sri-body">
+              {/* Student Academic Profile Banner */}
+              <div className="sri-profileBanner">
+                <Info size={16} className="sri-profileBannerIcon" />
+                <span>
+                  Enrolled as: <strong>{dept}</strong> · <strong>{yearLevel}</strong> · <strong>Section {section}</strong>
+                </span>
+              </div>
+
+              {/* Segmented Tab Navigation */}
+              <div className="sri-tabNav">
+                <button
+                  type="button"
+                  className={`sri-tabBtn ${reportTab === "submit" ? "sri-tabBtn--active" : ""}`}
+                  onClick={() => setReportTab("submit")}
+                >
+                  Submit Issue
+                </button>
+                <button
+                  type="button"
+                  className={`sri-tabBtn ${reportTab === "history" ? "sri-tabBtn--active" : ""}`}
+                  onClick={() => setReportTab("history")}
+                >
+                  My Reports
+                  {myRequests.length > 0 && (
+                    <span className="sri-tabBadge">{myRequests.length}</span>
+                  )}
+                </button>
+              </div>
+
+              {reportTab === "submit" ? (
+                <>
+                  {/* Category Chips */}
+                  <div>
+                    <label className="sri-label">Select Issue Category</label>
+                    <div className="sri-chipsGrid">
+                      {ISSUE_CATEGORIES.map((cat) => {
+                        const isSelected = reportCategory === cat.id;
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            className={`sri-chip ${isSelected ? "sri-chip--selected" : ""}`}
+                            onClick={() => setReportCategory(cat.id)}
+                          >
+                            <span>{cat.icon}</span>
+                            <span>{cat.label}</span>
+                            {isSelected && <Check size={13} style={{ marginLeft: 2 }} />}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
+
+                  {/* Affected Subject Selector */}
+                  <div>
+                    <label className="sri-label">Select Affected Subject (Optional)</label>
+                    <select
+                      className="sri-select"
+                      value={reportSubjectId}
+                      onChange={(e) => setReportSubjectId(e.target.value)}
+                    >
+                      <option value="">Choose a subject from your list…</option>
+                      {assignedFaculty.map((f) => (
+                        <option key={f.assignmentId} value={f.assignmentId}>
+                          {f.subjectCode || f.subjectName} — {f.name || "No faculty assigned"}
+                        </option>
+                      ))}
+                      <option value="not_listed">➕ Other / Subject missing from list</option>
+                    </select>
+                  </div>
+
+                  {/* Issue Description Textarea */}
+                  <div className="sri-textareaWrap">
+                    <label className="sri-label">Issue Details</label>
+                    <textarea
+                      className="sri-textarea"
+                      value={reportMessage}
+                      onChange={(e) => setReportMessage(e.target.value)}
+                      maxLength={1000}
+                      rows={4}
+                      placeholder={
+                        reportCategory === "missing_subject"
+                          ? "State which subject code and instructor you are missing from your enrolled curriculum..."
+                          : reportCategory === "wrong_section"
+                          ? "Describe the section discrepancy (e.g. I am in Section A, but see Section B subjects)..."
+                          : reportCategory === "irregular"
+                          ? "Specify the irregular or retake subject you need added to your evaluation list..."
+                          : "Describe the issue with your subject list in detail..."
+                      }
+                    />
+                    <div className="sri-textareaFooter">
+                      <span>Please be specific so your admin can resolve it promptly.</span>
+                      <span className="sri-charCounter">{reportMessage.length} / 1000</span>
+                    </div>
+                  </div>
+
+                  {reportError && (
+                    <div className="sri-errorAlert">
+                      <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                      <span>{reportError}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* History Tab */
+                <div className="sri-historyList">
+                  {myRequests.length === 0 ? (
+                    <div className="sri-emptyHistory">
+                      <Clock size={36} className="sri-emptyHistoryIcon" />
+                      <p style={{ margin: 0, fontWeight: 600 }}>No reports submitted yet</p>
+                      <p style={{ margin: "4px 0 0", fontSize: "12.5px" }}>
+                        Any subject issue you submit will appear here with admin updates.
+                      </p>
+                    </div>
+                  ) : (
+                    myRequests.map((r) => {
+                      const isResolved = r.status === "resolved";
+                      const isNew = r.status === "new";
+                      return (
+                        <div key={r.id} className="sri-reportCard">
+                          <div className="sri-reportCardTop">
+                            <span
+                              className={`sri-statusBadge ${
+                                isResolved
+                                  ? "sri-statusBadge--resolved"
+                                  : isNew
+                                  ? "sri-statusBadge--new"
+                                  : "sri-statusBadge--dismissed"
+                              }`}
+                            >
+                              ● {isNew ? "Pending Review" : isResolved ? "Resolved" : "Dismissed"}
+                            </span>
+                            <span className="sri-reportDate">
+                              {r.created_at
+                                ? new Date(r.created_at).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                  })
+                                : ""}
+                            </span>
+                          </div>
+
+                          <p className="sri-reportMsg">{r.message}</p>
+
+                          {r.resolution_note && (
+                            <div className="sri-adminNoteCallout">
+                              <CheckCircle2 size={15} className="sri-adminNoteIcon" />
+                              <div>
+                                <strong>Admin Note:</strong> {r.resolution_note}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               )}
             </div>
-            <div className="se-modalFooter">
-              <button type="button" className="se-modalBtn se-modalBtn--cancel" onClick={() => setShowReportIssue(false)}>
-                Cancel
-              </button>
+
+            <div className="sri-footer">
               <button
                 type="button"
-                className="se-modalBtn se-modalBtn--submit"
-                onClick={submitCorrectionRequest}
-                disabled={reportBusy}
+                className="sri-btnCancel"
+                onClick={() => setShowReportIssue(false)}
               >
-                {reportBusy ? "Sending..." : "Send Report"}
+                {reportTab === "history" ? "Close" : "Cancel"}
               </button>
+
+              {reportTab === "submit" ? (
+                <button
+                  type="button"
+                  className="sri-btnSubmit"
+                  onClick={submitCorrectionRequest}
+                  disabled={reportBusy}
+                >
+                  <Send size={14} />
+                  {reportBusy ? "Submitting..." : "Submit Report"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="sri-btnSubmit"
+                  onClick={() => setReportTab("submit")}
+                >
+                  New Report
+                </button>
+              )}
             </div>
           </div>
         </div>

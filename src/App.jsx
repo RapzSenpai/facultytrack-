@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { SuperScopeProvider } from "./context/SuperScopeContext";
 import { NotificationProvider } from "./context/NotificationContext";
 import { DialogProvider } from "./context/DialogContext";
+import { AIAnalystProvider } from "./context/AIAnalystContext";
 import NotificationToast from "./components/notifications/NotificationToast";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -68,8 +69,9 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <SuperScopeGate>
-          <NotificationProvider>
-            <DialogProvider>
+          <AIAnalystProvider>
+            <NotificationProvider>
+              <DialogProvider>
               <NotificationToast />
               <Routes>
               {/* Public routes */}
@@ -116,7 +118,8 @@ export default function App() {
             </Routes>
             </DialogProvider>
           </NotificationProvider>
-        </SuperScopeGate>
+        </AIAnalystProvider>
+      </SuperScopeGate>
       </AuthProvider>
     </BrowserRouter>
   );

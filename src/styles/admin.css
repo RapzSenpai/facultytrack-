@@ -42,18 +42,18 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 18px 14px;
+  padding: 12px 14px;
   background: transparent;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   transition: justify-content 0.3s ease;
   white-space: nowrap;
   position: relative;
-  min-height: 72px;
+  min-height: 60px;
 }
 
 .ad--open .ad-brand {
   justify-content: flex-start;
-  padding: 18px 16px;
+  padding: 12px 16px;
 }
 
 .ad-logo {
@@ -125,7 +125,7 @@
 
 .ad--open .ad-menuLabel {
   text-align: left;
-  padding: 14px 16px 6px;
+  padding: 8px 16px 3px;
   visibility: visible;
   height: auto;
 }
@@ -133,13 +133,13 @@
 .ad-nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   padding: 0 8px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .ad-nav:first-of-type {
-  margin-top: 14px;
+  margin-top: 8px;
 }
 
 .ad-link {
@@ -147,7 +147,7 @@
   align-items: center;
   justify-content: center;
   gap: 11px;
-  padding: 10px 8px;
+  padding: 8px 8px;
   border-radius: var(--radius);
   background: transparent;
   color: rgba(255, 255, 255, 0.7);
@@ -162,7 +162,7 @@
 
 .ad--open .ad-link {
   justify-content: flex-start;
-  padding: 10px 13px;
+  padding: 7px 12px;
 }
 
 .ad-link:hover {
@@ -762,6 +762,41 @@
 .ad-btnSecondary:active {
   transform: translateY(0);
 }
+
+.ad-btnDanger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  background: #dc2626;
+  color: #fff;
+  border: 1.5px solid #dc2626;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: auto;
+  white-space: nowrap;
+}
+
+.ad-btnDanger:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+}
+
+.ad-btnDanger:active {
+  transform: translateY(0);
+}
+
+.ad-btnDanger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
 
 /* ========================= CRITERIA LIST ========================= */
 .ad-criteriaList {
@@ -4000,9 +4035,15 @@ select.ad-input {
 /* ── KPI Stats Grid ── */
 .ad-rel-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin-bottom: 24px;
+}
+
+@media (max-width: 900px) {
+  .ad-rel-stats {
+    grid-template-columns: 1fr;
+  }
 }
 
 .ad-rel-stat-card {
@@ -4017,6 +4058,29 @@ select.ad-input {
   justify-content: space-between;
   position: relative;
   overflow: hidden;
+}
+
+/* ── Focused Release Settings Card ── */
+.ad-rel-settings-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  margin-bottom: 24px;
+}
+
+.ad-rel-settings-header {
+  padding-bottom: 14px;
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 18px;
+}
+
+.ad-rel-settings-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
 }
 
 .ad-rel-stat-card:hover {
@@ -5314,6 +5378,7 @@ select.ad-input {
 .ad-kpiCard--success::before { background: linear-gradient(90deg, #059669, #10b981); }
 .ad-kpiCard--info::before { background: linear-gradient(90deg, #0284c7, #38bdf8); }
 .ad-kpiCard--purple::before { background: linear-gradient(90deg, #7c3aed, #a855f7); }
+.ad-kpiCard--amber::before { background: linear-gradient(90deg, #d97706, #f59e0b); }
 
 .ad-kpiHeader {
   display: flex;
@@ -5360,10 +5425,16 @@ select.ad-input {
   color: #7c3aed;
 }
 
+.ad-kpiCard--amber .ad-kpiIcon {
+  background: #fffbeb;
+  color: #d97706;
+}
+
 .ad-kpiBody {
   display: flex;
   align-items: baseline;
   gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 6px;
 }
 
@@ -5722,3 +5793,972 @@ select.ad-input {
   font-weight: 700;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
+
+/* ==========================================================================
+   SUBJECT CORRECTIONS: INTERACTIVE CARDS & VIEW SWITCHER
+   ========================================================================== */
+
+/* View Mode Switcher */
+.asc-viewToggle {
+  display: inline-flex;
+  align-items: center;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.asc-toggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.asc-toggleBtn:hover {
+  color: #1e293b;
+}
+
+.asc-toggleBtn.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  font-weight: 700;
+}
+
+/* Card Grid */
+.asc-cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 18px;
+  margin-top: 14px;
+}
+
+@media (max-width: 640px) {
+  .asc-cardGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Interactive Ticket Card */
+.asc-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  position: relative;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+  text-align: left;
+}
+
+.asc-card:hover {
+  transform: translateY(-2px);
+  border-color: #cbd5e1;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 4px 6px -2px rgba(15, 23, 42, 0.03);
+}
+
+/* Accent Top Border */
+.asc-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  transition: height 0.2s ease;
+}
+
+.asc-card:hover::before {
+  height: 5px;
+}
+
+.asc-card--new::before {
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+.asc-card--resolved::before {
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.asc-card--dismissed::before {
+  background: linear-gradient(90deg, #94a3b8, #cbd5e1);
+}
+
+/* Card Header */
+.asc-cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.asc-studentInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.asc-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(30, 58, 138, 0.2);
+}
+
+.asc-studentMeta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.asc-studentName {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.asc-studentSubMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.asc-schoolId {
+  font-size: 11.5px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.asc-deptBadge {
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 1.5px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  border: 1px solid #dbeafe;
+}
+
+/* Status Pill */
+.asc-statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.asc-statusBadge--new {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.asc-statusBadge--resolved {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.asc-statusBadge--dismissed {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.asc-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.asc-dot--pulse {
+  animation: ascPulse 1.8s infinite;
+}
+
+@keyframes ascPulse {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Tag Chips */
+.asc-tagsRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.asc-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2.5px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.asc-tag--category {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fee2e2;
+}
+
+.asc-tag--subject {
+  background: #f0f9ff;
+  color: #0369a1;
+  border: 1px solid #e0f2fe;
+}
+
+/* Card Message Box */
+.asc-msgBox {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  min-height: 52px;
+}
+
+.asc-msgText {
+  margin: 0;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Admin Note Callout */
+.asc-adminCallout {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #166534;
+}
+
+.asc-adminCalloutIcon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.asc-adminCalloutText {
+  flex: 1;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Card Footer */
+.asc-cardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.asc-cardTime {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.asc-cardActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.asc-btnRespond {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #1e3a8a;
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.asc-btnRespond:hover {
+  background: #1e40af;
+  box-shadow: 0 2px 4px rgba(30, 64, 175, 0.2);
+}
+
+.asc-btnAdjust {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.asc-btnAdjust:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.asc-btnDelete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.asc-btnDelete:hover {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+/* Empty State Card */
+.asc-emptyState {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 56px 20px;
+  background: #ffffff;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 14px;
+}
+
+/* ==========================================================================
+   AI ANALYST & FLOATING COPILOT SUITE
+   ========================================================================== */
+.ad-aiStudio {
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+/* Top Executive Scope Banner */
+.ad-aiHeader {
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f1f3a 100%);
+  border-radius: 12px;
+  padding: 12px 20px;
+  color: #fff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  box-shadow: 0 4px 16px rgba(15, 31, 58, 0.12);
+  border-top: 3px solid #f5c400;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ad-aiHeaderLeft {
+  max-width: 650px;
+}
+
+.ad-aiTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 3px;
+}
+
+.ad-aiTitle {
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.2px;
+}
+
+.ad-aiBadge {
+  background: rgba(245, 196, 0, 0.18);
+  color: #f5c400;
+  border: 1px solid rgba(245, 196, 0, 0.4);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ad-aiSub {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
+.ad-aiHeaderRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.ad-aiScopeTag {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  color: #e2e8f0;
+  text-align: right;
+  line-height: 1.3;
+}
+
+.ad-aiScopeDot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  margin-right: 6px;
+  box-shadow: 0 0 6px #10b981;
+}
+
+.ad-aiBtnClear {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #cbd5e1;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+.ad-aiBtnClear:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+/* 4-Card Launchpad Grid */
+.ad-aiLaunchpad {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.ad-aiLaunchCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  position: relative;
+  overflow: hidden;
+}
+
+.ad-aiLaunchCard::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #cbd5e1;
+  transition: background 0.2s ease;
+}
+
+.ad-aiLaunchCard:hover {
+  transform: translateY(-2px);
+  border-color: #93c5fd;
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.08);
+}
+
+.ad-aiLaunchCard:hover::before {
+  background: #2563eb;
+}
+
+.ad-aiLaunchCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ad-aiLaunchBadge {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #2563eb;
+  background: #eff6ff;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.ad-aiLaunchTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ad-aiLaunchPrompt {
+  font-size: 11.5px;
+  color: #475569;
+  line-height: 1.4;
+}
+
+.ad-aiLaunchDesc {
+  font-size: 10.5px;
+  color: #94a3b8;
+  margin-top: auto;
+}
+
+/* Chat Container */
+.ad-aiChatContainer {
+  flex: 1;
+  min-height: 380px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+}
+
+.ad-aiMessages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scroll-behavior: smooth;
+}
+
+.ad-aiMsgUser {
+  align-self: flex-end;
+  max-width: 76%;
+  background: #1e3a5f;
+  color: #ffffff;
+  padding: 12px 18px;
+  border-radius: 18px 18px 4px 18px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  box-shadow: 0 2px 8px rgba(30, 58, 95, 0.16);
+  word-break: break-word;
+}
+
+.ad-aiMsgAssistant {
+  align-self: flex-start;
+  max-width: 82%;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #1e293b;
+  padding: 14px 18px;
+  border-radius: 18px 18px 18px 4px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  word-break: break-word;
+}
+
+.ad-aiMsgError {
+  background: #fef2f2 !important;
+  border-color: #fecaca !important;
+  color: #991b1b !important;
+}
+
+.ad-aiMsgHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #4f46e5;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ad-aiMsgCopyBtn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.ad-aiMsgCopyBtn:hover {
+  color: #1e3a5f;
+  background: #e2e8f0;
+}
+
+.ad-aiThinking {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.ad-aiDots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.ad-aiDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6366f1;
+  animation: adPulseDot 1.4s infinite ease-in-out both;
+}
+
+.ad-aiDot:nth-child(1) { animation-delay: -0.32s; }
+.ad-aiDot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes adPulseDot {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+  40% { transform: scale(1.1); opacity: 1; }
+}
+
+/* Composer Area */
+.ad-aiComposerArea {
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ad-aiChipsRow {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.ad-aiChipsRow::-webkit-scrollbar {
+  display: none;
+}
+
+.ad-aiChip {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.ad-aiChip:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.ad-aiInputBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 4px 6px 4px 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ad-aiInputBar:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.ad-aiInput {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: #1e293b;
+  background: transparent;
+  padding: 8px 0;
+}
+
+.ad-aiInput::placeholder {
+  color: #94a3b8;
+}
+
+.ad-aiSendBtn {
+  background: #1e3a5f;
+  color: #ffffff;
+  border: none;
+  border-radius: 9px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.ad-aiSendBtn:hover:not(:disabled) {
+  background: #2b5182;
+  transform: translateY(-1px);
+}
+
+.ad-aiSendBtn:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.ad-aiDisclaimer {
+  font-size: 11px;
+  color: #94a3b8;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   FLOATING COPILOT TRIGGER & SLIDE-OVER DRAWER
+   ========================================================================== */
+.ad-floatingCopilotBtn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 990;
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f1f3a 100%);
+  color: #ffffff;
+  border: 1.5px solid #f5c400;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(30, 58, 95, 0.35);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ad-floatingCopilotBtn:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 12px 28px rgba(30, 58, 95, 0.45);
+}
+
+.ad-topCopilotBtn {
+  background: #eff6ff;
+  color: #1e3a5f;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ad-topCopilotBtn:hover {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.ad-copilotBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 1000;
+  animation: adFadeIn 0.2s ease;
+}
+
+.ad-copilotDrawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 440px;
+  max-width: 92vw;
+  background: #ffffff;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 32px rgba(15, 23, 42, 0.2);
+  animation: adSlideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ad-copilotDrawerHeader {
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f1f3a 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px solid #f5c400;
+}
+
+.ad-copilotDrawerTitle {
+  font-size: 15px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ad-copilotDrawerActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ad-copilotIconBtn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #e2e8f0;
+  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ad-copilotIconBtn:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+@keyframes adFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes adSlideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+

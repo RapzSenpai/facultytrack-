@@ -24,6 +24,8 @@ import { useSuperScope } from "../../context/SuperScopeContext";
 import { supabase } from "../../config/supabase";
 import logo from "../../assets/logo.jpg";
 import NotificationBell from "../../components/notifications/NotificationBell";
+import { useAIAnalyst } from "../../context/AIAnalystContext";
+import AdminAICopilotDrawer from "../../components/admin/AdminAICopilotDrawer";
 
 // Phase 7 [Req 10]: the Program Assignments page is super-admin-only;
 // RLS enforces the same rule server-side.
@@ -39,10 +41,35 @@ const navSections = [
   {
     id: "system-users",
     label: "SYSTEM USERS",
+    isFallback: true,
     items: [
       { key: "faculty", label: "Faculty", path: "/admin/faculty", icon: Users },
-      { key: "approvals", label: "Approvals", path: "/admin/approvals", icon: ShieldCheck },
       { key: "student", label: "Student", path: "/admin/student", icon: UserCircle2 },
+      { key: "approvals", label: "Approvals", path: "/admin/approvals", icon: ShieldCheck },
+    ],
+  },
+  {
+    id: "academic-setup",
+    label: "ACADEMIC SETUP",
+    isFallback: true,
+    items: [
+      { key: "department", label: "Curriculum & Sections", path: "/admin/department", icon: GraduationCap },
+      { key: "subject", label: "All Subjects", path: "/admin/subject", icon: BookOpen, scopedHide: true },
+      { key: "class-assignment", label: "Class Assignment", path: "/admin/class-assignment", icon: ClipboardList },
+      { key: "academic-year", label: "Evaluation Period", path: "/admin/academic-year", icon: CalendarDays },
+      { key: "questionnaire", label: "Questionnaire", path: "/admin/questionnaire", icon: FileText },
+    ],
+  },
+  {
+    id: "evaluation-management",
+    label: "EVALUATION & REPORTS",
+    isFallback: true,
+    items: [
+      { key: "subject-corrections", label: "Subject Corrections", path: "/admin/subject-corrections", icon: ClipboardCheck },
+      { key: "moderation", label: "Moderation & Priority", path: "/admin/moderation", icon: ClipboardCheck },
+      { key: "release-management", label: "Release Management", path: "/admin/release-management", icon: ClipboardCheck, scopedOnly: true },
+      { key: "report", label: "Evaluation Report", path: "/admin/report", icon: FileText },
+      { key: "ai-analyst", label: "EvalIQ", path: "/admin/ai-analyst", icon: Sparkles },
     ],
   },
   {
@@ -53,28 +80,7 @@ const navSections = [
       { key: "program-assignments", label: "Program Assignments", path: "/admin/program-assignments", icon: UserCircle2, superOnly: true },
       { key: "reports", label: "Reports & Export", path: "/admin/reports", icon: FileText, superOnly: true },
       { key: "analytics", label: "Analytics", path: "/admin/analytics", icon: BarChart3, superOnly: true },
-    ],
-  },
-  {
-    id: "release",
-    label: "RELEASE",
-    items: [
-      { key: "release-management", label: "Release Management", path: "/admin/release-management", icon: ClipboardCheck },
-    ],
-  },
-  {
-    id: "manage-evaluation",
-    label: "MANAGE EVALUATION",
-    items: [
-      { key: "department", label: "Curriculum & Sections", path: "/admin/department", icon: GraduationCap },
-      { key: "subject", label: "All Subjects", path: "/admin/subject", icon: BookOpen, scopedHide: true },
-      { key: "class-assignment", label: "Class Assignment", path: "/admin/class-assignment", icon: ClipboardList },
-      { key: "academic-year", label: "Evaluation Period", path: "/admin/academic-year", icon: CalendarDays },
-      { key: "subject-corrections", label: "Subject Corrections", path: "/admin/subject-corrections", icon: ClipboardCheck },
-      { key: "moderation", label: "Moderation & Priority", path: "/admin/moderation", icon: ClipboardCheck },
-      { key: "questionnaire", label: "Questionnaire", path: "/admin/questionnaire", icon: FileText },
-      { key: "report", label: "Evaluation Report", path: "/admin/report", icon: FileText },
-      { key: "ai-analyst", label: "AI Analyst", path: "/admin/ai-analyst", icon: Sparkles },
+      { key: "release-management-super", label: "Release Management", path: "/admin/release-management", icon: ClipboardCheck, superOnly: true },
     ],
   },
 ];
@@ -89,6 +95,7 @@ function AdminLayoutInner({ title, children }) {
   const { logout, userProfile } = useAuth();
   const superAdmin = isSuperAdmin(userProfile);
   const { inScopeName, loading: scopeLoading } = useScopedAdmin();
+  const { toggleDrawer } = useAIAnalyst();
 
   useEffect(() => {
     const fetchPending = async () => {
@@ -198,41 +205,47 @@ function AdminLayoutInner({ title, children }) {
         {navSections.map((section) => {
           // Super: management screens collapse into a fallback group so
           // the sidebar stays oversight-focused. Admins see everything flat.
-          const isFallbackSection = superAdmin && (section.id === "system-users" || section.id === "manage-evaluation");
+          const isFallbackSection = superAdmin && section.isFallback;
           if (isFallbackSection) return null;
+
+          const visibleItems = section.items.filter(
+            (item) => (!item.superOnly || superAdmin) && (!item.scopedHide || superAdmin) && (!item.scopedOnly || !superAdmin)
+          );
+          if (visibleItems.length === 0) return null;
+
           return (
-          <div key={section.id}>
-            {section.label && <div className="ad-menuLabel">{section.label}</div>}
-            <nav className="ad-nav">
-              {section.items.filter((item) => (!item.superOnly || superAdmin) && (!item.scopedHide || superAdmin)).map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.key}
-                    className={`ad-link ${isActive(item.path) ? "ad-link--active" : ""}`}
-                    type="button"
-                    onClick={() => handleNavClick(item.path)}
-                    title={!sidebarOpen ? item.label : undefined}
-                  >
-                    <span className="ad-linkIcon"><Icon size={18} /></span>
-                    <span className="ad-linkText">{item.label}</span>
-                    {item.key === "approvals" && pendingCount > 0 && (
-                      <span style={{ 
-                        marginLeft: "auto", 
-                        background: isActive(item.path) ? "#1e3a5f" : "#f5c400", 
-                        color: isActive(item.path) ? "#fff" : "#1e3a5f", 
-                        padding: "2px 6px", 
-                        borderRadius: "12px", 
-                        fontSize: "10px", 
-                        fontWeight: "800",
-                        display: (!sidebarOpen && !mobileOpen) ? "none" : "inline-flex"
-                      }}>{pendingCount}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+            <div key={section.id}>
+              {section.label && <div className="ad-menuLabel">{section.label}</div>}
+              <nav className="ad-nav">
+                {visibleItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.key}
+                      className={`ad-link ${isActive(item.path) ? "ad-link--active" : ""}`}
+                      type="button"
+                      onClick={() => handleNavClick(item.path)}
+                      title={!sidebarOpen ? item.label : undefined}
+                    >
+                      <span className="ad-linkIcon"><Icon size={18} /></span>
+                      <span className="ad-linkText">{item.label}</span>
+                      {item.key === "approvals" && pendingCount > 0 && (
+                        <span style={{ 
+                          marginLeft: "auto", 
+                          background: isActive(item.path) ? "#1e3a5f" : "#f5c400", 
+                          color: isActive(item.path) ? "#fff" : "#1e3a5f", 
+                          padding: "2px 6px", 
+                          borderRadius: "12px", 
+                          fontSize: "10px", 
+                          fontWeight: "800",
+                          display: (!sidebarOpen && !mobileOpen) ? "none" : "inline-flex"
+                        }}>{pendingCount}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
           );
         })}
         {/* Super fallback Admin Tools: same pages, collapsed by default. */}
@@ -250,8 +263,9 @@ function AdminLayoutInner({ title, children }) {
                 <span className="ad-linkText">Admin Tools</span>
               </button>
               {fallbackOpen && navSections
-                .filter((s) => s.id === "system-users" || s.id === "manage-evaluation")
+                .filter((s) => s.isFallback)
                 .flatMap((s) => s.items)
+                .filter((item) => (!item.superOnly || superAdmin) && (!item.scopedHide || superAdmin) && (!item.scopedOnly || !superAdmin))
                 .map((item) => {
                   const Icon = item.icon;
                   return (
@@ -265,6 +279,18 @@ function AdminLayoutInner({ title, children }) {
                     >
                       <span className="ad-linkIcon"><Icon size={16} /></span>
                       <span className="ad-linkText">{item.label}</span>
+                      {item.key === "approvals" && pendingCount > 0 && (
+                        <span style={{ 
+                          marginLeft: "auto", 
+                          background: isActive(item.path) ? "#1e3a5f" : "#f5c400", 
+                          color: isActive(item.path) ? "#fff" : "#1e3a5f", 
+                          padding: "2px 6px", 
+                          borderRadius: "12px", 
+                          fontSize: "10px", 
+                          fontWeight: "800",
+                          display: (!sidebarOpen && !mobileOpen) ? "none" : "inline-flex"
+                        }}>{pendingCount}</span>
+                      )}
                     </button>
                   );
                 })}
@@ -383,6 +409,21 @@ function AdminLayoutInner({ title, children }) {
 
         {children}
 
+        {/* Floating Copilot Trigger Button (hidden when on full AI Analyst page) */}
+        {location.pathname !== "/admin/ai-analyst" && (
+          <button
+            type="button"
+            className="ad-floatingCopilotBtn"
+            onClick={toggleDrawer}
+            title="Ask EvalIQ Assistant"
+          >
+            <Sparkles size={16} color="#f5c400" />
+            <span>EvalIQ</span>
+          </button>
+        )}
+
+        {/* Slide-over Copilot Drawer */}
+        <AdminAICopilotDrawer />
       </main>
     </div>
   );
