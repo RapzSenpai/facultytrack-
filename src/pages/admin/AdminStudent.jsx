@@ -332,7 +332,7 @@ export default function AdminStudent() {
                       <td>{student.department}</td>
                       <td>
                         {student.yearLevel ? (
-                          <span style={{ display: 'inline-block', padding: '4px 10px', background: '#f3f4f6', color: '#1e3a8a', borderRadius: '6px', fontSize: '11px', fontWeight: '800', border: '1px solid #e5e7eb', letterSpacing: '0.5px' }}>
+                          <span className="ad-pill">
                             {student.yearLevel.toUpperCase().replace(/YEAR/i, '').trim()} YR
                           </span>
                         ) : (
@@ -340,7 +340,7 @@ export default function AdminStudent() {
                         )}
                       </td>
                       <td>
-                        <span style={{ display: 'inline-block', padding: '4px 10px', background: '#f3f4f6', color: '#1e3a8a', borderRadius: '6px', fontSize: '11px', fontWeight: '800', border: '1px solid #e5e7eb', letterSpacing: '0.5px' }}>
+                        <span className="ad-pill">
                           {student.section ? student.section.toUpperCase() : "—"}
                         </span>
                       </td>

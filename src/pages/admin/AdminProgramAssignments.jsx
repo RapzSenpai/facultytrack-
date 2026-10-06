@@ -270,20 +270,20 @@ export default function AdminProgramAssignments() {
             </p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", marginBottom: "12px" }}>
               <input
-                className="ad-filterSelect"
+                className="ad-textInput"
                 placeholder="Full name"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
               />
               <input
-                className="ad-filterSelect"
+                className="ad-textInput"
                 placeholder="Email"
                 type="email"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
               />
               <input
-                className="ad-filterSelect"
+                className="ad-textInput"
                 placeholder="Temporary password (6+ chars)"
                 type="password"
                 value={newPassword}

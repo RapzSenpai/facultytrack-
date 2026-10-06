@@ -295,7 +295,7 @@ export default function AdminFaculty() {
                         </td>
                         <td className="ad-code">{f.schoolId}</td>
                         <td>
-                          <span style={{ display: 'inline-block', padding: '4px 10px', background: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '999px', fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                          <span className="ad-pill">
                             {f.department || "—"}
                           </span>
                         </td>

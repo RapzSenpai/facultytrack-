@@ -44,7 +44,7 @@
   background: #ffffff;
   border: 1px solid #edf2f7;
   padding: 28px;
-  border-radius: 18px;
+  border-radius: 14px;
   box-shadow: 0 8px 30px rgba(16, 20, 27, 0.06);
   transition: 0.25s ease;
   position: relative;
@@ -135,7 +135,7 @@
   padding: 16px 20px;
   background: #fff;
   border: 1px solid #e5e7eb;
-  border-radius: 18px;
+  border-radius: 14px;
 }
 
 .mockup-period-icon {
@@ -207,7 +207,7 @@
 .mockup-stat-card {
   background: #fff;
   padding: 20px;
-  border-radius: 18px;
+  border-radius: 14px;
   box-shadow: 0 8px 30px rgba(15, 31, 58, 0.06);
   display: flex;
   flex-direction: column;
@@ -334,7 +334,7 @@
 
 .mockup-panel {
   background: #fff;
-  border-radius: 18px;
+  border-radius: 14px;
   padding: 20px;
   box-shadow: 0 8px 30px rgba(15, 31, 58, 0.06);
   display: flex;
@@ -734,7 +734,7 @@
 .mockup-act-icon {
   width: 32px;
   height: 32px;
-  border-radius: 16px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;

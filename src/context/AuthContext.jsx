@@ -45,6 +45,8 @@ export function AuthProvider({ children }) {
         schoolId: data.school_id,
         yearLevel: data.year_level,
         department: data.department,
+        departmentId: data.department_id,
+        department_id: data.department_id,
         section: data.section,
         contactNumber: data.contact_number,
         photoUrl: data.photo_url,

@@ -60,7 +60,7 @@ export default function FacultyLayout({ children, breadcrumb }) {
       {/* SIDEBAR */}
       <aside className="fd-sidebar">
         <div className="fd-brand">
-          <div className="fd-logo" style={{ width: "56px", height: "56px", borderRadius: "50%", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="fd-logo">
             <img src={logo} alt="FacultyTrack Logo" style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scale(1.5)" }} />
           </div>
           <div className="fd-brandInfo">
@@ -185,7 +185,7 @@ export default function FacultyLayout({ children, breadcrumb }) {
           {children}
         </div>
 
-        
+
       </main>
     </div>
   );

@@ -289,7 +289,7 @@ export default function AdminModeration() {
         </div>
 
         {/* Tabs */}
-        <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+        <div className="ad-tabs">
           {[
             { key: "priority", label: `Priority Queue (${openReviews.length})` },
             { key: "flagged", label: `Flagged Comments (${flaggedEvals.length})` },
@@ -299,21 +299,13 @@ export default function AdminModeration() {
               key={t.key}
               type="button"
               onClick={() => setTab(t.key)}
-              style={{
-                padding: "8px 18px",
-                borderRadius: "999px",
-                border: tab === t.key ? "none" : "1px solid #e5e7eb",
-                background: tab === t.key ? "#1e3a5f" : "#fff",
-                color: tab === t.key ? "#fff" : "#374151",
-                fontWeight: 700,
-                fontSize: "13px",
-                cursor: "pointer",
-              }}
+              className={`ad-tab ${tab === t.key ? "ad-tab--active" : ""}`}
             >
               {t.label}
             </button>
           ))}
         </div>
+
 
         {loading ? (
           <div className="ad-tableCard" style={{ padding: "40px", textAlign: "center", color: "#6b7280" }}>

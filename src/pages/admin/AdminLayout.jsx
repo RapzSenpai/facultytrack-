@@ -173,7 +173,7 @@ function AdminLayoutInner({ title, children }) {
       {/* SIDEBAR */}
       <aside className="ad-sidebar">
         <div className="ad-brand">
-          <div className="ad-logo" style={{ width: "56px", height: "56px", borderRadius: "50%", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", border: "none" }}>
+          <div className="ad-logo">
             <img src={logo} alt="FacultyTrack Logo" style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scale(1.5)" }} />
           </div>
           <div className="ad-brandInfo">
@@ -230,13 +230,13 @@ function AdminLayoutInner({ title, children }) {
                       <span className="ad-linkIcon"><Icon size={18} /></span>
                       <span className="ad-linkText">{item.label}</span>
                       {item.key === "approvals" && pendingCount > 0 && (
-                        <span style={{ 
-                          marginLeft: "auto", 
-                          background: isActive(item.path) ? "#1e3a5f" : "#f5c400", 
-                          color: isActive(item.path) ? "#fff" : "#1e3a5f", 
-                          padding: "2px 6px", 
-                          borderRadius: "12px", 
-                          fontSize: "10px", 
+                        <span style={{
+                          marginLeft: "auto",
+                          background: isActive(item.path) ? "#1e3a5f" : "#f5c400",
+                          color: isActive(item.path) ? "#fff" : "#1e3a5f",
+                          padding: "2px 6px",
+                          borderRadius: "12px",
+                          fontSize: "10px",
                           fontWeight: "800",
                           display: (!sidebarOpen && !mobileOpen) ? "none" : "inline-flex"
                         }}>{pendingCount}</span>
@@ -280,13 +280,13 @@ function AdminLayoutInner({ title, children }) {
                       <span className="ad-linkIcon"><Icon size={16} /></span>
                       <span className="ad-linkText">{item.label}</span>
                       {item.key === "approvals" && pendingCount > 0 && (
-                        <span style={{ 
-                          marginLeft: "auto", 
-                          background: isActive(item.path) ? "#1e3a5f" : "#f5c400", 
-                          color: isActive(item.path) ? "#fff" : "#1e3a5f", 
-                          padding: "2px 6px", 
-                          borderRadius: "12px", 
-                          fontSize: "10px", 
+                        <span style={{
+                          marginLeft: "auto",
+                          background: isActive(item.path) ? "#1e3a5f" : "#f5c400",
+                          color: isActive(item.path) ? "#fff" : "#1e3a5f",
+                          padding: "2px 6px",
+                          borderRadius: "12px",
+                          fontSize: "10px",
                           fontWeight: "800",
                           display: (!sidebarOpen && !mobileOpen) ? "none" : "inline-flex"
                         }}>{pendingCount}</span>

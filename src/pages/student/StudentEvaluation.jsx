@@ -5,7 +5,7 @@ import { useDialog } from "../../context/DialogContext";
 import { supabase } from "../../config/supabase";
 import { parseFunctionError } from "../../utils/audit";
 import { isAssignmentMatch } from "../../utils/assignmentMatch";
-import { pickActivePeriod } from "../../utils/periodStatus";
+import { pickActivePeriod, isPeriodActive, periodEndPassed, isStatusOngoing } from "../../utils/periodStatus";
 import { notifyAdminsForDepartment } from "../../utils/notifications";
 import StudentLayout from "./StudentLayout";
 
@@ -93,6 +93,7 @@ export default function StudentEvaluation() {
         }));
 
         const active = pickActivePeriod(years, studentDept) || null;
+        console.log("[StudentEvaluation] Student dept:", studentDept, "Academic years from DB:", yearsRes.data, "Resolved active period:", active);
         setActiveYear(active);
 
         const subMap = new Map();
@@ -351,7 +352,8 @@ export default function StudentEvaluation() {
 
   const now = new Date();
   const endDate = activeYear?.endDate ? new Date(activeYear.endDate + "T23:59:59") : null;
-  const isEvaluationOpen = !loading && activeYear !== null && (!endDate || now <= endDate);
+  const isPeriodEnded = activeYear ? periodEndPassed(activeYear, now) : false;
+  const isEvaluationOpen = !loading && activeYear !== null && isPeriodActive(activeYear, now);
 
   const hoursLeft = endDate ? Math.max(0, Math.floor((endDate - now) / 1000 / 3600)) : null;
   const showUrgencyBanner = isEvaluationOpen && hoursLeft !== null && hoursLeft <= 72;
@@ -394,9 +396,11 @@ export default function StudentEvaluation() {
           <div>
             <strong>Evaluation Period is Closed</strong>
             <p style={{ margin: "2px 0 0", fontSize: "13px", opacity: 0.85 }}>
-              {activeYear
-                ? `The evaluation for ${activeYear.year} ${activeYear.semester} is not currently open. Please contact the administrator.`
-                : "There is no active evaluation period at this time. Please contact the administrator."}
+              {activeYear && isPeriodEnded && isStatusOngoing(activeYear.status)
+                ? `The evaluation period for ${activeYear.year} ${activeYear.semester} is set to On-going, but its deadline (${activeYear.endDate || activeYear.end_date}) has already passed. Please ask your administrator to extend the End Date.`
+                : activeYear
+                ? `The evaluation for ${activeYear.year} ${activeYear.semester} is currently closed. Please contact the administrator.`
+                : "There is no active evaluation period configured for your program at this time. Please contact the administrator."}
             </p>
           </div>
         </div>

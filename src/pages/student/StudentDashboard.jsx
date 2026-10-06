@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import { isAssignmentMatch } from "../../utils/assignmentMatch";
-import { pickActivePeriod } from "../../utils/periodStatus";
+import { pickActivePeriod, isPeriodActive, periodEndPassed, isStatusOngoing } from "../../utils/periodStatus";
 import { notifyAdminsForDepartment } from "../../utils/notifications";
 import {
   Calendar,
@@ -96,10 +96,14 @@ export default function StudentDashboard() {
           semester: y.semester,
           startDate: y.start_date,
           endDate: y.end_date,
+          end_date: y.end_date,
           status: y.status,
+          department_id: y.department_id,
+          departments: y.departments,
         }));
 
         const active = pickActivePeriod(years, studentDept) || null;
+        console.log("[StudentDashboard] Profile dept:", studentDept, "Academic years from DB:", yearsRes.data, "Resolved active period:", active);
         setActiveYear(active);
 
         const subMap = new Map();
@@ -252,9 +256,9 @@ export default function StudentDashboard() {
   const hour = now.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
-  const ayEndDate = activeYear?.endDate ? new Date(activeYear.endDate + "T23:59:59") : null;
+  const isPeriodEnded = activeYear ? periodEndPassed(activeYear, now) : false;
   const isEvaluationOpen =
-    !loading && activeYear !== null && (!ayEndDate || now <= ayEndDate);
+    !loading && activeYear !== null && isPeriodActive(activeYear, now);
 
   const evalProgress =
     stats.total > 0 ? Math.round((stats.evaluated / stats.total) * 100) : 0;
@@ -454,10 +458,27 @@ export default function StudentDashboard() {
                   <span className="sdb-statusBadge">—</span>
                 ) : isEvaluationOpen ? (
                   <span className="sdb-statusBadge sdb-statusBadge--open">OPEN</span>
+                ) : isPeriodEnded ? (
+                  <span className="sdb-statusBadge sdb-statusBadge--closed" title={`Deadline ended (${activeYear?.endDate || activeYear?.end_date})`}>
+                    CLOSED (DEADLINE PASSED)
+                  </span>
                 ) : (
                   <span className="sdb-statusBadge sdb-statusBadge--closed">CLOSED</span>
                 )}
               </div>
+              {activeYear && isPeriodEnded && isStatusOngoing(activeYear.status) && (
+                <p style={{ margin: "6px 0 0", fontSize: "11px", color: "#dc2626", lineHeight: "1.35" }}>
+                  ⚠️ Period is marked On-going, but its deadline ({activeYear.endDate || activeYear.end_date}) has passed. Contact your admin to extend the End Date.
+                </p>
+              )}
+              {!loading && !activeYear && (
+                <div style={{ margin: "10px 0 0", padding: "10px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", fontSize: "11.5px", color: "#991b1b", lineHeight: "1.4" }}>
+                  <strong>⚠️ No academic period loaded for your program ({dept || "Not set"}).</strong>
+                  <div style={{ marginTop: "4px" }}>
+                    The on-going academic period was created under <strong>BSIT</strong>. If your account program is not BSIT, or if your program is stored as full text, please ask your admin to update your program in <em>Student Management</em> or run Migration 031 in the Supabase SQL editor.
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

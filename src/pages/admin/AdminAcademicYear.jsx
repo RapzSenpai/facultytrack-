@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
-import { isPeriodActive, periodStatusLabel } from "../../utils/periodStatus";
+import { isPeriodActive, periodStatusLabel, periodEndPassed, isStatusOngoing } from "../../utils/periodStatus";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { useSuperScope } from "../../context/SuperScopeContext";
 
@@ -91,6 +91,16 @@ export default function AdminAcademicYear() {
       alert("Shared periods are read-only for program admins.");
       return;
     }
+    if (formData.status === "on-going" && formData.end_date) {
+      const end = new Date(`${formData.end_date.slice(0, 10)}T23:59:59`);
+      if (!Number.isNaN(end.getTime()) && end < new Date()) {
+        const proceed = window.confirm(
+          `The End Date (${formData.end_date}) is in the past.\n\nStudents will see evaluation as CLOSED until the End Date is set to today or a future date.\n\nDo you want to save anyway?`
+        );
+        if (!proceed) return;
+      }
+    }
+
     const payload = {
       ...formData,
       department_id: isEditing ? (editingAY.department_id || null) : (isSuper ? (scopeDeptId || null) : myDeptIds[0]),
@@ -231,6 +241,11 @@ export default function AdminAcademicYear() {
                         <span className={`ad-badge ad-badge--${isPeriodActive(ay) ? "active" : "inactive"}`}>
                           {periodStatusLabel(ay)}
                         </span>
+                        {isStatusOngoing(ay.status) && periodEndPassed(ay) && (
+                          <div style={{ fontSize: "11px", color: "#b91c1c", marginTop: "3px", fontWeight: 600 }}>
+                            ⚠️ Ended {ay.end_date}
+                          </div>
+                        )}
                       </td>
                       <td className="ad-tableActions" style={{ justifyContent: 'flex-end' }}>
                         <button className="ad-actionBtn ad-actionBtn--edit" title="Edit" onClick={() => handleOpenModal(ay)}>
@@ -312,6 +327,11 @@ export default function AdminAcademicYear() {
                   <option value="on-going">On-going (Open)</option>
                   <option value="closed">Closed</option>
                 </select>
+                {formData.status === "on-going" && formData.end_date && new Date(`${formData.end_date.slice(0, 10)}T23:59:59`) < new Date() && (
+                  <div style={{ color: "#b91c1c", backgroundColor: "#fef2f2", border: "1px solid #fecaca", padding: "8px 12px", borderRadius: "6px", fontSize: "12px", marginTop: "8px", lineHeight: "1.4" }}>
+                    ⚠️ <strong>Deadline Notice:</strong> The End Date (<strong>{formData.end_date}</strong>) is in the past. Even with status "On-going", student evaluation will read as <strong>CLOSED</strong> until the End Date is set to today or a future date.
+                  </div>
+                )}
               </div>
             </div>
             <div className="ad-modalFooter">

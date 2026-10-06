@@ -241,49 +241,40 @@ export default function AdminApprovals() {
                 )}
 
                 {/* TABS */}
-                <div style={{ display: 'flex', gap: '24px', borderBottom: '1px solid #e5e7eb', marginBottom: '24px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+                <div className="ad-tabs">
                     <button
                         onClick={() => setActiveTab("faculty")}
-                        style={{
-                            background: 'none', border: 'none', borderBottom: activeTab === "faculty" ? '2px solid #1e3a5f' : '2px solid transparent',
-                            padding: '12px 4px', fontSize: '14px', fontWeight: activeTab === "faculty" ? '700' : '600',
-                            color: activeTab === "faculty" ? '#1e3a5f' : '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
-                            whiteSpace: 'nowrap', transition: 'all 0.2s ease'
-                        }}
+                        className={`ad-tab ${activeTab === "faculty" ? "ad-tab--active" : ""}`}
                     >
                         Faculty Approvals
-                        <span style={{ background: activeTab === "faculty" ? '#f3f4f6' : 'transparent', color: activeTab === "faculty" ? '#374151' : '#9ca3af', padding: '2px 8px', borderRadius: '12px', fontSize: '11px' }}>
+                        <span className="ad-tabBadge">
                             {pendingFaculty.length}
                         </span>
                     </button>
                     <button
                         onClick={() => setActiveTab("student")}
-                        style={{
-                            background: 'none', border: 'none', borderBottom: activeTab === "student" ? '2px solid #1e3a5f' : '2px solid transparent',
-                            padding: '12px 4px', fontSize: '14px', fontWeight: activeTab === "student" ? '700' : '600',
-                            color: activeTab === "student" ? '#1e3a5f' : '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
-                            whiteSpace: 'nowrap', transition: 'all 0.2s ease'
-                        }}
+                        className={`ad-tab ${activeTab === "student" ? "ad-tab--active" : ""}`}
                     >
                         Student Approvals
-                        <span style={{ background: activeTab === "student" ? '#f3f4f6' : 'transparent', color: activeTab === "student" ? '#374151' : '#9ca3af', padding: '2px 8px', borderRadius: '12px', fontSize: '11px' }}>
+                        <span className="ad-tabBadge">
                             {pendingStudents.length}
                         </span>
                     </button>
                 </div>
 
+
                 <div className="ad-tableCard" style={{ padding: '24px' }}>
                     {/* TOOLBAR */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
                         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                            <div style={{ position: 'relative', width: '100%', maxWidth: '360px', flexGrow: 1 }}>
-                                <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+                            <div className="ad-searchWrap" style={{ width: '100%' }}>
+                                <Search size={16} className="ad-searchIcon" />
                                 <input
                                     type="text"
+                                    className="ad-searchInput"
                                     placeholder="Search by name, ID or email"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    style={{ width: '100%', padding: '10px 14px 10px 38px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '14px', outline: 'none', background: '#f9fafb', boxSizing: 'border-box' }}
                                 />
                             </div>
 
@@ -338,11 +329,11 @@ export default function AdminApprovals() {
                                             <td className="ad-code">{user.schoolId || user.employeeId}</td>
                                             <td>
                                                 {activeTab === "faculty" ? (
-                                                    <span style={{ display: 'inline-block', padding: '4px 10px', background: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '999px', fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                                                    <span className="ad-pill">
                                                         {user.department || "—"}
                                                     </span>
                                                 ) : (
-                                                    <span style={{ display: 'inline-block', padding: '4px 12px', background: '#f0f4f8', color: '#1e3a5f', border: '1px solid #d1d9e6', borderRadius: '999px', fontSize: '11px', fontWeight: '800', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                                                    <span className="ad-pill ad-pill--info">
                                                         {user.yearLevel || ""} - {user.section || ""}
                                                     </span>
                                                 )}
@@ -364,14 +355,14 @@ export default function AdminApprovals() {
                                                         <IdCard size={13} /> View
                                                     </button>
                                                 ) : (
-                                                    <span style={{ display: 'inline-block', padding: '4px 10px', background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '999px', fontSize: '10px', fontWeight: '800', letterSpacing: '0.5px' }}>
+                                                    <span className="ad-pill ad-pill--danger">
                                                         MISSING
                                                     </span>
                                                 )}
                                             </td>
 
                                             <td style={{ textAlign: 'center' }}>
-                                                <span style={{ display: 'inline-block', padding: '4px 10px', background: '#fffbeb', color: '#b45309', border: '1px solid #fef3c7', borderRadius: '999px', fontSize: '10px', fontWeight: '800', letterSpacing: '0.5px' }}>
+                                                <span className="ad-pill ad-pill--warning">
                                                     PENDING
                                                 </span>
                                             </td>

@@ -40,7 +40,7 @@ export default function StudentLayout({ children, breadcrumb }) {
   };
 
   const handleBurger = () => {
-    if (window.innerWidth <= 900) {
+    if (window.innerWidth <= 768) {
       setMobileOpen((v) => !v);
     } else {
       setSidebarCollapsed((v) => !v);
@@ -62,7 +62,7 @@ export default function StudentLayout({ children, breadcrumb }) {
       {/* SIDEBAR */}
       <aside className="sd-sidebar">
         <div className="sd-brand">
-          <div className="sd-logo" style={{ width: "56px", height: "56px", borderRadius: "50%", padding: "0", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="sd-logo">
             <img src={logo} alt="FacultyTrack Logo" style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scale(1.5)" }} />
           </div>
           <div className="sd-brandInfo">
