@@ -30,43 +30,69 @@ export function periodStatusLabel(row, today = new Date()) {
   return isPeriodActive(row, today) ? "On-going" : "Closed";
 }
 
-// Department name normalizer for flexible matching (e.g. BSIT <-> Bachelor of Science in Information Technology)
-function normDeptStr(val) {
-  return String(val || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+export function normDeptStr(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function matchDepartment(deptA, deptB) {
+export function getCanonicalDept(val) {
+  if (!val) return "";
+  const s = String(val).toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (s.includes("hospitality") || s === "bshm" || s === "hm") return "BSHM";
+  if (s.includes("informationtechnology") || s.includes("infotech") || s === "bsit" || s === "it") return "BSIT";
+  if (s.includes("entrepreneur") || s === "bsentrepreneur" || s === "bsentrep" || s === "entrep") return "BSEntrep";
+  if (s.includes("secondary") || s === "bsed" || s === "sed") return "BSED";
+  if (s.includes("elementary") || s === "beed" || s === "eed") return "BEED";
+  if (s.includes("physical") || s === "bped" || s === "ped") return "BPED";
+  return s.toUpperCase();
+}
+
+export function matchDepartment(deptA, deptB) {
   if (!deptA || !deptB) return false;
+  const cA = getCanonicalDept(deptA);
+  const cB = getCanonicalDept(deptB);
+  if (cA && cB && cA === cB) return true;
   const a = normDeptStr(deptA);
   const b = normDeptStr(deptB);
   if (!a || !b) return false;
-  if (a === b) return true;
-  if (a.includes(b) || b.includes(a)) return true;
-  return false;
+  return a === b;
 }
 
 // Pick the active period for a viewer's program:
-// 1. Prioritize active periods (on-going status + unexpired end date)
-//    - Program match
-//    - Shared period (NULL department_id)
-//    - First active period
-// 2. If all ongoing periods have expired end dates, still pick the matching ongoing period
-//    so the UI can display the period details and explain that the deadline has passed.
+// Strict isolation rules:
+// 1. Program-specific periods always govern for that department.
+//    - If an active period exists for userDept, return it.
+//    - If an ongoing period exists (even if deadline passed), return it so UI shows deadline passed.
+//    - If only closed periods exist for userDept, return the most recent closed period so UI displays CLOSED.
+// 2. Global/Shared period (department_id IS NULL) applies ONLY if no program-specific period exists for userDept.
+// 3. NEVER steal or leak another department's active period (no fallback to candidateList[0]).
 export function pickActivePeriod(rows, userDept, today = new Date()) {
   const list = Array.isArray(rows) ? rows : [];
-  const actives = list.filter((r) => isPeriodActive(r, today));
+  if (!userDept && list.length === 0) return null;
 
-  const findBest = (candidateList) => {
-    return candidateList.find((r) => r.departments?.name && matchDepartment(r.departments.name, userDept))
-      || candidateList.find((r) => !r.department_id)
-      || candidateList[0]
-      || null;
-  };
+  // 1. Look for periods specifically belonging to this student's department
+  const deptPeriods = list.filter((r) =>
+    r.departments?.name && matchDepartment(r.departments.name, userDept)
+  );
 
-  const bestActive = findBest(actives);
-  if (bestActive) return bestActive;
+  if (deptPeriods.length > 0) {
+    const active = deptPeriods.find((r) => isPeriodActive(r, today));
+    if (active) return active;
+    const ongoing = deptPeriods.find((r) => isStatusOngoing(r.status));
+    if (ongoing) return ongoing;
+    // Return closed/expired period for their own department so UI knows it's closed
+    return deptPeriods[0];
+  }
 
-  // Fallback: ongoing status even if end date has passed
-  const ongoing = list.filter((r) => isStatusOngoing(r.status));
-  return findBest(ongoing);
+  // 2. Global shared periods (department_id IS NULL)
+  const sharedPeriods = list.filter((r) => !r.department_id);
+  if (sharedPeriods.length > 0) {
+    const activeShared = sharedPeriods.find((r) => isPeriodActive(r, today));
+    if (activeShared) return activeShared;
+    const ongoingShared = sharedPeriods.find((r) => isStatusOngoing(r.status));
+    if (ongoingShared) return ongoingShared;
+    return sharedPeriods[0];
+  }
+
+  // 3. Neither department period nor shared period exists: NULL (no period / closed)
+  return null;
 }

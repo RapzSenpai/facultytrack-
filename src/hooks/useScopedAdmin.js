@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
+import { matchDepartment } from "../utils/periodStatus";
 
 // Shared program-scope for dept admins (D8/D9).
 // Super admin => isSuper, sees everything, no filtering.
@@ -71,11 +72,10 @@ export function useScopedAdmin() {
 
   const loading = !profileReady || loadingAssignments;
 
-  // Case-insensitive dept-name matcher for tables carrying TEXT department.
+  // Case-insensitive canonical dept-name matcher for tables carrying TEXT department.
   const inScopeName = useMemo(() => {
     if (isSuper) return () => true;
-    const lower = new Set(deptNames.map((n) => String(n).trim().toLowerCase()));
-    return (name) => lower.has(String(name || "").trim().toLowerCase());
+    return (name) => deptNames.some((d) => matchDepartment(d, name));
   }, [isSuper, deptNames]);
 
   return { isSuper, myDeptIds: deptIds, myDeptNames: deptNames, inScopeName, loading, error };

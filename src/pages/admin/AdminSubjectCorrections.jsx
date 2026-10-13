@@ -21,6 +21,8 @@ import {
   BookOpen,
   SlidersHorizontal,
 } from "lucide-react";
+import { pickActivePeriod, isPeriodActive, isStatusOngoing, matchDepartment, getCanonicalDept } from "../../utils/periodStatus";
+import { normalizeYear, normalizeSection } from "../../utils/assignmentMatch";
 
 // Phase 3 (Req 2 / D5): students can no longer build their own
 // subject lists. This page lets the admin (a) resolve student
@@ -53,9 +55,9 @@ const statusBadgeStyle = (status) => {
 };
 
 export default function AdminSubjectCorrections() {
-  const { isSuper, inScopeName } = useScopedAdmin();
+  const { isSuper, inScopeName, myDeptIds, myDeptNames } = useScopedAdmin();
   const { scopeDeptId, scopeDeptName } = useSuperScope();
-  const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  const sameDept = (a, b) => matchDepartment(a, b);
   // Student rows have TEXT department only: match own scope, or the
   // super pick when set.
   const inScopeStudent = (s) => (isSuper && !scopeDeptId)
@@ -90,6 +92,7 @@ export default function AdminSubjectCorrections() {
   const [adjusting, setAdjusting] = useState(null); // student row
   const [adjustYear, setAdjustYear] = useState("");
   const [adjustSemester, setAdjustSemester] = useState("");
+  const [availableAcademicYears, setAvailableAcademicYears] = useState([]);
   const [activeAssignments, setActiveAssignments] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [excludedIds, setExcludedIds] = useState(new Set());
@@ -101,7 +104,7 @@ export default function AdminSubjectCorrections() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [reqRes, stuRes] = await Promise.all([
+      const [reqRes, stuRes, ayRes] = await Promise.all([
         supabase
           .from("subject_correction_requests")
           .select("*")
@@ -110,15 +113,27 @@ export default function AdminSubjectCorrections() {
           .from("users")
           .select("id, full_name, school_id, email, department, year_level, section, status")
           .eq("role", "student"),
+        supabase
+          .from("academic_years")
+          .select("*, departments(name)")
+          .order("year", { ascending: false }),
       ]);
       setRequests(reqRes.data || []);
       setStudents(stuRes.data || []);
+
+      const inScopePeriod = (r) => (isSuper && !scopeDeptId)
+        || !r.department_id
+        || (myDeptIds && myDeptIds.includes(r.department_id))
+        || (scopeDeptId && r.department_id === scopeDeptId)
+        || (myDeptNames && myDeptNames.some((name) => sameDept(name, r.departments?.name)));
+      const filteredAY = (ayRes.data || []).filter(inScopePeriod);
+      setAvailableAcademicYears(filteredAY.length > 0 ? filteredAY : (ayRes.data || []));
     } catch (err) {
       console.error("Fetch error:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isSuper, scopeDeptId, myDeptIds, myDeptNames]);
 
   useEffect(() => {
     fetchData();
@@ -227,35 +242,52 @@ export default function AdminSubjectCorrections() {
     return n1 !== "" && n1 === n2;
   };
 
+  const isSectionMatch = (a, stu) => {
+    if (!a || !stu) return false;
+    return (
+      matchDepartment(a.department, stu.department) &&
+      normalizeYear(a.year_level || a.yearLevel) === normalizeYear(stu.year_level || stu.yearLevel) &&
+      normalizeSection(a.section) === normalizeSection(stu.section)
+    );
+  };
+
   // ---------------- Per-student subject adjustment ----------------
 
   const loadAdjustment = async (student, year, semester) => {
     setAdjustBusy(true);
     setAdjustMsg("");
     try {
+      const cleanSem = (semester || "").replace(/\s*semester/i, "").trim();
+      const semVariants = [
+        semester,
+        cleanSem,
+        cleanSem ? `${cleanSem} Semester` : null,
+      ].filter(Boolean);
+
       const { data: assignments } = await supabase
         .from("class_assignments")
         .select("*")
         .eq("academic_year", year)
-        .eq("semester", semester);
+        .in("semester", semVariants);
 
       const { data: enr } = await supabase
         .from("student_enrollments")
-        .select("confirmed_assignments, excluded_assignments, enrollment_kind")
+        .select("confirmed_assignments, excluded_assignments, enrollment_kind, semester")
         .eq("student_id", student.id)
         .eq("academic_year", year)
-        .eq("semester", semester)
+        .in("semester", semVariants)
         .maybeSingle();
 
-      const rows = assignments || [];
+      // STRICT PROGRAM RESTRICTION:
+      // Only keep assignments belonging to this student's program/department.
+      // This strictly prevents BSIT subjects from appearing for BSHM students, and vice versa.
+      const allRows = assignments || [];
+      const rows = allRows.filter((a) =>
+        matchDepartment(a.department, student.department)
+      );
       setActiveAssignments(rows);
 
-      const sectionMatches = rows.filter(
-        (a) =>
-          isMatch(a.department, student.department) &&
-          isMatch(a.year_level, student.year_level) &&
-          isMatch(a.section, student.section)
-      );
+      const sectionMatches = rows.filter((a) => isSectionMatch(a, student));
 
       const kind = enr?.enrollment_kind === "admin" || enr?.enrollment_kind === "exception"
         ? "admin"
@@ -263,11 +295,9 @@ export default function AdminSubjectCorrections() {
       setExistingKind(kind);
 
       if (kind === "admin") {
-        // Explicit list governs: start from the stored list; if the
-        // stored list is empty, preselect the section match as a
-        // sensible starting point.
+        // Explicit list governs: only valid IDs within the student's program rows
         const stored = new Set(
-          (enr.confirmed_assignments || []).filter((id) =>
+          (enr?.confirmed_assignments || []).filter((id) =>
             rows.some((a) => a.id === id)
           )
         );
@@ -275,7 +305,13 @@ export default function AdminSubjectCorrections() {
       } else {
         setSelectedIds(new Set(sectionMatches.map((a) => a.id)));
       }
-      setExcludedIds(new Set(enr?.excluded_assignments || []));
+      setExcludedIds(
+        new Set(
+          (enr?.excluded_assignments || []).filter((id) =>
+            rows.some((a) => a.id === id)
+          )
+        )
+      );
     } finally {
       setAdjustBusy(false);
     }
@@ -292,15 +328,35 @@ export default function AdminSubjectCorrections() {
     setExtraSubjectId("");
     setAdjustMsg("");
     try {
-      const { data: years } = await supabase
+      const { data: yearsRes } = await supabase
         .from("academic_years")
-        .select("*");
+        .select("*, departments(name)")
+        .order("year", { ascending: false });
+
+      const allYears = yearsRes && yearsRes.length > 0 ? yearsRes : availableAcademicYears;
+
+      // Strictly scope periods to this student's program or admin's program (or shared periods)
+      const scopedYears = allYears.filter((y) => {
+        if (!y.department_id) return true; // shared periods are open to all
+        if (isSuper && !scopeDeptId) return true;
+        if (scopeDeptId && y.department_id === scopeDeptId) return true;
+        if (myDeptIds && myDeptIds.includes(y.department_id)) return true;
+        if (student?.department && y.departments?.name && sameDept(student.department, y.departments.name)) return true;
+        if (myDeptNames && myDeptNames.some((name) => sameDept(name, y.departments?.name))) return true;
+        return false;
+      });
+
+      const yearsToUse = scopedYears.length > 0 ? scopedYears : allYears;
+      setAvailableAcademicYears(yearsToUse);
+
+      // Prioritize student's own program active period
       const active =
-        (years || []).find(
-          (y) => (y.status || "").toLowerCase().trim() === "on-going"
-        ) ||
-        (years || [])[0] ||
+        pickActivePeriod(yearsToUse, student?.department) ||
+        yearsToUse.find((y) => isPeriodActive(y)) ||
+        yearsToUse.find((y) => isStatusOngoing(y.status)) ||
+        yearsToUse[0] ||
         null;
+
       if (active) {
         setAdjustYear(active.year);
         setAdjustSemester(active.semester);
@@ -353,6 +409,13 @@ export default function AdminSubjectCorrections() {
     setAdjustBusy(true);
     setAdjustMsg("");
     try {
+      const cleanSem = (adjustSemester || "").replace(/\s*semester/i, "").trim();
+      const semVariants = [
+        adjustSemester,
+        cleanSem,
+        cleanSem ? `${cleanSem} Semester` : null,
+      ].filter(Boolean);
+
       // Remove the override row entirely: the student reverts to the
       // plain section match (minus nothing).
       const { error } = await supabase
@@ -360,7 +423,7 @@ export default function AdminSubjectCorrections() {
         .delete()
         .eq("student_id", adjusting.id)
         .eq("academic_year", adjustYear)
-        .eq("semester", adjustSemester);
+        .in("semester", semVariants);
       if (error) throw new Error(error.message);
       setExistingKind("auto");
       logAdminAction("enrollment.override_clear", "student_enrollments", adjusting.id, {
@@ -370,11 +433,7 @@ export default function AdminSubjectCorrections() {
       setSelectedIds(
         new Set(
           activeAssignments
-            .filter((a) =>
-              isMatch(a.department, adjusting.department) &&
-              isMatch(a.year_level, adjusting.year_level) &&
-              isMatch(a.section, adjusting.section)
-            )
+            .filter((a) => isSectionMatch(a, adjusting))
             .map((a) => a.id)
         )
       );
@@ -419,8 +478,15 @@ export default function AdminSubjectCorrections() {
     }
   };
 
+  const displayedAssignments = activeAssignments.filter((a) => {
+    return isSectionMatch(a, adjusting) || selectedIds.has(a.id) || excludedIds.has(a.id);
+  });
+
   const addableExtras = activeAssignments.filter(
-    (a) => !selectedIds.has(a.id) && !excludedIds.has(a.id)
+    (a) =>
+      matchDepartment(a.department, adjusting?.department) &&
+      !selectedIds.has(a.id) &&
+      !displayedAssignments.some((d) => d.id === a.id)
   );
 
   return (
@@ -958,18 +1024,36 @@ export default function AdminSubjectCorrections() {
               <div className="ad-formRow" style={{ gridTemplateColumns: "1fr 1fr 1fr 1fr", alignItems: "end" }}>
                 <div className="ad-formGroup">
                   <label className="ad-label">Academic Year</label>
-                  <select className="ad-input" value={adjustYear} onChange={(e) => changeAdjustPeriod(e.target.value, adjustSemester)}>
+                  <select
+                    className="ad-input"
+                    value={adjustYear}
+                    onChange={(e) => changeAdjustPeriod(e.target.value, adjustSemester)}
+                  >
                     <option value="">Select…</option>
-                    {[...new Set(activeAssignments.map((a) => a.academic_year).concat(adjustYear).filter(Boolean))].map((y) => (
+                    {[...new Set([
+                      ...availableAcademicYears.map((a) => a.year),
+                      ...activeAssignments.map((a) => a.academic_year),
+                      adjustYear
+                    ].filter(Boolean))].map((y) => (
                       <option key={y} value={y}>{y}</option>
                     ))}
                   </select>
                 </div>
                 <div className="ad-formGroup">
                   <label className="ad-label">Semester</label>
-                  <select className="ad-input" value={adjustSemester} onChange={(e) => changeAdjustPeriod(adjustYear, e.target.value)}>
+                  <select
+                    className="ad-input"
+                    value={adjustSemester}
+                    onChange={(e) => changeAdjustPeriod(adjustYear, e.target.value)}
+                  >
                     <option value="">Select…</option>
-                    {["1st", "2nd", "Midterm", "Summer"].map((s) => (
+                    {[...new Set([
+                      "1st Semester",
+                      "2nd Semester",
+                      "Summer",
+                      ...availableAcademicYears.map((a) => a.semester),
+                      adjustSemester
+                    ].filter(Boolean))].map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
@@ -996,9 +1080,19 @@ export default function AdminSubjectCorrections() {
 
               {adjustBusy && activeAssignments.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "32px", color: "#6b7280" }}>Loading subjects…</div>
-              ) : activeAssignments.length === 0 ? (
+              ) : displayedAssignments.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "32px", color: "#6b7280" }}>
-                  No class assignments found for {adjustYear || "—"} {adjustSemester || "—"}.
+                  <div style={{ fontWeight: 600, color: "#374151", marginBottom: "4px" }}>
+                    No class assignments found for {adjusting?.department || "this department"} ({adjusting?.year_level || "—"} · {adjusting?.section || "—"}).
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#9ca3af" }}>
+                    Period: {adjustYear || "—"} · {adjustSemester || "—"}
+                  </div>
+                  {addableExtras.length > 0 && (
+                    <div style={{ marginTop: "10px", fontSize: "12px", color: "#2563eb" }}>
+                      You can add irregular or retake subjects from {adjusting?.department} below.
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="ad-tableWrap ad-tableWrap--bordered" style={{ maxHeight: "320px", overflowY: "auto" }}>
@@ -1010,33 +1104,48 @@ export default function AdminSubjectCorrections() {
                         <th>Subject</th>
                         <th>Faculty</th>
                         <th>Section</th>
+                        <th style={{ width: "80px", textAlign: "center" }}>Match</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {activeAssignments.map((a) => (
-                        <tr key={a.id}>
-                          <td>
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.has(a.id)}
-                              onChange={() => toggleSubject(a.id, "include")}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="checkbox"
-                              checked={excludedIds.has(a.id)}
-                              onChange={() => toggleSubject(a.id, "exclude")}
-                            />
-                          </td>
-                          <td>
-                            <span className="ad-cellPrimary">{a.subject_code}</span>
-                            <span className="ad-cellSecondary"> {a.subject_name}</span>
-                          </td>
-                          <td>{a.faculty_name || "—"}</td>
-                          <td className="ad-code">{a.department} {a.year_level}-{a.section}</td>
-                        </tr>
-                      ))}
+                      {displayedAssignments.map((a) => {
+                        const isSecMatch = isSectionMatch(a, adjusting);
+                        return (
+                          <tr key={a.id}>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(a.id)}
+                                onChange={() => toggleSubject(a.id, "include")}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={excludedIds.has(a.id)}
+                                onChange={() => toggleSubject(a.id, "exclude")}
+                              />
+                            </td>
+                            <td>
+                              <span className="ad-cellPrimary">{a.subject_code}</span>
+                              <span className="ad-cellSecondary"> {a.subject_name}</span>
+                            </td>
+                            <td>{a.faculty_name || "—"}</td>
+                            <td className="ad-code">{a.department} {a.year_level}-{a.section}</td>
+                            <td style={{ textAlign: "center" }}>
+                              {isSecMatch ? (
+                                <span style={{ fontSize: "11px", color: "#059669", background: "#ecfdf5", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>
+                                  Section
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: "11px", color: "#b45309", background: "#fef3c7", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>
+                                  Irregular
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1046,7 +1155,11 @@ export default function AdminSubjectCorrections() {
                 <div className="ad-formGroup">
                   <label className="ad-label">Add a subject outside the student's section (irregular / retake)</label>
                   <select className="ad-input" value={extraSubjectId} onChange={(e) => setExtraSubjectId(e.target.value)}>
-                    <option value="">Select a subject…</option>
+                    <option value="">
+                      {addableExtras.length > 0
+                        ? "Select a subject…"
+                        : `No other subjects available in ${adjusting?.department || "this program"}`}
+                    </option>
                     {addableExtras.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.subject_code} — {a.subject_name} ({a.department} {a.year_level}-{a.section})

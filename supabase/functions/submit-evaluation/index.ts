@@ -71,10 +71,28 @@ function isMatch(a: unknown, b: unknown): boolean {
   return n1 !== "" && n1 === n2;
 }
 
+function canonicalDept(val: unknown): string {
+  if (!val) return "";
+  const s = String(val).toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (s.includes("hospitality") || s === "bshm" || s === "hm") return "BSHM";
+  if (s.includes("informationtechnology") || s.includes("infotech") || s === "bsit" || s === "it") return "BSIT";
+  if (s.includes("entrepreneur") || s === "bsentrepreneur" || s === "bsentrep" || s === "entrep") return "BSEntrep";
+  if (s.includes("secondary") || s === "bsed" || s === "sed") return "BSED";
+  if (s.includes("elementary") || s === "beed" || s === "eed") return "BEED";
+  if (s.includes("physical") || s === "bped" || s === "ped") return "BPED";
+  return s.toUpperCase();
+}
+
 function isFieldMatch(kind: "dept" | "year" | "section", a: unknown, b: unknown): boolean {
   if (!a || !b) return false;
-  const n1 = kind === "year" ? normalizeYear(a) : kind === "section" ? normalizeSection(a) : normalize(a);
-  const n2 = kind === "year" ? normalizeYear(b) : kind === "section" ? normalizeSection(b) : normalize(b);
+  if (kind === "dept") {
+    const c1 = canonicalDept(a);
+    const c2 = canonicalDept(b);
+    if (c1 && c2 && c1 === c2) return true;
+    return normalize(a) !== "" && normalize(a) === normalize(b);
+  }
+  const n1 = kind === "year" ? normalizeYear(a) : normalizeSection(a);
+  const n2 = kind === "year" ? normalizeYear(b) : normalizeSection(b);
   return n1 !== "" && n1 === n2;
 }
 
@@ -377,11 +395,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const confirmedHere =
       Array.isArray(confirmed) && confirmed.includes(assignmentId);
 
+    const sameDept = isFieldMatch("dept", assignment.department, profile?.department);
     const authorized = excludedHere
       ? false
-      : isAdminList
-        ? confirmedHere
-        : confirmedHere || selfMatched;
+      : !sameDept
+        ? false
+        : isAdminList
+          ? confirmedHere
+          : confirmedHere || selfMatched;
 
     if (!authorized) {
       return json({ error: "You are not assigned to this subject." }, 403);
@@ -474,7 +495,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // Blocked submissions never reach the insert (422 above); this
     // mask is defence-in depth in case that flow changes later.
     const storedComment =
-      moderationStatus === "block" ? "[comment withheld by moderation]" : comment;
+      (moderationStatus as string) === "block" ? "[comment withheld by moderation]" : comment;
 
     const { data: inserted, error: insertErr } = await admin
       .from("evaluations")

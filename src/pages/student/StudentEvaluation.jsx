@@ -5,7 +5,7 @@ import { useDialog } from "../../context/DialogContext";
 import { supabase } from "../../config/supabase";
 import { parseFunctionError } from "../../utils/audit";
 import { isAssignmentMatch } from "../../utils/assignmentMatch";
-import { pickActivePeriod, isPeriodActive, periodEndPassed, isStatusOngoing } from "../../utils/periodStatus";
+import { pickActivePeriod, isPeriodActive, periodEndPassed, isStatusOngoing, matchDepartment } from "../../utils/periodStatus";
 import { notifyAdminsForDepartment } from "../../utils/notifications";
 import StudentLayout from "./StudentLayout";
 
@@ -147,6 +147,8 @@ export default function StudentEvaluation() {
         // the server gate).
         const matchedFaculty = activeAssignments
           .filter((a) => {
+            // Strict program restriction: Never display subjects from another program
+            if (!matchDepartment(a.department, studentDept)) return false;
             if (excludedSet.has(a.id)) return false;
             if (isAdminList) return confirmedSet.has(a.id);
             if (confirmedSet.has(a.id)) return true;

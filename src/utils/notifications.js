@@ -1,4 +1,5 @@
 import { supabase } from "../config/supabase";
+import { matchDepartment } from "./periodStatus";
 
 /**
  * Send an in-app notification to a user.
@@ -94,11 +95,7 @@ export async function notifyAdminsForDepartment({
         .select("id, name");
 
       if (!deptErr && depts) {
-        const lower = cleanDeptName.toLowerCase();
-        const matched = depts.find((d) => {
-          const dName = String(d.name || "").trim().toLowerCase();
-          return dName === lower || (dName && lower.includes(dName));
-        });
+        const matched = depts.find((d) => matchDepartment(d.name, cleanDeptName));
         if (matched) {
           resolvedDeptId = matched.id;
         }

@@ -3,6 +3,7 @@ import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { useSuperScope } from "../../context/SuperScopeContext";
+import { pickActivePeriod, isPeriodActive, isStatusOngoing } from "../../utils/periodStatus";
 
 const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 
@@ -109,7 +110,7 @@ export default function AdminClassAssignment() {
           supabase.from('users').select('*'),
           supabase.from('subjects').select('*'),
           supabase.from('departments').select('*'),
-          supabase.from('academic_years').select('*'),
+          supabase.from('academic_years').select('*, departments(name)'),
           supabase.from('sections').select('*').order('name'),
         ]);
 
@@ -128,11 +129,18 @@ export default function AdminClassAssignment() {
         const ays = ayRes.data || [];
         const secs = secRes.data || [];
 
+        const inScopePeriod = (r) => (isSuper && !scopeDeptId)
+          || !r.department_id
+          || myDeptIds.includes(r.department_id)
+          || r.department_id === scopeDeptId;
+        const scopedAys = ays.filter(inScopePeriod);
+        const aysToUse = scopedAys.length > 0 ? scopedAys : ays;
+
         setAssignmentList(assignments.filter(inScope));
         setFacultyOptions(users.filter(u => u.role === "faculty" && u.status !== "deleted" && inScope(u)).map(u => ({ ...u, fullName: u.full_name })));
         setSubjectOptions(subjects.filter(inScope));
         setDepartmentOptions(depts);
-        setAcademicYearOptions(ays);
+        setAcademicYearOptions(aysToUse);
         setSectionOptions(secs.filter(inScope));
 
         const deletedUids = new Set(
@@ -140,10 +148,14 @@ export default function AdminClassAssignment() {
         );
         setDeletedFacultyIds(deletedUids);
 
-        // Auto-select defaults for AY and Semester if not set
-        const activeAy = ays.find(y => y.is_active || y.status === "active");
+        // Auto-select defaults for AY and Semester using canonical pickActivePeriod
+        const activeAy = pickActivePeriod(aysToUse, myDeptNames[0] || filterDept)
+          || aysToUse.find(y => isPeriodActive(y))
+          || aysToUse.find(y => isStatusOngoing(y.status))
+          || aysToUse[0];
+
         if (!filterAY) {
-          const active = activeAy?.year || ays[0]?.year || "";
+          const active = activeAy?.year || "";
           if (active) setFilterAY(active);
         }
         if (!filterSemester) {

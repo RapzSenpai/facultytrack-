@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { useSuperScope } from "../../context/SuperScopeContext";
 import { parseFunctionError } from "../../utils/audit";
+import { pickActivePeriod, isPeriodActive, isStatusOngoing } from "../../utils/periodStatus";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -88,7 +89,7 @@ export default function AdminReport() {
   const { userProfile } = useAuth();
   // D9: scoped admins are locked to their assigned program(s).
   // Backend (export-report + anon view RLS) enforces the same.
-  const { isSuper, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
+  const { isSuper, myDeptIds, myDeptNames, inScopeName, loading: scopeLoading } = useScopedAdmin();
   const { scopeDeptId, scopeDeptName } = useSuperScope();
   const canExport = userProfile?.role === "admin" || userProfile?.role === "super_admin"; // D11
   const [evaluations, setEvaluations] = useState([]);
@@ -110,7 +111,7 @@ export default function AdminReport() {
       supabase.from('admin_evaluations_anon').select('*'),
       supabase.from('users').select('*').eq('role', 'faculty'),
       supabase.from('class_assignments').select('*'),
-      supabase.from('academic_years').select('*'),
+      supabase.from('academic_years').select('*, departments(name)'),
       supabase.from('departments').select('*'),
     ])
       .then(([evalsRes, facultyRes, assignRes, yearsRes, deptsRes]) => {
@@ -138,18 +139,26 @@ export default function AdminReport() {
         const years = yearsRes.data || [];
         const depts = deptsRes.data || [];
 
+        const inScopePeriod = (r) => (isSuper && !scopeDeptId)
+          || !r.department_id
+          || (myDeptIds && myDeptIds.includes(r.department_id))
+          || (scopeDeptId && r.department_id === scopeDeptId);
+        const scopedYears = years.filter(inScopePeriod);
+        const yearsToUse = scopedYears.length > 0 ? scopedYears : years;
+
         setEvaluations(evals);
         setFacultyUsers(faculty);
         setAssignments(assign);
         setDepartmentsList(depts);
-        setAcademicYearsList(years);
+        setAcademicYearsList(yearsToUse);
 
-        if (years.length > 0) {
-          const active = years.find(y => (y.status || "").toLowerCase().trim() === "on-going");
-          if (active) {
-            setFilterAY(active.year);
-            setFilterSem(active.semester);
-          }
+        const active = pickActivePeriod(yearsToUse, myDeptNames?.[0] || filterDept)
+          || yearsToUse.find(y => isPeriodActive(y))
+          || yearsToUse.find(y => isStatusOngoing(y.status))
+          || yearsToUse[0];
+        if (active) {
+          setFilterAY(active.year);
+          setFilterSem(active.semester);
         }
       })
       .catch(err => console.error("Report fetch error:", err))

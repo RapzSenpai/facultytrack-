@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import { isAssignmentMatch } from "../../utils/assignmentMatch";
-import { pickActivePeriod, isPeriodActive, periodEndPassed, isStatusOngoing } from "../../utils/periodStatus";
+import { pickActivePeriod, isPeriodActive, periodEndPassed, isStatusOngoing, matchDepartment } from "../../utils/periodStatus";
 import { notifyAdminsForDepartment } from "../../utils/notifications";
 import {
   Calendar,
@@ -138,6 +138,8 @@ export default function StudentDashboard() {
         // (exact normalized equality — mirrors the server gate).
         const matchedFaculty = activeAssignments
           .filter((a) => {
+            // Strict program restriction: Never display subjects from another program
+            if (!matchDepartment(a.department, studentDept)) return false;
             if (excludedSet.has(a.id)) return false;
             if (isAdminList) return confirmedSet.has(a.id);
             if (confirmedSet.has(a.id)) return true;

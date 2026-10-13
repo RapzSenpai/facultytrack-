@@ -1,3 +1,5 @@
+import { matchDepartment } from "./periodStatus";
+
 export function normalizeYear(y) {
   if (!y) return "";
   const str = String(y).toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -19,11 +21,11 @@ export function normalizeDept(d) {
 }
 
 export function isAssignmentMatch(assignment, studentDept, studentYear, studentSection) {
-  const deptValue = normalizeDept(assignment?.department);
-  const yearValue = normalizeYear(assignment?.yearLevel);
+  const deptMatch = matchDepartment(assignment?.department, studentDept);
+  const yearVal = assignment?.yearLevel ?? assignment?.year_level;
+  const yearValue = normalizeYear(yearVal);
   const sectionValue = normalizeSection(assignment?.section);
 
-  const deptMatch = deptValue !== "" && deptValue === normalizeDept(studentDept);
   const yearMatch = yearValue !== "" && yearValue === normalizeYear(studentYear);
   const sectionMatch = sectionValue !== "" && sectionValue === normalizeSection(studentSection);
 
