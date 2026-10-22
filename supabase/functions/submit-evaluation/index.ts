@@ -332,18 +332,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     // Match student's or assignment's program department first, then fallback to shared (NULL department_id)
-    const studentDept = String(profile?.department ?? assignment.department ?? "").trim().toLowerCase();
+    const rawDept = String(profile?.department ?? assignment.department ?? "");
+    const cleanDept = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const studentDeptNorm = cleanDept(rawDept);
+
     const active =
       ongoingYears.find(
         (y: any) =>
           y.departments?.name &&
-          String(y.departments.name).trim().toLowerCase() === studentDept,
+          cleanDept(y.departments.name) === studentDeptNorm,
       ) ||
-      ongoingYears.find((y: any) => !y.department_id) ||
-      ongoingYears[0];
+      ongoingYears.find((y: any) => !y.department_id);
 
     if (!active) {
-      return json({ error: "No active evaluation period is available for this subject." }, 400);
+      return json({ error: "No active evaluation period is available for this subject or department." }, 400);
     }
 
     // End date validation: end of day in Philippine Time (UTC+8)

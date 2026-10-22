@@ -1,19 +1,24 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { useSuperScope } from "../../context/SuperScopeContext";
-import { pickActivePeriod, isPeriodActive, isStatusOngoing } from "../../utils/periodStatus";
+import { pickActivePeriod, isPeriodActive, isStatusOngoing, matchDepartment } from "../../utils/periodStatus";
 
-const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+const sameDept = (a, b) => {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  if (String(a).trim().toLowerCase() === String(b).trim().toLowerCase()) return true;
+  return matchDepartment(a, b);
+};
 
 const normYear = (y) => {
   if (!y) return "";
   const str = String(y).toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (str.includes("1")) return "1st";
-  if (str.includes("2")) return "2nd";
-  if (str.includes("3")) return "3rd";
-  if (str.includes("4")) return "4th";
+  if (str.includes("1") || str.includes("first")) return "1st";
+  if (str.includes("2") || str.includes("second")) return "2nd";
+  if (str.includes("3") || str.includes("third")) return "3rd";
+  if (str.includes("4") || str.includes("fourth")) return "4th";
   return y;
 };
 
@@ -26,9 +31,17 @@ const normSem = (s) => {
   return str.trim();
 };
 
+const sameAY = (a, b) => {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  const clean = (s) => String(s).trim().toLowerCase().replace(/^a\.?y\.?\s*/i, "").replace(/\s+/g, "");
+  return clean(a) === clean(b);
+};
+
 const matchSemester = (subjectSem, filterSem) => {
   if (!filterSem) return true;
-  const str = String(subjectSem || "1st Semester").toLowerCase();
+  if (!subjectSem) return true;
+  const str = String(subjectSem).toLowerCase();
   if (str.includes("all") || str.includes("both")) return true;
   const sNorm = normSem(str);
   const fNorm = normSem(filterSem);
@@ -86,8 +99,12 @@ export default function AdminClassAssignment() {
   });
 
   const reloadAssignments = async () => {
-    const { data: refreshed } = await supabase.from('class_assignments').select('*');
+    const [{ data: refreshed }, { data: ays }] = await Promise.all([
+      supabase.from('class_assignments').select('*'),
+      supabase.from('academic_years').select('year, semester'),
+    ]);
     if (refreshed) {
+      const validPeriodKeys = new Set((ays || []).map(y => `${y.year}___${y.semester}`));
       const list = refreshed.map(a => ({
         ...a,
         facultyId: a.faculty_id,
@@ -96,7 +113,14 @@ export default function AdminClassAssignment() {
         subjectName: a.subject_name,
         yearLevel: a.year_level,
         academicYear: a.academic_year,
-      })).filter(inScope);
+      }))
+        .filter(inScope)
+        .filter(a => validPeriodKeys.has(`${a.academicYear}___${a.semester}`))
+        .sort((a, b) => {
+          const ayCmp = String(b.academicYear || "").localeCompare(String(a.academicYear || ""));
+          if (ayCmp !== 0) return ayCmp;
+          return (b.id || 0) - (a.id || 0);
+        });
       setAssignmentList(list);
     }
   };
@@ -122,7 +146,11 @@ export default function AdminClassAssignment() {
           subjectName: a.subject_name,
           yearLevel: a.year_level,
           academicYear: a.academic_year,
-        }));
+        })).sort((a, b) => {
+          const ayCmp = String(b.academicYear || "").localeCompare(String(a.academicYear || ""));
+          if (ayCmp !== 0) return ayCmp;
+          return (b.id || 0) - (a.id || 0);
+        });
         const users = facRes.data || [];
         const subjects = subRes.data || [];
         const depts = deptRes.data || [];
@@ -136,11 +164,21 @@ export default function AdminClassAssignment() {
         const scopedAys = ays.filter(inScopePeriod);
         const aysToUse = scopedAys.length > 0 ? scopedAys : ays;
 
-        setAssignmentList(assignments.filter(inScope));
+        // Sort academic periods newest first by end_date/start_date or year
+        const sortedAys = [...aysToUse].sort((a, b) => {
+          const dateA = a.end_date || a.start_date || "";
+          const dateB = b.end_date || b.start_date || "";
+          if (dateA && dateB && dateA !== dateB) return dateB.localeCompare(dateA);
+          return String(b.year || "").localeCompare(String(a.year || ""));
+        });
+
+        const validPeriodKeys = new Set(ays.map(y => `${y.year}___${y.semester}`));
+        const scopedAssignments = assignments.filter(inScope).filter(a => validPeriodKeys.has(`${a.academicYear}___${a.semester}`));
+        setAssignmentList(scopedAssignments);
         setFacultyOptions(users.filter(u => u.role === "faculty" && u.status !== "deleted" && inScope(u)).map(u => ({ ...u, fullName: u.full_name })));
         setSubjectOptions(subjects.filter(inScope));
         setDepartmentOptions(depts);
-        setAcademicYearOptions(aysToUse);
+        setAcademicYearOptions(sortedAys);
         setSectionOptions(secs.filter(inScope));
 
         const deletedUids = new Set(
@@ -148,18 +186,25 @@ export default function AdminClassAssignment() {
         );
         setDeletedFacultyIds(deletedUids);
 
-        // Auto-select defaults for AY and Semester using canonical pickActivePeriod
-        const activeAy = pickActivePeriod(aysToUse, myDeptNames[0] || filterDept)
-          || aysToUse.find(y => isPeriodActive(y))
-          || aysToUse.find(y => isStatusOngoing(y.status))
-          || aysToUse[0];
+        // Auto-select defaults for AY and Semester:
+        // Prioritizes:
+        // 1. Active period (within date window)
+        // 2. Ongoing status period
+        // 3. Latest period from sortedAys (newest configured period, even if closed/ended)
+        // 4. Latest academic year with existing assignments
+        const activeAy = pickActivePeriod(sortedAys, myDeptNames[0] || filterDept)
+          || sortedAys.find(y => isPeriodActive(y))
+          || sortedAys.find(y => isStatusOngoing(y.status));
 
-        if (!filterAY) {
-          const active = activeAy?.year || "";
-          if (active) setFilterAY(active);
+        const latestPeriod = sortedAys[0];
+        const fallbackAY = activeAy?.year || latestPeriod?.year || "";
+        const fallbackSem = activeAy?.semester || latestPeriod?.semester || "1st Semester";
+
+        if (!filterAY || !sortedAys.some(y => sameAY(y.year, filterAY))) {
+          setFilterAY(fallbackAY);
         }
-        if (!filterSemester) {
-          setFilterSemester(activeAy?.semester || "1st Semester");
+        if (!filterSemester && fallbackSem) {
+          setFilterSemester(fallbackSem);
         }
       } catch (err) { console.error("Fetch Error:", err); }
     };
@@ -178,25 +223,61 @@ export default function AdminClassAssignment() {
     }
   }, [scopeLoading, isSuper, myDeptNames.join("|"), scopeDeptId, scopeDeptName, departmentOptions]);
 
-  const getSectionsForYear = useCallback((dept, year) => {
-    if (!dept || !year) return ["A", "B"];
-    const matches = sectionOptions.filter(
-      (sec) => sameDept(sec.department, dept) && normYear(sec.year_level) === normYear(year)
-    );
-    if (matches.length > 0) {
-      return matches.map((m) => m.name);
+  // When selected department changes, auto-sync Academic Year & Semester to that department's active period
+  const prevDeptRef = useRef(null);
+  useEffect(() => {
+    if (!filterDept || academicYearOptions.length === 0) return;
+    if (prevDeptRef.current !== null && prevDeptRef.current !== filterDept) {
+      const activeForDept = pickActivePeriod(academicYearOptions, filterDept)
+        || academicYearOptions.find(y => sameDept(y.departments?.name, filterDept) && isPeriodActive(y))
+        || academicYearOptions.find(y => sameDept(y.departments?.name, filterDept) && isStatusOngoing(y.status))
+        || academicYearOptions.find(y => sameDept(y.departments?.name, filterDept))
+        || academicYearOptions[0];
+
+      if (activeForDept?.year) {
+        setFilterAY(activeForDept.year);
+        if (activeForDept.semester) {
+          setFilterSemester(activeForDept.semester);
+        }
+      }
     }
-    // Check if sections already exist in assignments
-    const fromAssignments = Array.from(new Set(
-      assignmentList
-        .filter((a) => sameDept(a.department, dept) && normYear(a.yearLevel) === normYear(year) && a.section)
-        .map((a) => a.section)
-    ));
-    if (fromAssignments.length > 0) {
-      return fromAssignments.sort();
+    prevDeptRef.current = filterDept;
+  }, [filterDept, academicYearOptions]);
+
+  const getSectionsForYear = useCallback((dept, year) => {
+    const secMap = new Map();
+    const addSec = (raw) => {
+      if (!raw) return;
+      const trimmed = String(raw).trim();
+      if (!trimmed) return;
+      // Normalize: "Section A" -> "A", "A" -> "A"
+      const clean = trimmed.replace(/^section\s+/i, "").trim().toUpperCase() || trimmed;
+      if (!secMap.has(clean)) {
+        secMap.set(clean, clean);
+      }
+    };
+
+    // 1. Configured sections from sections table
+    sectionOptions
+      .filter((sec) => (!dept || sameDept(sec.department, dept)) && normYear(sec.year_level) === normYear(year))
+      .forEach((sec) => addSec(sec.name));
+
+    // 2. Sections from active assignments in the selected academic year and semester (excludes obsolete historical years)
+    assignmentList
+      .filter((a) =>
+        (!dept || sameDept(a.department, dept)) &&
+        normYear(a.yearLevel) === normYear(year) &&
+        (!filterAY || sameAY(a.academicYear, filterAY)) &&
+        (!filterSemester || matchSemester(a.semester, filterSemester)) &&
+        a.section
+      )
+      .forEach((a) => addSec(a.section));
+
+    if (secMap.size > 0) {
+      return Array.from(secMap.values()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     }
     return ["A", "B"];
-  }, [sectionOptions, assignmentList]);
+  }, [sectionOptions, assignmentList, filterAY, filterSemester]);
 
   const getInitials = (name) => {
     if (!name) return "??";
@@ -219,12 +300,16 @@ export default function AdminClassAssignment() {
   const handleSlotAssign = async (targetSubject, targetSection, faculty) => {
     try {
       const selectedDept = departmentOptions.find((d) => sameDept(d.name, filterDept));
+      const deptActiveAy = pickActivePeriod(academicYearOptions, filterDept);
+      const targetAY = filterAY || deptActiveAy?.year || (availableAcademicYears[0] || "2025-2026");
+      const targetSem = (filterSemester && filterSemester.trim()) || targetSubject.semester || deptActiveAy?.semester || "1st Semester";
+
       const existing = assignmentList.find(a =>
-        a.academicYear === filterAY &&
-        matchSemester(a.semester, filterSemester) &&
+        sameAY(a.academicYear, targetAY) &&
+        matchSemester(a.semester, targetSem) &&
         sameDept(a.department, filterDept) &&
         a.subjectCode === targetSubject.code &&
-        a.section === targetSection
+        (a.section === targetSection || a.section?.replace(/^section\s+/i, "").toUpperCase() === targetSection?.replace(/^section\s+/i, "").toUpperCase())
       );
 
       if (existing) {
@@ -234,8 +319,8 @@ export default function AdminClassAssignment() {
           department: filterDept,
           department_id: selectedDept?.id || null,
           year_level: selectedYearTab,
-          semester: filterSemester,
-          academic_year: filterAY,
+          semester: targetSem,
+          academic_year: targetAY,
         }).eq('id', existing.id);
         if (error) throw error;
       } else {
@@ -248,8 +333,8 @@ export default function AdminClassAssignment() {
           department_id: selectedDept?.id || null,
           year_level: selectedYearTab,
           section: targetSection,
-          semester: filterSemester,
-          academic_year: filterAY,
+          semester: targetSem,
+          academic_year: targetAY,
         }]);
         if (error) throw error;
       }
@@ -265,14 +350,17 @@ export default function AdminClassAssignment() {
   const handleBatchAssignToAllSections = async (targetSubject, sectionsList, faculty) => {
     try {
       const selectedDept = departmentOptions.find((d) => sameDept(d.name, filterDept));
+      const deptActiveAy = pickActivePeriod(academicYearOptions, filterDept);
+      const targetAY = filterAY || deptActiveAy?.year || (availableAcademicYears[0] || "2025-2026");
+      const targetSem = (filterSemester && filterSemester.trim()) || targetSubject.semester || deptActiveAy?.semester || "1st Semester";
 
       for (const sec of sectionsList) {
         const existing = assignmentList.find(a =>
-          a.academicYear === filterAY &&
-          matchSemester(a.semester, filterSemester) &&
+          sameAY(a.academicYear, targetAY) &&
+          matchSemester(a.semester, targetSem) &&
           sameDept(a.department, filterDept) &&
           a.subjectCode === targetSubject.code &&
-          a.section === sec
+          (a.section === sec || a.section?.replace(/^section\s+/i, "").toUpperCase() === sec?.replace(/^section\s+/i, "").toUpperCase())
         );
 
         if (existing) {
@@ -282,8 +370,8 @@ export default function AdminClassAssignment() {
             department: filterDept,
             department_id: selectedDept?.id || null,
             year_level: selectedYearTab,
-            semester: filterSemester,
-            academic_year: filterAY,
+            semester: targetSem,
+            academic_year: targetAY,
           }).eq('id', existing.id);
         } else {
           await supabase.from('class_assignments').insert([{
@@ -295,8 +383,8 @@ export default function AdminClassAssignment() {
             department_id: selectedDept?.id || null,
             year_level: selectedYearTab,
             section: sec,
-            semester: filterSemester,
-            academic_year: filterAY,
+            semester: targetSem,
+            academic_year: targetAY,
           }]);
         }
       }
@@ -389,7 +477,7 @@ export default function AdminClassAssignment() {
               a.facultyId === formData.facultyId &&
               a.subjectCode === formData.subjectCode &&
               matchSemester(a.semester, formData.semester) &&
-              a.academicYear === formData.academicYear
+              sameAY(a.academicYear, formData.academicYear)
             )
             .map(a => a.section)
         );
@@ -441,19 +529,58 @@ export default function AdminClassAssignment() {
   };
 
   // ----------------------------------------------------
+  // Deduplicated academic years from registered periods only, sorted descending
+  const availableAcademicYears = useMemo(() => {
+    const map = new Map();
+    const addYear = (yStr) => {
+      if (!yStr || !yStr.trim()) return;
+      const trimmed = yStr.trim();
+      const cleanKey = trimmed.toLowerCase().replace(/^a\.?y\.?\s*/i, "").replace(/\s+/g, "");
+      if (!map.has(cleanKey)) {
+        map.set(cleanKey, trimmed);
+      }
+    };
+    academicYearOptions
+      .filter((y) => !filterDept || !y.departments?.name || sameDept(y.departments?.name, filterDept))
+      .forEach(y => addYear(y.year));
+    return Array.from(map.values()).sort((a, b) => b.localeCompare(a));
+  }, [academicYearOptions, filterDept]);
+
+  const displayedAYOptions = useMemo(() => {
+    return availableAcademicYears;
+  }, [availableAcademicYears]);
+
+  // Keep filterAY in sync: if currently selected filterAY was deleted or is invalid, reset to valid period
+  useEffect(() => {
+    if (availableAcademicYears.length > 0) {
+      if (filterAY && !availableAcademicYears.some(y => sameAY(y, filterAY))) {
+        setFilterAY(availableAcademicYears[0] || "");
+      }
+    } else if (filterAY) {
+      setFilterAY("");
+    }
+  }, [availableAcademicYears, filterAY]);
+
+  // ----------------------------------------------------
   // Filtered Assignments for Classic Table View
   // ----------------------------------------------------
   const filteredAssignments = useMemo(() => {
     return assignmentList
       .filter(a => !deletedFacultyIds.has(a.facultyId))
-      .filter(a =>
-        a.facultyName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        a.subjectCode?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+      .filter(a => {
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase();
+        return (
+          a.facultyName?.toLowerCase().includes(q) ||
+          a.subjectCode?.toLowerCase().includes(q) ||
+          a.subjectName?.toLowerCase().includes(q) ||
+          a.section?.toLowerCase().includes(q)
+        );
+      })
       .filter(a => !filterDept || sameDept(a.department, filterDept))
-      .filter(a => !filterYear || a.yearLevel === filterYear)
+      .filter(a => !filterYear || normYear(a.yearLevel) === normYear(filterYear))
       .filter(a => !filterSemester || matchSemester(a.semester, filterSemester))
-      .filter(a => !filterAY || a.academicYear === filterAY);
+      .filter(a => !filterAY || sameAY(a.academicYear, filterAY));
   }, [assignmentList, deletedFacultyIds, searchQuery, filterDept, filterYear, filterSemester, filterAY]);
 
   // ----------------------------------------------------
@@ -462,12 +589,43 @@ export default function AdminClassAssignment() {
   const yearTabStats = useMemo(() => {
     const years = ["1st", "2nd", "3rd", "4th"];
     return years.map((y) => {
-      const subs = subjectOptions.filter(
+      const curriculumSubs = subjectOptions.filter(
         (s) =>
           sameDept(s.department, filterDept) &&
-          normYear(s.year_level) === normYear(y) &&
-          matchSemester(s.semester, filterSemester)
+          normYear(s.year_level) === normYear(y)
       );
+
+      const relevantAssignments = assignmentList.filter(
+        (a) =>
+          !deletedFacultyIds.has(a.facultyId) &&
+          sameDept(a.department, filterDept) &&
+          normYear(a.yearLevel) === normYear(y) &&
+          (!filterAY || sameAY(a.academicYear, filterAY)) &&
+          (!filterSemester || matchSemester(a.semester, filterSemester))
+      );
+
+      const assignedSubCodes = new Set(relevantAssignments.map((a) => a.subjectCode));
+      const matchedCurriculumSubs = curriculumSubs.filter(
+        (s) => (!filterSemester || matchSemester(s.semester, filterSemester)) || assignedSubCodes.has(s.code)
+      );
+      const existingCodes = new Set(matchedCurriculumSubs.map((s) => s.code));
+      const extraSubs = [];
+      relevantAssignments.forEach((a) => {
+        if (a.subjectCode && !existingCodes.has(a.subjectCode)) {
+          existingCodes.add(a.subjectCode);
+          extraSubs.push({
+            id: `custom-${a.subjectCode}`,
+            code: a.subjectCode,
+            name: a.subjectName || a.subjectCode,
+            description: a.subjectName || a.subjectCode,
+            department: a.department,
+            year_level: a.yearLevel,
+            semester: a.semester,
+            units: 3,
+          });
+        }
+      });
+      const subs = [...matchedCurriculumSubs, ...extraSubs];
       const secs = getSectionsForYear(filterDept, y);
       const totalSlots = subs.length * secs.length;
 
@@ -478,11 +636,11 @@ export default function AdminClassAssignment() {
             (a) =>
               !deletedFacultyIds.has(a.facultyId) &&
               sameDept(a.department, filterDept) &&
-              (!filterAY || a.academicYear === filterAY) &&
-              matchSemester(a.semester, filterSemester) &&
+              (!filterAY || sameAY(a.academicYear, filterAY)) &&
+              (!filterSemester || matchSemester(a.semester, filterSemester)) &&
               normYear(a.yearLevel) === normYear(y) &&
               a.subjectCode === s.code &&
-              a.section === sec
+              (a.section === sec || a.section?.replace(/^section\s+/i, "").toUpperCase() === sec)
           );
           if (hasTeacher) filledSlots++;
         });
@@ -496,18 +654,49 @@ export default function AdminClassAssignment() {
         pct,
       };
     });
-  }, [subjectOptions, sectionOptions, assignmentList, filterDept, filterAY, filterSemester, deletedFacultyIds, getSectionsForYear]);
+  }, [subjectOptions, assignmentList, filterDept, filterAY, filterSemester, deletedFacultyIds, getSectionsForYear]);
 
   // ----------------------------------------------------
   // Subject Board: Cards for Selected Year
   // ----------------------------------------------------
   const activeYearCards = useMemo(() => {
-    const subs = subjectOptions.filter(
+    const curriculumSubs = subjectOptions.filter(
       (s) =>
         sameDept(s.department, filterDept) &&
-        normYear(s.year_level) === normYear(selectedYearTab) &&
-        matchSemester(s.semester, filterSemester)
+        normYear(s.year_level) === normYear(selectedYearTab)
     );
+
+    const relevantAssignments = assignmentList.filter(
+      (a) =>
+        !deletedFacultyIds.has(a.facultyId) &&
+        sameDept(a.department, filterDept) &&
+        normYear(a.yearLevel) === normYear(selectedYearTab) &&
+        (!filterAY || sameAY(a.academicYear, filterAY)) &&
+        (!filterSemester || matchSemester(a.semester, filterSemester))
+    );
+
+    const assignedSubCodes = new Set(relevantAssignments.map((a) => a.subjectCode));
+    const matchedCurriculumSubs = curriculumSubs.filter(
+      (s) => (!filterSemester || matchSemester(s.semester, filterSemester)) || assignedSubCodes.has(s.code)
+    );
+    const existingCodes = new Set(matchedCurriculumSubs.map((s) => s.code));
+    const extraSubs = [];
+    relevantAssignments.forEach((a) => {
+      if (a.subjectCode && !existingCodes.has(a.subjectCode)) {
+        existingCodes.add(a.subjectCode);
+        extraSubs.push({
+          id: `custom-${a.subjectCode}`,
+          code: a.subjectCode,
+          name: a.subjectName || a.subjectCode,
+          description: a.subjectName || a.subjectCode,
+          department: a.department,
+          year_level: a.yearLevel,
+          semester: a.semester,
+          units: 3,
+        });
+      }
+    });
+    const subs = [...matchedCurriculumSubs, ...extraSubs];
     const secs = getSectionsForYear(filterDept, selectedYearTab);
 
     return subs
@@ -517,11 +706,11 @@ export default function AdminClassAssignment() {
             (a) =>
               !deletedFacultyIds.has(a.facultyId) &&
               sameDept(a.department, filterDept) &&
-              (!filterAY || a.academicYear === filterAY) &&
-              matchSemester(a.semester, filterSemester) &&
+              (!filterAY || sameAY(a.academicYear, filterAY)) &&
+              (!filterSemester || matchSemester(a.semester, filterSemester)) &&
               normYear(a.yearLevel) === normYear(selectedYearTab) &&
               a.subjectCode === s.code &&
-              a.section === sec
+              (a.section === sec || a.section?.replace(/^section\s+/i, "").toUpperCase() === sec)
           );
           return {
             section: sec,
@@ -556,7 +745,7 @@ export default function AdminClassAssignment() {
         }
         return true;
       });
-  }, [subjectOptions, sectionOptions, assignmentList, filterDept, filterAY, filterSemester, selectedYearTab, showUnassignedOnly, searchQuery, deletedFacultyIds, getSectionsForYear]);
+  }, [subjectOptions, assignmentList, filterDept, filterAY, filterSemester, selectedYearTab, showUnassignedOnly, searchQuery, deletedFacultyIds, getSectionsForYear]);
 
   // ----------------------------------------------------
   // Faculty Load Sidebar List (No limits, simple workload count)
@@ -571,7 +760,7 @@ export default function AdminClassAssignment() {
         const myAssignments = assignmentList.filter(
           (a) =>
             a.facultyId === f.id &&
-            (!filterAY || a.academicYear === filterAY) &&
+            (!filterAY || sameAY(a.academicYear, filterAY)) &&
             (!filterSemester || matchSemester(a.semester, filterSemester))
         );
         return {
@@ -626,7 +815,7 @@ export default function AdminClassAssignment() {
               facultyId: "", facultyName: "", subjectCode: "", subjectName: "",
               department: filterDept || (!isSuper && myDeptNames[0]) || "",
               yearLevel: selectedYearTab, section: "", selectedSections: [],
-              semester: filterSemester || "1st Semester", academicYear: filterAY || ""
+              semester: filterSemester || "1st Semester", academicYear: filterAY || (availableAcademicYears[0] || "")
             });
             setShowModal(true);
           }}>
@@ -662,8 +851,9 @@ export default function AdminClassAssignment() {
               value={filterAY}
               onChange={(e) => setFilterAY(e.target.value)}
             >
-              {academicYearOptions.map(y => (
-                <option key={y.id} value={y.year}>{y.year}</option>
+              <option value="">All Academic Years</option>
+              {displayedAYOptions.map(year => (
+                <option key={year} value={year}>{year}</option>
               ))}
             </select>
           </div>
@@ -1006,10 +1196,15 @@ export default function AdminClassAssignment() {
                 {["1st", "2nd", "3rd", "4th"].map(y => <option key={y} value={y}>{y} Year</option>)}
               </select>
 
-              {(filterYear || searchQuery) && (
+              {(filterYear || searchQuery || filterSemester || filterAY) && (
                 <button
                   className="ad-filterClear"
-                  onClick={() => { setFilterYear(""); setSearchQuery(""); }}
+                  onClick={() => {
+                    setFilterYear("");
+                    setSearchQuery("");
+                    setFilterSemester("");
+                    setFilterAY("");
+                  }}
                 >
                   Clear Filters
                 </button>
@@ -1153,7 +1348,10 @@ export default function AdminClassAssignment() {
                   .filter((f) => f.fullName?.toLowerCase().includes(slotSearch.toLowerCase()))
                   .map((fac) => {
                     const myCount = assignmentList.filter(
-                      (a) => a.facultyId === fac.id && a.academicYear === filterAY && a.semester === filterSemester
+                      (a) =>
+                        a.facultyId === fac.id &&
+                        (!filterAY || sameAY(a.academicYear, filterAY)) &&
+                        (!filterSemester || matchSemester(a.semester, filterSemester))
                     ).length;
                     const isCurrent = slotModal.existingAssignment?.facultyId === fac.id;
 
@@ -1274,9 +1472,9 @@ export default function AdminClassAssignment() {
                     onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
                   >
                     <option value="">Select academic year</option>
-                    {academicYearOptions.map(y => (
-                      <option key={y.id} value={y.year}>
-                        {y.year}
+                    {availableAcademicYears.map(year => (
+                      <option key={year} value={year}>
+                        {year}
                       </option>
                     ))}
                   </select>

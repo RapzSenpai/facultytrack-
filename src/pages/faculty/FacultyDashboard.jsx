@@ -31,20 +31,34 @@ export default function FacultyDashboard() {
       .then(([evalRes, yearRes, statusRows]) => {
         const evals = evalRes.data || [];
         const years = yearRes.data || [];
-        setReleaseStatus(statusRows || []);
+        const statuses = statusRows || [];
 
-        const allScores = evals
+        // Exclude data from deleted academic periods
+        const existingPeriodKeys = new Set(
+          years.map((y) => `${y.year}__${y.semester}`)
+        );
+
+        setReleaseStatus(statuses.filter((s) => existingPeriodKeys.has(`${s.academic_year}__${s.semester}`)));
+
+        // Only count evaluations for periods currently existing in academic_years!
+        const validEvals = evals.filter((e) =>
+          existingPeriodKeys.has(`${e.academic_year}__${e.semester}`)
+        );
+
+        const allScores = validEvals
           .flatMap(e => Object.values(e.ratings || {}).map(Number));
         setOverallRating(allScores.length ? allScores.reduce((a, b) => a + b, 0) / allScores.length : null);
-        setTotalResponses(evals.length);
+        setTotalResponses(validEvals.length);
 
-        if (years.length > 0) {
-          const active = pickActivePeriod(years, userProfile?.department) || years[0];
+        const active = pickActivePeriod(years, userProfile?.department);
+        if (active) {
           setActiveYear({
             ...active,
             startDate: active.start_date,
             endDate: active.end_date,
           });
+        } else {
+          setActiveYear(null);
         }
       })
       .catch(err => console.error(err))
@@ -53,6 +67,10 @@ export default function FacultyDashboard() {
 
   const displayName = userProfile?.fullName || "Faculty";
   const firstName = displayName.split(" ")[0];
+
+  const now = new Date();
+  const hour = now.getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
 
 
@@ -106,7 +124,7 @@ export default function FacultyDashboard() {
         <div className="fd-welcomeHeader">
           <div className="fd-welcomeText">
             <span className="fd-welcomeBadge">Faculty Portal</span>
-            <h2 className="fd-title">Welcome back, {firstName}!</h2>
+            <h2 className="fd-title">{greeting}, {firstName}!</h2>
             <p className="fd-subtitle">Overview of your teaching evaluation results and academic performance</p>
           </div>
           <div className="fd-periodCard">

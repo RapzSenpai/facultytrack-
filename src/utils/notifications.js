@@ -55,25 +55,26 @@ export async function notifyAdminsForDepartment({
   if (!title || !message) return 0;
 
   try {
-    // 1. First try the server-side RPC (migration 030)
-    const { data: rpcCount, error: rpcErr } = await supabase.rpc(
-      "notify_admins_for_department",
-      {
-        p_department: department || null,
-        p_department_id: departmentId || null,
-        p_title: title,
-        p_message: message,
-        p_type: type,
-        p_link: link || null,
-      }
-    );
+    // Primary path: Server-side RPC (SECURITY DEFINER bypasses student RLS,
+    // safely routes to matching program admins + super_admins, and respects strict department isolation)
+    const { data: rpcCount, error: rpcErr } = await supabase.rpc("notify_admins_for_department", {
+      p_department: department || null,
+      p_department_id: departmentId || null,
+      p_title: title,
+      p_message: message,
+      p_type: type,
+      p_link: link,
+    });
 
     if (!rpcErr && typeof rpcCount === "number") {
       return rpcCount;
     }
 
-    // 2. Client-side fallback if RPC is not yet applied in DB
-    // Step A: Fetch active super_admins (always receive all alerts)
+    if (rpcErr) {
+      console.warn("[notifications] notify_admins_for_department RPC fallback:", rpcErr.message);
+    }
+
+    // Step A: Fetch active super_admins (receive system-wide alerts)
     const { data: superAdmins, error: superErr } = await supabase
       .from("users")
       .select("id")
@@ -102,32 +103,38 @@ export async function notifyAdminsForDepartment({
       }
     }
 
-    // Step C: If department ID resolved, find assigned admins via admin_program_assignments
+    // Step C: If department ID resolved, find assigned admins via admin_program_assignments AND direct users table
     let scopedAdminIds = [];
     if (resolvedDeptId) {
-      const { data: assignments, error: assignErr } = await supabase
-        .from("admin_program_assignments")
-        .select("admin_id")
-        .eq("department_id", resolvedDeptId);
+      const [assignRes, directAdminsRes] = await Promise.all([
+        supabase
+          .from("admin_program_assignments")
+          .select("admin_id")
+          .eq("department_id", resolvedDeptId),
+        supabase
+          .from("users")
+          .select("id, department, department_id")
+          .eq("role", "admin")
+          .neq("status", "deleted"),
+      ]);
 
-      if (!assignErr && assignments && assignments.length > 0) {
-        const assignedIds = Array.from(new Set(assignments.map((a) => a.admin_id).filter(Boolean)));
-        if (assignedIds.length > 0) {
-          const { data: activeAdmins } = await supabase
-            .from("users")
-            .select("id")
-            .in("id", assignedIds)
-            .eq("role", "admin")
-            .neq("status", "deleted");
+      const assignedIds = new Set((assignRes.data || []).map((a) => a.admin_id).filter(Boolean));
 
-          if (activeAdmins) {
-            scopedAdminIds = activeAdmins.map((u) => u.id);
-          }
+      // Also check direct department or department_id on users table
+      (directAdminsRes.data || []).forEach((u) => {
+        if (
+          (u.department_id && u.department_id === resolvedDeptId) ||
+          (cleanDeptName && u.department && matchDepartment(u.department, cleanDeptName))
+        ) {
+          assignedIds.add(u.id);
         }
-      }
+      });
+
+      scopedAdminIds = Array.from(assignedIds);
     }
 
-    // Combine recipients and deduplicate
+    // Strict isolation: If department could NOT be resolved, ONLY super_admins receive the alert.
+    // Regular program admins of other departments are NEVER notified!
     const recipientIds = Array.from(new Set([...superAdminIds, ...scopedAdminIds]));
     if (recipientIds.length === 0) return 0;
 

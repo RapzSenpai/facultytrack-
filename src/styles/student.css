@@ -3903,7 +3903,8 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
-  max-width: 1300px;
+  max-width: 1040px;
+  width: 100%;
   margin: 0 auto;
   padding-bottom: 24px;
 }
@@ -3932,7 +3933,7 @@
 /* 2-Column Grid Layout */
 .sp-grid {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: 340px 1fr;
   gap: 24px;
   align-items: start;
 }
@@ -6756,3 +6757,391 @@
   cursor: not-allowed;
   transform: none;
 }
+
+/* My Reports page (reuses .sri- modal card inline) */
+.sri-pageWrap { max-width: 760px; margin: 0 auto; width: 100%; }
+.sri-pageCard { max-width: none; max-height: none; animation: none; }
+
+/* Dashboard instructions card */
+.sdb-instructionsCard {
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 18px -2px rgba(15, 23, 42, 0.05);
+  padding: 24px 28px;
+  margin-bottom: 24px;
+}
+
+.sdb-instrCardHeader {
+  margin-bottom: 22px;
+}
+
+.sdb-instrCardTitle {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 5px 0;
+  letter-spacing: -0.01em;
+}
+
+.sdb-instrCardSubtitle {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.sdb-instrColumns {
+  display: flex;
+  gap: 36px;
+  align-items: flex-start;
+}
+
+.sdb-instrCol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.sdb-instrItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+}
+
+.sdb-instrNum {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #0b192c;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(11, 25, 44, 0.12);
+  margin-top: 1px;
+}
+
+.sdb-instrBody {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sdb-instrTitle {
+  font-weight: 700;
+  font-size: 13.5px;
+  color: #0f172a;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.sdb-instrText {
+  font-size: 12.5px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.sdb-anonBanner {
+  margin-top: 24px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 9px;
+  padding: 11px 16px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #15803d;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.sdb-anonIcon {
+  color: #16a34a;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .sdb-instrColumns {
+    flex-direction: column;
+    gap: 18px;
+  }
+  .sdb-instructionsCard {
+    padding: 18px 16px;
+  }
+}
+
+/* Evaluate Teacher: academic period filter (matches search bar) */
+.se-periodSelectWrap {
+  position: relative;
+  flex: 0 0 240px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.se-periodSelectIcon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; }
+.se-periodSelect {
+  width: 100%; height: 42px; padding: 0 34px 0 38px;
+  border: 1.5px solid #e2e8f0; border-radius: 10px;
+  background: #f8fafc url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 12px center;
+  color: #1e293b; font-size: 13.5px; font-weight: 600; cursor: pointer;
+  appearance: none; -webkit-appearance: none; box-sizing: border-box;
+  text-overflow: ellipsis; transition: all 0.2s ease;
+}
+.se-periodSelect:focus { outline: none; background-color: #fff; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+
+/* Interactive Rating Radio Group (Option 1: Radio Pills with Circular Indicator) */
+.se-ratingRadioGroup {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.se-ratingRadio {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  font-size: 13.5px;
+  font-weight: 700;
+  box-sizing: border-box;
+}
+
+.se-ratingRadio:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.se-ratingRadioInput {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  margin: 0;
+}
+
+.se-ratingRadio:has(.se-ratingRadioInput:focus-visible) {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.se-radioCircle {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1.8px solid #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s ease;
+  flex-shrink: 0;
+  background: #ffffff;
+}
+
+.se-radioDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: transparent;
+  transform: scale(0);
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.se-radioNum {
+  line-height: 1;
+}
+
+/* Hover styles per rating tier */
+.se-ratingRadio--1:hover { border-color: #ef4444; color: #dc2626; background: #fef2f2; }
+.se-ratingRadio--2:hover { border-color: #f59e0b; color: #d97706; background: #fffbeb; }
+.se-ratingRadio--3:hover { border-color: #3b82f6; color: #2563eb; background: #eff6ff; }
+.se-ratingRadio--4:hover { border-color: #0ea5e9; color: #0284c7; background: #f0f9ff; }
+.se-ratingRadio--5:hover { border-color: #10b981; color: #059669; background: #ecfdf5; }
+
+/* Active (Checked) states */
+.se-ratingRadio--active {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.se-ratingRadio--active .se-radioDot {
+  transform: scale(1);
+}
+
+.se-ratingRadio--1.se-ratingRadio--active {
+  background: #fef2f2;
+  border-color: #ef4444;
+  color: #b91c1c;
+}
+.se-ratingRadio--1.se-ratingRadio--active .se-radioCircle {
+  border-color: #ef4444;
+}
+.se-ratingRadio--1.se-ratingRadio--active .se-radioDot {
+  background: #ef4444;
+}
+
+.se-ratingRadio--2.se-ratingRadio--active {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #b45309;
+}
+.se-ratingRadio--2.se-ratingRadio--active .se-radioCircle {
+  border-color: #f59e0b;
+}
+.se-ratingRadio--2.se-ratingRadio--active .se-radioDot {
+  background: #f59e0b;
+}
+
+.se-ratingRadio--3.se-ratingRadio--active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+.se-ratingRadio--3.se-ratingRadio--active .se-radioCircle {
+  border-color: #3b82f6;
+}
+.se-ratingRadio--3.se-ratingRadio--active .se-radioDot {
+  background: #3b82f6;
+}
+
+.se-ratingRadio--4.se-ratingRadio--active {
+  background: #f0f9ff;
+  border-color: #0ea5e9;
+  color: #0369a1;
+}
+.se-ratingRadio--4.se-ratingRadio--active .se-radioCircle {
+  border-color: #0ea5e9;
+}
+.se-ratingRadio--4.se-ratingRadio--active .se-radioDot {
+  background: #0ea5e9;
+}
+
+.se-ratingRadio--5.se-ratingRadio--active {
+  background: #ecfdf5;
+  border-color: #10b981;
+  color: #047857;
+}
+.se-ratingRadio--5.se-ratingRadio--active .se-radioCircle {
+  border-color: #10b981;
+}
+.se-ratingRadio--5.se-ratingRadio--active .se-radioDot {
+  background: #10b981;
+}
+
+/* Responsive adjustment for small screens */
+@media (max-width: 768px) {
+  .se-ratingRadioGroup {
+    width: 100%;
+    justify-content: space-between;
+    padding-top: 10px;
+    gap: 4px;
+  }
+  .se-ratingRadio {
+    padding: 6px 8px;
+    font-size: 13px;
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+/* Compact Mobile Controls for Evaluate Teacher */
+@media (max-width: 992px) {
+  .se-controlsTop {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .se-periodSelectWrap {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: none !important;
+  }
+  .se-searchBarWrap {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: none !important;
+  }
+  .se-filterChips {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .se-controlsCard {
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    gap: 10px;
+    border-radius: 12px;
+  }
+  .se-controlsTop {
+    gap: 8px;
+  }
+  .se-periodSelect {
+    height: 38px;
+    font-size: 13px;
+    padding: 0 30px 0 34px;
+  }
+  .se-periodSelectIcon {
+    left: 11px;
+    width: 14px;
+    height: 14px;
+  }
+  .se-searchBarInput {
+    height: 38px;
+    font-size: 13px;
+    padding: 0 32px 0 34px;
+  }
+  .se-searchBarIcon {
+    left: 11px;
+    width: 14px;
+    height: 14px;
+  }
+  .se-sectionSummaryBanner {
+    font-size: 12px;
+    padding-top: 8px;
+    gap: 6px;
+    line-height: 1.4;
+  }
+}
+
+@media (max-width: 480px) {
+  .se-controlsCard {
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    gap: 8px;
+  }
+  .se-filterChips {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+    gap: 6px;
+    scrollbar-width: none;
+  }
+  .se-filterChips::-webkit-scrollbar {
+    display: none;
+  }
+  .se-filterChip {
+    padding: 5px 11px;
+    font-size: 11.5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+

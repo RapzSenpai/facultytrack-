@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { Users, Menu, LogOut, ChevronDown, User, FileText, Home } from "lucide-react";
+import { Users, Menu, LogOut, ChevronDown, User, FileText, Home, AlertCircle } from "lucide-react";
 import logo from "../../assets/logo.jpg";
 import NotificationBell from "../../components/notifications/NotificationBell";
 
@@ -16,6 +16,11 @@ const NAV_ITEMS = [
     path: "/student/evaluate",
     label: "Evaluate Teacher",
     icon: <FileText size={18} />,
+  },
+  {
+    path: "/student/reports",
+    label: "My Reports",
+    icon: <AlertCircle size={18} />,
   },
   {
     path: "/student/profile",
@@ -93,13 +98,15 @@ export default function StudentLayout({ children, breadcrumb }) {
             onClick={() => navigate("/student/profile")}
             title={sidebarCollapsed ? `${displayName} (STUDENT)` : undefined}
           >
-            <div className="sd-userAvatar">
-              {(() => {
-                const parts = displayName.trim().split(" ");
-                if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-                return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-              })()}
-            </div>
+            {sidebarCollapsed && (
+              <div className="sd-userAvatar">
+                {(() => {
+                  const parts = displayName.trim().split(" ");
+                  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+                  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+                })()}
+              </div>
+            )}
             <div className="sd-userFooterInfo">
               <div className="sd-userFooterName">{displayName}</div>
               <div className="sd-userFooterSub">
@@ -107,15 +114,6 @@ export default function StudentLayout({ children, breadcrumb }) {
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            className="sd-userLogoutBtn"
-            onClick={handleLogout}
-            title={sidebarCollapsed ? "Log out" : undefined}
-          >
-            <LogOut size={16} />
-            <span className="sd-userLogoutText">Log out</span>
-          </button>
         </div>
       </aside>
 

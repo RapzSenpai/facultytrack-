@@ -2,9 +2,6 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  background: radial-gradient(circle at top right, #eef5ff 0%, transparent 35%),
-    radial-gradient(circle at bottom left, #f8fafc 0%, transparent 40%),
-    #f5f7fb;
   font-family: 'Inter', sans-serif;
   min-height: 100vh;
 }
@@ -41,8 +38,8 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  background: #ffffff;
-  border: 1px solid #edf2f7;
+  background: linear-gradient(135deg, #1e3a5f 0%, #2d5a8a 100%);
+  border: 1px solid #c4d4e4;
   padding: 28px;
   border-radius: 14px;
   box-shadow: 0 8px 30px rgba(16, 20, 27, 0.06);
@@ -62,7 +59,7 @@
   margin: 0;
   font-size: 24px;
   font-weight: 700;
-  color: #000000;
+  color: #f4f3f3;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -73,7 +70,7 @@
 .mockup-welcome p {
   margin: 4px 0 16px;
   font-size: 14px;
-  color: #727a89;
+  color: #ced4de;
   z-index: 1;
   position: relative;
 }
@@ -197,11 +194,33 @@
   animation: pulse 2s infinite;
 }
 
+.mockup-status-badge--scheduled {
+  background: #eff6ff;
+  color: #2563eb;
+}
+.mockup-status-badge--scheduled::before {
+  background: #3b82f6;
+  animation: none;
+}
+
+.mockup-status-badge--closed {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+.mockup-status-badge--closed::before {
+  background: #9ca3af;
+  animation: none;
+}
+
 /* Stats Row */
 .mockup-stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 20px;
+}
+
+.mockup-stats-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .mockup-stat-card {
@@ -230,6 +249,16 @@
   height: 4px;
   width: 100%;
   background: linear-gradient(90deg, #1e40af, #3b82f6);
+}
+
+.mockup-panel .mockup-stat-card {
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 4px 16px rgba(15, 31, 58, 0.04);
+}
+
+.mockup-panel .mockup-stat-card:hover {
+  border-color: #e2e8f0;
+  box-shadow: 0 10px 25px rgba(15, 31, 58, 0.08);
 }
 
 .mockup-stat-header {
@@ -883,6 +912,10 @@
     grid-template-columns: repeat(2, 1fr);
   }
 
+  .mockup-stats-grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
   .mockup-grid-3,
   .mockup-grid-3-bottom,
   .mockup-grid-3-bottom.super-three-col {
@@ -926,7 +959,8 @@
 }
 
 @media (max-width: 480px) {
-  .mockup-stats-grid {
+  .mockup-stats-grid,
+  .mockup-stats-grid-3 {
     grid-template-columns: 1fr;
   }
 

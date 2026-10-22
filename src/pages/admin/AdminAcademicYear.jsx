@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
-import { isPeriodActive, periodStatusLabel, periodEndPassed, isStatusOngoing } from "../../utils/periodStatus";
+import { isPeriodActive, periodStatusLabel, periodEndPassed, periodNotStarted } from "../../utils/periodStatus";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { useSuperScope } from "../../context/SuperScopeContext";
 
@@ -23,6 +23,8 @@ export default function AdminAcademicYear() {
 
   // Real Data State
   const [academicYearList, setAcademicYearList] = useState([]);
+  const [orphanedPeriods, setOrphanedPeriods] = useState([]);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   // Form State for CRUD
   const [formData, setFormData] = useState({
@@ -37,9 +39,44 @@ export default function AdminAcademicYear() {
   const fetchAY = async () => {
     if (scopeLoading) return;
     try {
-      const { data, error } = await supabase.from('academic_years').select('*, departments(name)');
-      if (error) throw error;
-      setAcademicYearList((data || []).filter(inScopePeriod));
+      const [ayRes, assignRes, evalRes] = await Promise.all([
+        supabase.from('academic_years').select('*, departments(name)'),
+        supabase.from('class_assignments').select('academic_year, semester, department_id, department'),
+        supabase.from('admin_evaluations_anon').select('academic_year, semester')
+      ]);
+
+      if (ayRes.error) throw ayRes.error;
+      const allAY = ayRes.data || [];
+      const scopedAY = allAY.filter(inScopePeriod);
+      setAcademicYearList(scopedAY);
+
+      // Detect orphaned periods (data present in class_assignments or evaluations but deleted from academic_years)
+      const registeredKeys = new Set(allAY.map(a => `${a.year}___${a.semester}`));
+      const orphanMap = new Map();
+
+      (assignRes.data || []).forEach(a => {
+        if (!a.academic_year || !a.semester) return;
+        const key = `${a.academic_year}___${a.semester}`;
+        if (!registeredKeys.has(key)) {
+          if (!orphanMap.has(key)) {
+            orphanMap.set(key, { year: a.academic_year, semester: a.semester, classCount: 0, evalCount: 0 });
+          }
+          orphanMap.get(key).classCount += 1;
+        }
+      });
+
+      (evalRes.data || []).forEach(e => {
+        if (!e.academic_year || !e.semester) return;
+        const key = `${e.academic_year}___${e.semester}`;
+        if (!registeredKeys.has(key)) {
+          if (!orphanMap.has(key)) {
+            orphanMap.set(key, { year: e.academic_year, semester: e.semester, classCount: 0, evalCount: 0 });
+          }
+          orphanMap.get(key).evalCount += 1;
+        }
+      });
+
+      setOrphanedPeriods(Array.from(orphanMap.values()));
     } catch (err) {
       console.error("Fetch error:", err);
     }
@@ -63,7 +100,7 @@ export default function AdminAcademicYear() {
         semester: ay.semester || "",
         start_date: ay.start_date || "",
         end_date: ay.end_date || "",
-        status: ay.status || "on-going",
+        status: periodEndPassed(ay) ? "closed" : "on-going",
       });
     } else {
       setEditingAY(null);
@@ -91,18 +128,17 @@ export default function AdminAcademicYear() {
       alert("Shared periods are read-only for program admins.");
       return;
     }
-    if (formData.status === "on-going" && formData.end_date) {
-      const end = new Date(`${formData.end_date.slice(0, 10)}T23:59:59`);
-      if (!Number.isNaN(end.getTime()) && end < new Date()) {
-        const proceed = window.confirm(
-          `The End Date (${formData.end_date}) is in the past.\n\nStudents will see evaluation as CLOSED until the End Date is set to today or a future date.\n\nDo you want to save anyway?`
-        );
-        if (!proceed) return;
-      }
-    }
+
+    // Status is determined automatically: scheduled if not started yet, closed once deadline has passed, otherwise on-going.
+    const autoStatus = periodNotStarted(formData)
+      ? "scheduled"
+      : periodEndPassed(formData)
+      ? "closed"
+      : "on-going";
 
     const payload = {
       ...formData,
+      status: autoStatus,
       department_id: isEditing ? (editingAY.department_id || null) : (isSuper ? (scopeDeptId || null) : myDeptIds[0]),
     };
 
@@ -128,19 +164,135 @@ export default function AdminAcademicYear() {
     }
   };
 
-  // 5. Delete Handler
-  const handleDelete = async (row) => {
-    if (!isSuper && !row.department_id) {
+  // 5. Delete Handlers with Cascade Support
+  const handleOpenDelete = async (ay, isOrphan = false) => {
+    if (!isOrphan && !isSuper && !ay.department_id) {
       alert("Shared periods are read-only for program admins.");
       return;
     }
-    if (window.confirm("Delete this academic year record?")) {
+
+    setDeleteTarget({
+      id: ay.id,
+      year: ay.year,
+      semester: ay.semester,
+      department_id: ay.department_id,
+      deptName: ay.departments?.name,
+      isOrphan,
+      checking: !isOrphan,
+      classCount: isOrphan ? (ay.classCount || 0) : 0,
+      evalCount: isOrphan ? (ay.evalCount || 0) : 0,
+      cascade: true,
+      deleting: false,
+    });
+
+    if (!isOrphan) {
       try {
-        const { error } = await supabase.from('academic_years').delete().eq('id', row.id);
-        if (!error) await fetchAY();
+        let assignQuery = supabase
+          .from('class_assignments')
+          .select('id', { count: 'exact', head: true })
+          .eq('academic_year', ay.year)
+          .eq('semester', ay.semester);
+        if (ay.department_id) {
+          assignQuery = assignQuery.eq('department_id', ay.department_id);
+        }
+
+        const [assignRes, evalRes] = await Promise.all([
+          assignQuery,
+          supabase
+            .from('admin_evaluations_anon')
+            .select('assignment_id', { count: 'exact', head: true })
+            .eq('academic_year', ay.year)
+            .eq('semester', ay.semester),
+        ]);
+
+        setDeleteTarget(prev => (prev && prev.id === ay.id) ? {
+          ...prev,
+          checking: false,
+          classCount: assignRes.count || 0,
+          evalCount: evalRes.count || 0,
+        } : prev);
       } catch (err) {
-        console.error("Delete error:", err);
+        console.error("Count check error:", err);
+        setDeleteTarget(prev => prev ? { ...prev, checking: false } : null);
       }
+    }
+  };
+
+  const executeDelete = async () => {
+    if (!deleteTarget) return;
+    const { id, year, semester, department_id, cascade, isOrphan } = deleteTarget;
+    setDeleteTarget(prev => ({ ...prev, deleting: true }));
+
+    try {
+      if (cascade || isOrphan) {
+        // 1. Delete evaluations for this period
+        const { error: evalErr } = await supabase
+          .from('evaluations')
+          .delete()
+          .eq('academic_year', year)
+          .eq('semester', semester);
+        if (evalErr) console.warn("evaluations delete warning:", evalErr);
+
+        // 2. Delete class assignments
+        let assignDelete = supabase
+          .from('class_assignments')
+          .delete()
+          .eq('academic_year', year)
+          .eq('semester', semester);
+        if (department_id) {
+          assignDelete = assignDelete.or(`department_id.eq.${department_id},department.eq.${deleteTarget.deptName || ''}`);
+        }
+        const { error: caErr } = await assignDelete;
+        if (caErr) console.warn("class_assignments delete warning:", caErr);
+
+        // 3. Delete evaluation releases
+        let relDelete = supabase
+          .from('evaluation_releases')
+          .delete()
+          .eq('academic_year', year)
+          .eq('semester', semester);
+        const { error: relErr } = await relDelete;
+        if (relErr) console.warn("evaluation_releases delete warning:", relErr);
+
+        // 4. Delete student enrollments
+        let enrollDelete = supabase
+          .from('student_enrollments')
+          .delete()
+          .eq('academic_year', year)
+          .eq('semester', semester);
+        const { error: seErr } = await enrollDelete;
+        if (seErr) console.warn("student_enrollments delete warning:", seErr);
+      }
+
+      // 5. Delete from academic_years if record still exists
+      if (!isOrphan && id) {
+        const { error: ayErr } = await supabase.from('academic_years').delete().eq('id', id);
+        if (ayErr) throw ayErr;
+      }
+
+      setDeleteTarget(null);
+      await fetchAY();
+    } catch (err) {
+      console.error("Delete execution error:", err);
+      alert(`Delete failed: ${err.message || 'Error deleting records'}`);
+      setDeleteTarget(prev => ({ ...prev, deleting: false }));
+    }
+  };
+
+  const purgeAllOrphans = async () => {
+    if (!window.confirm("Permanently delete all orphaned class assignments, student evaluations, releases, and enrollments for deleted periods?")) return;
+    try {
+      for (const p of orphanedPeriods) {
+        await supabase.from('evaluations').delete().eq('academic_year', p.year).eq('semester', p.semester);
+        await supabase.from('class_assignments').delete().eq('academic_year', p.year).eq('semester', p.semester);
+        await supabase.from('evaluation_releases').delete().eq('academic_year', p.year).eq('semester', p.semester);
+        await supabase.from('student_enrollments').delete().eq('academic_year', p.year).eq('semester', p.semester);
+      }
+      await fetchAY();
+      alert("All orphaned records have been purged from the database.");
+    } catch (err) {
+      console.error("Purge error:", err);
+      alert("Failed to purge orphaned records: " + err.message);
     }
   };
 
@@ -150,8 +302,11 @@ export default function AdminAcademicYear() {
       ay.semester?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Derived status: a past end date reads Closed even before manual close.
-  const ayStatus = (ay) => (isPeriodActive(ay) ? "on-going" : "closed");
+  // Derived status: scheduled if not started, closed if deadline passed, otherwise on-going.
+  const ayStatus = (ay) => {
+    if (periodNotStarted(ay)) return "scheduled";
+    return isPeriodActive(ay) ? "on-going" : "closed";
+  };
 
   const displayedAY = filteredAcademicYears
     .filter(ay => !filterStatus || ayStatus(ay) === filterStatus)
@@ -172,6 +327,91 @@ export default function AdminAcademicYear() {
             Add New
           </button>
         </div>
+
+        {/* ORPHANED PERIOD DATA BANNER */}
+        {orphanedPeriods.length > 0 && (
+          <div style={{
+            background: "#fffbeb",
+            border: "1px solid #fef3c7",
+            borderRadius: "10px",
+            padding: "16px 20px",
+            marginBottom: "20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "16px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: "280px", flex: 1 }}>
+              <div style={{
+                width: "36px", height: "36px", borderRadius: "50%",
+                background: "#fef3c7", color: "#d97706",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#92400e" }}>
+                  Orphaned Period Data Detected
+                </h4>
+                <p style={{ margin: "2px 0 0 0", fontSize: "13px", color: "#b45309" }}>
+                  Found data from deleted period(s): <strong>{orphanedPeriods.map(p => `${p.year} • ${p.semester}`).join(", ")}</strong>. These still show in Reports and Class Assignments.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                onClick={purgeAllOrphans}
+                style={{
+                  background: "#dc2626",
+                  color: "#fff",
+                  border: "none",
+                  padding: "8px 16px",
+                  borderRadius: "6px",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 1px 2px rgba(220,38,38,0.2)"
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2" />
+                </svg>
+                Purge All Orphaned Data
+              </button>
+              {orphanedPeriods.length > 1 && orphanedPeriods.map((p, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleOpenDelete(p, true)}
+                  style={{
+                    background: "#fef2f2",
+                    color: "#dc2626",
+                    border: "1px solid #fecaca",
+                    padding: "7px 12px",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "5px"
+                  }}
+                >
+                  {p.year} ({p.semester})
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="ad-tableCard ad-tableCard--padded">
           {/* TOOLBAR */}
@@ -198,6 +438,7 @@ export default function AdminAcademicYear() {
 
             <select className="ad-filterSelect" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
               <option value="">All Status</option>
+              <option value="scheduled">Scheduled</option>
               <option value="on-going">On-going</option>
               <option value="closed">Closed</option>
             </select>
@@ -238,12 +479,17 @@ export default function AdminAcademicYear() {
                       <td className="ad-engagement">{ay.end_date}</td>
                       <td className="ad-engagement">{ay.departments?.name || "Shared"}</td>
                       <td>
-                        <span className={`ad-badge ad-badge--${isPeriodActive(ay) ? "active" : "inactive"}`}>
+                        <span className={`ad-badge ad-badge--${periodNotStarted(ay) ? "scheduled" : isPeriodActive(ay) ? "active" : "inactive"}`}>
                           {periodStatusLabel(ay)}
                         </span>
-                        {isStatusOngoing(ay.status) && periodEndPassed(ay) && (
-                          <div style={{ fontSize: "11px", color: "#b91c1c", marginTop: "3px", fontWeight: 600 }}>
-                            ⚠️ Ended {ay.end_date}
+                        {ay.start_date && periodNotStarted(ay) && (
+                          <div style={{ fontSize: "11px", color: "#2563eb", marginTop: "3px" }}>
+                            Starts {ay.start_date}
+                          </div>
+                        )}
+                        {ay.end_date && !periodNotStarted(ay) && (
+                          <div style={{ fontSize: "11px", color: isPeriodActive(ay) ? "#059669" : "#64748b", marginTop: "3px" }}>
+                            {isPeriodActive(ay) ? `Until ${ay.end_date}` : `Ended ${ay.end_date}`}
                           </div>
                         )}
                       </td>
@@ -251,7 +497,7 @@ export default function AdminAcademicYear() {
                         <button className="ad-actionBtn ad-actionBtn--edit" title="Edit" onClick={() => handleOpenModal(ay)}>
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
                         </button>
-                        <button className="ad-actionBtn ad-actionBtn--delete" title="Delete" onClick={() => handleDelete(ay)}>
+                        <button className="ad-actionBtn ad-actionBtn--delete" title="Delete" onClick={() => handleOpenDelete(ay, false)}>
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2" /></svg>
                         </button>
                       </td>
@@ -322,22 +568,175 @@ export default function AdminAcademicYear() {
                 </div>
               </div>
               <div className="ad-formGroup">
-                <label className="ad-label">Status</label>
-                <select className="ad-input" value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
-                  <option value="on-going">On-going (Open)</option>
-                  <option value="closed">Closed</option>
-                </select>
-                {formData.status === "on-going" && formData.end_date && new Date(`${formData.end_date.slice(0, 10)}T23:59:59`) < new Date() && (
-                  <div style={{ color: "#b91c1c", backgroundColor: "#fef2f2", border: "1px solid #fecaca", padding: "8px 12px", borderRadius: "6px", fontSize: "12px", marginTop: "8px", lineHeight: "1.4" }}>
-                    ⚠️ <strong>Deadline Notice:</strong> The End Date (<strong>{formData.end_date}</strong>) is in the past. Even with status "On-going", student evaluation will read as <strong>CLOSED</strong> until the End Date is set to today or a future date.
-                  </div>
-                )}
+                <label className="ad-label">Evaluation Status (Automated)</label>
+                {(() => {
+                  const isFormActive = !periodEndPassed(formData);
+                  return (
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "10px 14px",
+                      background: isFormActive ? "#f0fdf4" : "#f8fafc",
+                      border: `1px solid ${isFormActive ? "#bbf7d0" : "#e2e8f0"}`,
+                      borderRadius: "8px",
+                      fontSize: "13px"
+                    }}>
+                      <span className={`ad-badge ad-badge--${isFormActive ? "active" : "inactive"}`}>
+                        {isFormActive ? "On-going" : "Closed"}
+                      </span>
+                      <span style={{ color: isFormActive ? "#15803d" : "#64748b" }}>
+                        {formData.end_date
+                          ? (isFormActive
+                              ? `Open until ${formData.end_date} at 11:59 PM`
+                              : `Closed automatically (deadline passed on ${formData.end_date})`)
+                          : "Open (No end date set)"}
+                      </span>
+                    </div>
+                  );
+                })()}
+                <small style={{ color: "#64748b", marginTop: "6px", display: "block" }}>
+                  Status is automated based on the End Date. Period automatically closes once the deadline passes.
+                </small>
               </div>
             </div>
             <div className="ad-modalFooter">
               <button className="ad-btnSecondary" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="ad-btnPrimary" onClick={handleSave}>
                 {editingAY ? "Update" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* DELETE CONFIRMATION & CASCADE MODAL */}
+      {deleteTarget && (
+        <div className="ad-modal">
+          <div className="ad-modalOverlay" onClick={() => !deleteTarget.deleting && setDeleteTarget(null)} />
+          <div className="ad-modalContent" style={{ maxWidth: "480px" }}>
+            <div className="ad-modalHeader">
+              <h3 className="ad-modalTitle" style={{ color: "#dc2626", display: "flex", alignItems: "center", gap: "8px" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2v2" />
+                </svg>
+                {deleteTarget.isOrphan ? "Purge Orphaned Period Data" : "Delete Evaluation Period"}
+              </h3>
+              <button
+                className="ad-modalClose"
+                disabled={deleteTarget.deleting}
+                onClick={() => setDeleteTarget(null)}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="ad-modalBody">
+              <p style={{ margin: "0 0 14px 0", fontSize: "14px", color: "#374151" }}>
+                {deleteTarget.isOrphan
+                  ? <>Permanently purge orphaned records for deleted period: <strong style={{ color: "#111827" }}>{deleteTarget.year} ({deleteTarget.semester})</strong>.</>
+                  : <>Are you sure you want to delete <strong style={{ color: "#111827" }}>{deleteTarget.year} ({deleteTarget.semester})</strong>?</>}
+              </p>
+
+              {deleteTarget.checking ? (
+                <div style={{ padding: "16px", textAlign: "center", color: "#6b7280", fontSize: "13px" }}>
+                  Scanning associated records...
+                </div>
+              ) : (
+                <div style={{
+                  background: "#f9fafb",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "8px",
+                  padding: "14px",
+                  marginBottom: "16px"
+                }}>
+                  <div style={{ fontSize: "12px", fontWeight: "600", textTransform: "uppercase", color: "#6b7280", marginBottom: "8px" }}>
+                    Associated Records Found
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: "6px", padding: "10px" }}>
+                      <span style={{ fontSize: "11px", color: "#6b7280", display: "block" }}>Class Assignments</span>
+                      <strong style={{ fontSize: "18px", color: deleteTarget.classCount > 0 ? "#dc2626" : "#111827" }}>
+                        {deleteTarget.classCount}
+                      </strong>
+                    </div>
+                    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: "6px", padding: "10px" }}>
+                      <span style={{ fontSize: "11px", color: "#6b7280", display: "block" }}>Student Evaluations</span>
+                      <strong style={{ fontSize: "18px", color: deleteTarget.evalCount > 0 ? "#dc2626" : "#111827" }}>
+                        {deleteTarget.evalCount}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!deleteTarget.isOrphan && (
+                <div style={{
+                  background: deleteTarget.cascade ? "#fef2f2" : "#f8fafc",
+                  border: `1px solid ${deleteTarget.cascade ? "#fecaca" : "#e2e8f0"}`,
+                  borderRadius: "8px",
+                  padding: "12px 14px",
+                  transition: "all 0.15s ease"
+                }}>
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer", userSelect: "none" }}>
+                    <input
+                      type="checkbox"
+                      checked={deleteTarget.cascade}
+                      disabled={deleteTarget.deleting}
+                      onChange={(e) => setDeleteTarget(prev => ({ ...prev, cascade: e.target.checked }))}
+                      style={{ marginTop: "3px" }}
+                    />
+                    <div>
+                      <span style={{ fontSize: "13px", fontWeight: "600", color: deleteTarget.cascade ? "#991b1b" : "#334155", display: "block" }}>
+                        Cascade Delete Associated Records (Recommended)
+                      </span>
+                      <span style={{ fontSize: "12px", color: deleteTarget.cascade ? "#b91c1c" : "#64748b", display: "block", marginTop: "2px" }}>
+                        Also permanently delete all associated class assignments, student evaluation results, releases, and enrollments for this period.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              )}
+
+              {deleteTarget.isOrphan && (
+                <p style={{ margin: 0, fontSize: "12px", color: "#dc2626", fontWeight: "500" }}>
+                  ⚠️ This action will permanently remove all class assignments, evaluation responses, and releases for this period from the database.
+                </p>
+              )}
+            </div>
+
+            <div className="ad-modalFooter">
+              <button
+                className="ad-btnSecondary"
+                disabled={deleteTarget.deleting}
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeDelete}
+                disabled={deleteTarget.deleting || deleteTarget.checking}
+                style={{
+                  background: "#dc2626",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "10px 18px",
+                  fontWeight: "600",
+                  fontSize: "14px",
+                  cursor: (deleteTarget.deleting || deleteTarget.checking) ? "not-allowed" : "pointer",
+                  opacity: (deleteTarget.deleting || deleteTarget.checking) ? 0.6 : 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
+                {deleteTarget.deleting ? (
+                  <>Deleting...</>
+                ) : (
+                  deleteTarget.isOrphan ? "Purge All Data" : (deleteTarget.cascade ? "Delete Period & Data" : "Delete Period Only")
+                )}
               </button>
             </div>
           </div>

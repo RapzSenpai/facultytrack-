@@ -46,9 +46,19 @@ function buildEvaluationPeriods(evaluations, questions, criteria) {
       });
     });
 
-    const enabledCriteria = criteria.filter(c => c.enabled);
-    const categories = enabledCriteria.map(c => {
-      const cQuestions = questions.filter(q => q.criteriaId === c.id);
+    const activeOrHistoricalCriteria = criteria.filter(c => {
+      const hasRatingsInPeriod = questions.some(q => q.criteriaId === c.id && qScores[q.id]?.length > 0);
+      return hasRatingsInPeriod || c.enabled;
+    });
+
+    const categories = activeOrHistoricalCriteria.map(c => {
+      const cQuestions = questions.filter(q => {
+        if (q.criteriaId !== c.id) return false;
+        if (evals.length > 0) {
+          return qScores[q.id] && qScores[q.id].length > 0;
+        }
+        return q.is_active !== false;
+      });
       const items = cQuestions.map(q => ({
         criterion: q.text,
         rating: avg(qScores[q.id] || []),
@@ -182,20 +192,31 @@ export default function FacultyEvalResult() {
     // invisible here by design; pendingStatuses powers the notice.
     Promise.all([
       supabase.from('faculty_evaluations_anon').select('*'),
+      supabase.from('academic_years').select('id, year, semester'),
       supabase.from('questions').select('*'),
       supabase.from('criteria').select('*'),
       fetchFacultyReleaseStatus().catch(() => []),
     ])
-      .then(([evalRes, questionRes, criteriaRes, statusRows]) => {
+      .then(([evalRes, yearsRes, questionRes, criteriaRes, statusRows]) => {
         const rawEvals = evalRes.data || [];
+        const rawYears = yearsRes.data || [];
         const rawQuestions = questionRes.data || [];
         const rawCriteria = criteriaRes.data || [];
         const statuses = statusRows || [];
 
-        const releasedKeys = new Set(
-          statuses.filter((s) => s.released).map((s) => `${s.academic_year}__${s.semester}`),
+        // Valid periods that currently exist in academic_years (filters out deleted periods)
+        const existingPeriodKeys = new Set(
+          rawYears.map((y) => `${y.year}__${y.semester}`)
         );
-        setPendingStatuses(statuses.filter((s) => s.has_evaluations && !s.released));
+
+        const releasedKeys = new Set(
+          statuses
+            .filter((s) => s.released && existingPeriodKeys.has(`${s.academic_year}__${s.semester}`))
+            .map((s) => `${s.academic_year}__${s.semester}`),
+        );
+        setPendingStatuses(
+          statuses.filter((s) => s.has_evaluations && !s.released && existingPeriodKeys.has(`${s.academic_year}__${s.semester}`))
+        );
 
         const evals = rawEvals.map(e => ({
           ...e,
@@ -212,16 +233,17 @@ export default function FacultyEvalResult() {
 
         const criteria = rawCriteria;
 
-        // The view already filters to released periods; the set is a
-        // belt-and-braces guard against stale client state.
+        // Belt-and-braces: only evaluations for periods that are released AND still exist in academic_years!
         const visibleEvals = evals.filter((e) =>
-          releasedKeys.has(`${e.academicYear}__${e.semester}`),
+          releasedKeys.has(`${e.academicYear}__${e.semester}`) &&
+          existingPeriodKeys.has(`${e.academicYear}__${e.semester}`)
         );
 
         const periods = buildEvaluationPeriods(visibleEvals, questions, criteria);
         setEvaluationPeriods(periods);
         const keys = Object.keys(periods);
         if (keys.length > 0) setSelectedPeriod(keys[0]);
+        else setSelectedPeriod(null);
       })
       .catch(err => console.error(err))
       .finally(() => setLoading(false));

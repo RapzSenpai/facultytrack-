@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { useSuperScope } from "../../context/SuperScopeContext";
 import { parseFunctionError } from "../../utils/audit";
-import { pickActivePeriod, isPeriodActive, isStatusOngoing } from "../../utils/periodStatus";
+import { pickActivePeriod, isPeriodActive } from "../../utils/periodStatus";
+import { normalizeYear } from "../../utils/assignmentMatch";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -78,6 +79,15 @@ const PieChartIcon = () => (
   </svg>
 );
 
+const RosterIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+);
+
 const tierColors = {
   "Excellent (4.0-5.0)": "#22c55e",
   "Very Good (3.5-3.9)": "#3b82f6",
@@ -96,6 +106,7 @@ export default function AdminReport() {
   const [facultyUsers, setFacultyUsers] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [viewingReport, setViewingReport] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -105,17 +116,49 @@ export default function AdminReport() {
   const [filterDept, setFilterDept] = useState("");
   const [departmentsList, setDepartmentsList] = useState([]);
   const [academicYearsList, setAcademicYearsList] = useState([]);
+  const [leftChartMode, setLeftChartMode] = useState("yearLevel"); // 'yearLevel' | 'ayTrend' | 'program'
+  const [leftChartOrientation, setLeftChartOrientation] = useState("horizontal"); // 'horizontal' | 'vertical'
+  const [distYearFilter, setDistYearFilter] = useState("all"); // 'all' | '1' | '2' | '3' | '4'
+  const [rosterTierFilter, setRosterTierFilter] = useState("all"); // 'all' | 'high' | 'mid' | 'low'
+  const [selectedFacultyId, setSelectedFacultyId] = useState(null); // null = Dept Overview | facultyId
+
+  const deptKey = myDeptIds.join("|");
 
   useEffect(() => {
+    if (scopeLoading) return;
+    setLoadError("");
+
     Promise.all([
       supabase.from('admin_evaluations_anon').select('*'),
       supabase.from('users').select('*').eq('role', 'faculty'),
-      supabase.from('class_assignments').select('*'),
+      // Report assignments through the role-scoped view so this page has the
+      // complete roster (including sections with no submissions) for both
+      // super admins and program admins.
+      supabase.from('admin_report_assignments').select('*'),
       supabase.from('academic_years').select('*, departments(name)'),
       supabase.from('departments').select('*'),
+      isSuper
+        ? supabase.from('evaluations').select('id, faculty_id, assignment_id, student_id, academic_year, semester, ratings, comment, submitted_at, moderation_status, is_priority')
+        : Promise.resolve({ data: [], error: null }),
     ])
-      .then(([evalsRes, facultyRes, assignRes, yearsRes, deptsRes]) => {
-        const evals = (evalsRes.data || []).map(e => ({
+      .then(([evalsRes, facultyRes, assignRes, yearsRes, deptsRes, superEvalsRes]) => {
+        const failedQuery = [facultyRes, assignRes, yearsRes, deptsRes]
+          .find((result) => result?.error);
+        if (failedQuery?.error) throw failedQuery.error;
+        if (evalsRes?.error && (!isSuper || superEvalsRes?.error || !superEvalsRes?.data)) {
+          throw evalsRes.error;
+        }
+
+        const baseEvals = evalsRes.data || [];
+        const fallbackEvals = (isSuper && (!baseEvals || baseEvals.length === 0) && superEvalsRes?.data && superEvalsRes.data.length > 0)
+          ? superEvalsRes.data.map((e) => ({
+              ...e,
+              student_token: e.student_id ? `anon_${e.student_id}` : e.id,
+              submitted_on: e.submitted_at ? String(e.submitted_at).slice(0, 10) : null,
+            }))
+          : baseEvals;
+
+        const evals = fallbackEvals.map(e => ({
           ...e,
           assignmentId: e.assignment_id,
           // Phase 4 anonymity: per-row MD5 token instead of student_id
@@ -127,7 +170,7 @@ export default function AdminReport() {
           ...f,
           fullName: f.full_name,
         })).filter(u => u.status === "active");
-        const assign = (assignRes.data || []).map(a => ({
+        const assignmentMap = new Map((assignRes.data || []).map(a => [`${a.id}|${a.faculty_id}`, {
           ...a,
           facultyId: a.faculty_id,
           facultyName: a.faculty_name,
@@ -135,7 +178,36 @@ export default function AdminReport() {
           subjectName: a.subject_name,
           yearLevel: a.year_level,
           academicYear: a.academic_year,
-        }));
+        }]));
+
+        // The evaluation view carries safe assignment labels so reports still
+        // work when assignment-table RLS hides rows from this client. Keep a
+        // historical entry per evaluated faculty in case the assignment was
+        // later moved to someone else.
+        evals.forEach((evaluation) => {
+          if (!evaluation.assignmentId || !(
+            evaluation.assignment_subject_code || evaluation.assignment_subject_name
+            || evaluation.assignment_year_level || evaluation.assignment_section
+          )) return;
+
+          const key = `${evaluation.assignmentId}|${evaluation.facultyId}`;
+          const existing = assignmentMap.get(key) || {};
+          assignmentMap.set(key, {
+            ...existing,
+            id: evaluation.assignmentId,
+            facultyId: evaluation.facultyId,
+            facultyName: existing.facultyName || "",
+            subjectCode: evaluation.assignment_subject_code || existing.subjectCode || "",
+            subjectName: evaluation.assignment_subject_name || existing.subjectName || "",
+            department: evaluation.assignment_department || existing.department || "",
+            department_id: evaluation.assignment_department_id || existing.department_id || null,
+            yearLevel: evaluation.assignment_year_level || existing.yearLevel || "",
+            section: evaluation.assignment_section || existing.section || "",
+            academicYear: evaluation.academicYear || existing.academicYear || "",
+            semester: evaluation.semester || existing.semester || "",
+          });
+        });
+        const assign = Array.from(assignmentMap.values());
         const years = yearsRes.data || [];
         const depts = deptsRes.data || [];
 
@@ -143,27 +215,46 @@ export default function AdminReport() {
           || !r.department_id
           || (myDeptIds && myDeptIds.includes(r.department_id))
           || (scopeDeptId && r.department_id === scopeDeptId);
-        const scopedYears = years.filter(inScopePeriod);
-        const yearsToUse = scopedYears.length > 0 ? scopedYears : years;
+        const scopedYears = (isSuper && !scopeDeptId) ? years : years.filter(inScopePeriod);
 
         setEvaluations(evals);
         setFacultyUsers(faculty);
         setAssignments(assign);
         setDepartmentsList(depts);
-        setAcademicYearsList(yearsToUse);
+        setAcademicYearsList(scopedYears);
 
-        const active = pickActivePeriod(yearsToUse, myDeptNames?.[0] || filterDept)
-          || yearsToUse.find(y => isPeriodActive(y))
-          || yearsToUse.find(y => isStatusOngoing(y.status))
-          || yearsToUse[0];
+        const targetDept = myDeptNames?.[0] || filterDept;
+        let active = pickActivePeriod(scopedYears, targetDept);
+
+        if (evals.length > 0) {
+          const hasEvalsInActive = active && evals.some(e =>
+            String(e.academicYear || "").trim().toLowerCase() === String(active.year || "").trim().toLowerCase() &&
+            String(e.semester || "").trim().toLowerCase() === String(active.semester || "").trim().toLowerCase()
+          );
+          if (!hasEvalsInActive) {
+            const evalAY = scopedYears.find(y =>
+              String(y.year || "").trim().toLowerCase() === String(evals[0].academicYear || "").trim().toLowerCase() &&
+              String(y.semester || "").trim().toLowerCase() === String(evals[0].semester || "").trim().toLowerCase()
+            );
+            active = evalAY || { year: evals[0].academicYear, semester: evals[0].semester };
+          }
+        }
+
         if (active) {
           setFilterAY(active.year);
           setFilterSem(active.semester);
+        } else {
+          setFilterAY("");
+          setFilterSem("");
         }
       })
-      .catch(err => console.error("Report fetch error:", err))
+      .catch(err => {
+        console.error("Report fetch error:", err);
+        setLoadError(err?.message || "The evaluation report could not be loaded.");
+      })
       .finally(() => setLoading(false));
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeLoading, isSuper, deptKey, scopeDeptId]);
 
   // Lock scoped admins into their assigned program.
   useEffect(() => {
@@ -186,45 +277,107 @@ export default function AdminReport() {
     if (hit && !sameDept(filterDept, hit.name)) {
       setFilterDept(hit.name);
       setFilterFaculty("");
+      const active = pickActivePeriod(academicYearsList, hit.name);
+      if (active) {
+        setFilterAY(active.year);
+        setFilterSem(active.semester);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeLoading, isSuper, departmentsList, scopeDeptId, scopeDeptName]);
+  }, [scopeLoading, isSuper, departmentsList, scopeDeptId, scopeDeptName, academicYearsList]);
 
-  const uniqueAYs = [...new Set(academicYearsList.map(y => y.year).filter(Boolean))].sort().reverse();
+  // Registered period keys from academic_years (filters out deleted/orphaned periods)
+  const registeredAYs = useMemo(() => new Set(academicYearsList.map(y => y.year)), [academicYearsList]);
+  const registeredPeriods = useMemo(() => new Set(academicYearsList.map(y => `${y.year}___${y.semester}`)), [academicYearsList]);
+
+  // Only show registered academic years and semesters in dropdowns
+  const uniqueAYs = [...registeredAYs].sort().reverse();
   const uniqueSems = [...new Set(academicYearsList.map(y => y.semester).filter(Boolean))].sort();
 
-  const periodAssignments = assignments
-    .filter(a => !filterAY || a.academicYear === filterAY)
-    .filter(a => !filterSem || a.semester === filterSem);
+  // Auto-reset filterAY if current selection was deleted from academicYearsList
+  useEffect(() => {
+    if (uniqueAYs.length > 0) {
+      if (filterAY && !registeredAYs.has(filterAY)) {
+        setFilterAY(uniqueAYs[0] || "");
+      }
+    } else if (filterAY) {
+      setFilterAY("");
+    }
+  }, [uniqueAYs, filterAY, registeredAYs]);
+
+  const normAYKey = (y, s) => `${String(y || "").trim().toLowerCase()}___${String(s || "").trim().toLowerCase().replace(/semester/g, "").replace(/[^a-z0-9]/g, "")}`;
+  const registeredPeriodsNorm = useMemo(() => new Set(academicYearsList.map(y => normAYKey(y.year, y.semester))), [academicYearsList]);
 
   const periodEvals = evaluations
-    .filter(e => (!filterAY || e.academicYear === filterAY) && (!filterSem || e.semester === filterSem));
+    .filter(e => registeredPeriods.has(`${e.academicYear}___${e.semester}`) || registeredPeriodsNorm.has(normAYKey(e.academicYear, e.semester)))
+    .filter(e => {
+      if (filterAY && String(e.academicYear || "").trim().toLowerCase() !== String(filterAY || "").trim().toLowerCase()) return false;
+      if (!filterSem) return true;
+      const eSem = String(e.semester || "").trim().toLowerCase();
+      const fSem = String(filterSem || "").trim().toLowerCase();
+      return eSem === fSem || eSem.includes(fSem) || fSem.includes(eSem);
+    });
+  const evaluatedAssignmentIds = new Set(periodEvals.map((evaluation) => evaluation.assignmentId).filter(Boolean));
+
+  // Strip orphaned data from period calculations, while retaining assignment
+  // records directly referenced by evaluations in the selected period.
+  const periodAssignments = assignments
+    .filter(a => registeredPeriods.has(`${a.academicYear}___${a.semester}`) || registeredPeriodsNorm.has(normAYKey(a.academicYear, a.semester)) || evaluatedAssignmentIds.has(a.id))
+    .filter(a => evaluatedAssignmentIds.has(a.id) || !filterAY || String(a.academicYear || "").trim().toLowerCase() === String(filterAY || "").trim().toLowerCase())
+    .filter(a => {
+      if (evaluatedAssignmentIds.has(a.id) || !filterSem) return true;
+      const aSem = String(a.semester || "").trim().toLowerCase();
+      const fSem = String(filterSem || "").trim().toLowerCase();
+      return aSem === fSem || aSem.includes(fSem) || fSem.includes(aSem);
+    });
+
+  // Department labels on faculty profiles can be stale or empty. Assignment
+  // department data is the reliable fallback, especially for super admins.
+  const facultyHasDepartmentAssignment = (faculty, departmentName) => {
+    const department = departmentsList.find((d) => sameDept(d.name, departmentName));
+    return assignments.some((assignment) => assignment.facultyId === faculty.id && (
+      sameDept(assignment.department, departmentName)
+      || (department?.id && assignment.department_id === department.id)
+    ));
+  };
 
   // Consolidated Overall Data: Aggregated across all assigned sections per faculty
   const inScopeFaculty = facultyUsers
     .filter(f => !filterFaculty || f.id === filterFaculty)
-    .filter(f => !filterDept || sameDept(f.department, filterDept))
-    .filter(f => isSuper || inScopeName(f.department));
+    .filter(f => !filterDept || sameDept(f.department, filterDept) || facultyHasDepartmentAssignment(f, filterDept))
+    .filter(f => isSuper || inScopeName(f.department) || myDeptNames.some((name) => facultyHasDepartmentAssignment(f, name)));
 
   const consolidatedData = inScopeFaculty
     .map(faculty => {
-      const facAssignments = periodAssignments.filter(a => a.facultyId === faculty.id);
       const facEvals = periodEvals.filter(e => e.facultyId === faculty.id);
+      const facultyEvalAssignmentIds = new Set(facEvals.map((evaluation) => evaluation.assignmentId).filter(Boolean));
+      // Use the assignment IDs recorded on evaluations as historical truth.
+      // A class assignment may later be reassigned to another faculty member.
+      const facAssignments = periodAssignments.filter(a =>
+        a.facultyId === faculty.id || facultyEvalAssignmentIds.has(a.id)
+      );
 
-      const subjects = [...new Set(facAssignments.map(a => a.subjectCode).filter(Boolean))];
+      const subjects = [...new Set(facAssignments.map(a => a.subjectCode || a.subjectName).filter(Boolean))];
       const sections = [...new Set(facAssignments.map(a => a.yearLevel && a.section ? `${a.yearLevel} - ${a.section}` : a.section).filter(Boolean))];
 
       const uniqueStudents = new Set(facEvals.map(e => e.studentId)).size;
       const allScores = facEvals.flatMap(e => Object.values(e.ratings || {}).map(Number));
 
       const sectionBreakdown = facAssignments.map(assign => {
-        const aEvals = facEvals.filter(e => e.assignmentId === assign.id);
+        const assignSec = assign.yearLevel && assign.section ? `${assign.yearLevel} - ${assign.section}` : assign.section || "—";
+        const aEvals = facEvals.filter(e => {
+          if (e.assignmentId === assign.id) return true;
+          const evAssign = periodAssignments.find(a => a.id === e.assignmentId);
+          if (!evAssign) return false;
+          const evSec = evAssign.yearLevel && evAssign.section ? `${evAssign.yearLevel} - ${evAssign.section}` : evAssign.section || "—";
+          return evAssign.facultyId === faculty.id && evSec === assignSec;
+        });
         const aScores = aEvals.flatMap(e => Object.values(e.ratings || {}).map(Number));
         return {
           assignmentId: assign.id,
-          subject: assign.subjectCode || "—",
+          subject: assign.subjectCode || assign.subjectName || "—",
           subjectName: assign.subjectName || "",
-          section: assign.yearLevel && assign.section ? `${assign.yearLevel} - ${assign.section}` : assign.section || "—",
+          section: assignSec,
           students: new Set(aEvals.map(e => e.studentId)).size,
           formCount: aEvals.length,
           rating: avg(aScores),
@@ -250,6 +403,8 @@ export default function AdminReport() {
     .filter(r => r.formCount > 0 || r.sectionsCount > 0);
 
   const reportData = consolidatedData;
+
+  const selectedReport = consolidatedData.find(f => f.id === selectedFacultyId) || null;
 
   // 3. Executive KPI Metrics (scoped to current filters)
   const evaluatedCount = consolidatedData.filter(f => f.formCount > 0).length;
@@ -277,7 +432,7 @@ export default function AdminReport() {
     if (isSuper) {
       setFilterDept("");
     }
-    const active = academicYearsList.find(y => (y.status || "").toLowerCase().trim() === "on-going");
+    const active = academicYearsList.find(y => isPeriodActive(y)) || academicYearsList[0];
     if (active) {
       setFilterAY(active.year);
       setFilterSem(active.semester);
@@ -287,8 +442,19 @@ export default function AdminReport() {
     }
   };
 
-  // Filter table by live search query
+  // Filter table by live search query and tier filter
   const displayedReportData = reportData.filter(item => {
+    if (rosterTierFilter === "high") {
+      const r = parseFloat(item.rating);
+      if (isNaN(r) || r < 4.0) return false;
+    } else if (rosterTierFilter === "mid") {
+      const r = parseFloat(item.rating);
+      if (isNaN(r) || r < 3.0 || r >= 4.0) return false;
+    } else if (rosterTierFilter === "low") {
+      const r = parseFloat(item.rating);
+      if (isNaN(r) || r >= 3.0) return false;
+    }
+
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase().trim();
     const nameMatch = (item.faculty || "").toLowerCase().includes(term);
@@ -299,8 +465,91 @@ export default function AdminReport() {
   });
 
 
-  // Department bar chart data (grouped by normalized name so
-  // "BSIT" vs "bsit" casing variants don't split into two bars).
+  // Lookup map for assignments
+  const assignMap = new Map(assignments.map(a => [a.id, a]));
+
+  // 1. Year Level Performance Data (1st, 2nd, 3rd, 4th Year)
+  const yearLevelOrder = [
+    { key: "1", label: "1st Year" },
+    { key: "2", label: "2nd Year" },
+    { key: "3", label: "3rd Year" },
+    { key: "4", label: "4th Year" },
+  ];
+  const yearLevelStats = {
+    "1": { label: "1st Year", total: 0, count: 0 },
+    "2": { label: "2nd Year", total: 0, count: 0 },
+    "3": { label: "3rd Year", total: 0, count: 0 },
+    "4": { label: "4th Year", total: 0, count: 0 },
+  };
+
+  periodEvals.forEach(e => {
+    const a = assignMap.get(e.assignmentId);
+    if (!a) return;
+    if (filterDept && !sameDept(a.department, filterDept)) return;
+    if (!isSuper && !inScopeName(a.department)) return;
+
+    const yNorm = normalizeYear(a.yearLevel);
+    if (!yearLevelStats[yNorm]) return;
+
+    const scores = Object.values(e.ratings || {}).map(Number).filter(n => !isNaN(n));
+    if (scores.length > 0) {
+      const avgScore = scores.reduce((s, c) => s + c, 0) / scores.length;
+      yearLevelStats[yNorm].total += avgScore;
+      yearLevelStats[yNorm].count++;
+    }
+  });
+
+  const hasAnyYearResponses = yearLevelOrder.some(y => yearLevelStats[y.key].count > 0);
+  const yearLevelData = yearLevelOrder
+    .filter(y => !hasAnyYearResponses || yearLevelStats[y.key].count > 0)
+    .map(y => {
+      const stat = yearLevelStats[y.key];
+      return {
+        name: stat.label,
+        avg: stat.count > 0 ? parseFloat((stat.total / stat.count).toFixed(2)) : 0,
+        responses: stat.count,
+      };
+    });
+
+  // 2. Academic Year Trend Data (semester-by-semester evolution)
+  const ayMap = {};
+  evaluations.forEach(e => {
+    const a = assignMap.get(e.assignmentId);
+    if (a && filterDept && !sameDept(a.department, filterDept)) return;
+    if (a && !isSuper && !inScopeName(a.department)) return;
+    if (!registeredPeriods.has(`${e.academicYear}___${e.semester}`)) return;
+
+    const shortSem = (e.semester || "").toLowerCase().includes("1st")
+      ? "1st Sem"
+      : (e.semester || "").toLowerCase().includes("2nd")
+      ? "2nd Sem"
+      : e.semester;
+    const label = `${e.academicYear} (${shortSem})`;
+
+    if (!ayMap[label]) {
+      ayMap[label] = { total: 0, count: 0, ay: e.academicYear, sem: e.semester };
+    }
+
+    const scores = Object.values(e.ratings || {}).map(Number).filter(n => !isNaN(n));
+    if (scores.length > 0) {
+      const avgScore = scores.reduce((s, c) => s + c, 0) / scores.length;
+      ayMap[label].total += avgScore;
+      ayMap[label].count++;
+    }
+  });
+
+  const ayTrendData = Object.entries(ayMap)
+    .sort(([, aV], [, bV]) => {
+      if (aV.ay !== bV.ay) return aV.ay.localeCompare(bV.ay);
+      return aV.sem.localeCompare(bV.sem);
+    })
+    .map(([label, v]) => ({
+      name: label,
+      avg: parseFloat((v.total / v.count).toFixed(2)),
+      responses: v.count,
+    }));
+
+  // 3. Program comparison data (for Super Admin across departments)
   const deptMap = {};
   const deptLabel = {};
   reportData.forEach(r => {
@@ -315,30 +564,60 @@ export default function AdminReport() {
     deptMap[key].count++;
   });
   const deptData = Object.entries(deptMap).map(([key, v]) => ({
-    dept: deptLabel[key],
+    name: deptLabel[key],
     avg: parseFloat((v.total / v.count).toFixed(2)),
+    responses: v.count,
   }));
 
-  // Donut pie data
+  // Active dataset for left chart based on user selection
+  const activeLeftChartData =
+    leftChartMode === "yearLevel"
+      ? yearLevelData
+      : leftChartMode === "ayTrend"
+      ? ayTrendData
+      : deptData;
+
+  // 4. Rating Distribution data (interactive filter: Overall or specific Year Level)
   const tierMap = {
     "Excellent (4.0-5.0)": 0,
     "Very Good (3.5-3.9)": 0,
     "Good (3.0-3.4)": 0,
     "Needs Improvement (<3.0)": 0,
   };
-  reportData.forEach(r => {
-    const n = parseFloat(r.rating);
-    if (isNaN(n)) return;
-    if (n >= 4.0) tierMap["Excellent (4.0-5.0)"]++;
-    else if (n >= 3.5) tierMap["Very Good (3.5-3.9)"]++;
-    else if (n >= 3.0) tierMap["Good (3.0-3.4)"]++;
-    else tierMap["Needs Improvement (<3.0)"]++;
-  });
+
+  if (distYearFilter === "all") {
+    reportData.forEach(r => {
+      const n = parseFloat(r.rating);
+      if (isNaN(n)) return;
+      if (n >= 4.0) tierMap["Excellent (4.0-5.0)"]++;
+      else if (n >= 3.5) tierMap["Very Good (3.5-3.9)"]++;
+      else if (n >= 3.0) tierMap["Good (3.0-3.4)"]++;
+      else tierMap["Needs Improvement (<3.0)"]++;
+    });
+  } else {
+    periodEvals.forEach(e => {
+      const a = assignMap.get(e.assignmentId);
+      if (!a) return;
+      if (filterDept && !sameDept(a.department, filterDept)) return;
+      if (!isSuper && !inScopeName(a.department)) return;
+      if (normalizeYear(a.yearLevel) !== distYearFilter) return;
+
+      const scores = Object.values(e.ratings || {}).map(Number).filter(n => !isNaN(n));
+      if (scores.length > 0) {
+        const n = scores.reduce((s, c) => s + c, 0) / scores.length;
+        if (n >= 4.0) tierMap["Excellent (4.0-5.0)"]++;
+        else if (n >= 3.5) tierMap["Very Good (3.5-3.9)"]++;
+        else if (n >= 3.0) tierMap["Good (3.0-3.4)"]++;
+        else tierMap["Needs Improvement (<3.0)"]++;
+      }
+    });
+  }
+
   const pieData = Object.entries(tierMap)
     .filter(([, v]) => v > 0)
     .map(([name, value]) => ({ name, value }));
 
-  const hasChartData = deptData.length > 0 || pieData.length > 0;
+  const hasChartData = activeLeftChartData.length > 0 || pieData.length > 0 || reportData.length > 0;
 
   // ── Summary Report Export (PDF) (D13: statistics only) ────
   // Goes through the export-report Edge Function so program scope
@@ -996,7 +1275,7 @@ export default function AdminReport() {
             <p className="ad-subtitle">View and export faculty evaluation results.
               {!scopeLoading && !isSuper && (
                 <span style={{ display: "block", marginTop: 4, fontWeight: 700 }}>
-                  Scope: {myDeptNames.join(", ") || "No program assigned — no data"}
+                  
                 </span>
               )}
             </p>
@@ -1020,6 +1299,12 @@ export default function AdminReport() {
             </button>
           )}
         </div>
+
+        {loadError && (
+          <div role="alert" style={{ marginBottom: 16, padding: "12px 16px", border: "1px solid #fecaca", borderRadius: 10, color: "#991b1b", background: "#fef2f2" }}>
+            Could not load the complete evaluation report: {loadError}
+          </div>
+        )}
 
         {/* 3-Card Executive KPI Strip */}
         <div className="ad-kpiGrid">
@@ -1091,8 +1376,14 @@ export default function AdminReport() {
               {uniqueSems.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             <select className="ad-filterSelectEnhanced" value={filterDept} onChange={e => {
-              setFilterDept(e.target.value);
+              const val = e.target.value;
+              setFilterDept(val);
               setFilterFaculty(""); // Reset faculty when changing department
+              const active = pickActivePeriod(academicYearsList, val);
+              if (active) {
+                setFilterAY(active.year);
+                setFilterSem(active.semester);
+              }
             }}
               disabled={!isSuper && myDeptNames.length <= 1}
               title={!isSuper ? "Locked to your assigned program" : undefined}>
@@ -1130,294 +1421,762 @@ export default function AdminReport() {
           </div>
         </div>
 
-        {/* Report Header Toolbar & Live Search Bar */}
-        <div className="ad-reportToolbar">
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
-              Faculty Evaluations
-              <span style={{ fontSize: "12px", fontWeight: 600, padding: "2px 8px", background: "#e0e7ff", color: "#4338ca", borderRadius: "999px" }}>
-                {consolidatedData.length}
-              </span>
-            </h3>
-          </div>
+        {/* MASTER-DETAIL SPLIT WORKSTATION */}
+        <div className="ad-splitWorkstation">
 
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-            <div className="ad-searchFilterWrap">
-              <svg className="ad-searchFilterIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          {/* LEFT: MASTER PANEL (Faculty Directory) */}
+          <div className="ad-tableCard" style={{ padding: "16px", marginBottom: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <RosterIcon />
+                <h3 style={{ margin: 0, fontSize: "13.5px", fontWeight: 700, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  Faculty Directory
+                </h3>
+              </div>
+              <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", background: "#e0e7ff", color: "#4338ca", borderRadius: "999px" }}>
+                {displayedReportData.length}
+              </span>
+            </div>
+
+            {/* Department Overview Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setSelectedFacultyId(null)}
+              style={{
+                width: "100%",
+                padding: "9px 12px",
+                borderRadius: "8px",
+                border: selectedFacultyId === null ? "2px solid #1e3a8a" : "1px solid #e2e8f0",
+                background: selectedFacultyId === null ? "#eff6ff" : "#ffffff",
+                color: selectedFacultyId === null ? "#1e3a8a" : "#475569",
+                fontWeight: 700,
+                fontSize: "12px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                cursor: "pointer",
+                marginBottom: "12px",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <BarChartIcon />
+                Department Overview
+              </span>
+              <span style={{ fontSize: "10px", background: selectedFacultyId === null ? "#1e3a8a" : "#f1f5f9", color: selectedFacultyId === null ? "#fff" : "#64748b", padding: "2px 7px", borderRadius: "999px" }}>
+                Charts
+              </span>
+            </button>
+
+            {/* Search Input */}
+            <div className="ad-searchFilterWrap" style={{ width: "100%", marginBottom: "10px" }}>
+              <svg className="ad-searchFilterIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
               <input
                 type="text"
                 className="ad-searchFilterInput"
-                placeholder="Search faculty, subject, section..."
+                placeholder="Search faculty, subject..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
+                style={{ width: "100%", fontSize: "12px", padding: "7px 10px 7px 32px" }}
               />
             </div>
-            {searchTerm && (
-              <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 500 }}>
-                {displayedReportData.length} matching result{displayedReportData.length === 1 ? "" : "s"}
-              </span>
+
+            {/* Tier Filter Pills */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "4px", background: "#f8fafc", padding: "3px", borderRadius: "8px", marginBottom: "12px" }}>
+              <button
+                type="button"
+                onClick={() => setRosterTierFilter("all")}
+                style={{
+                  padding: "4px 2px",
+                  fontSize: "10.5px",
+                  fontWeight: 700,
+                  borderRadius: "6px",
+                  border: "none",
+                  cursor: "pointer",
+                  textAlign: "center",
+                  background: rosterTierFilter === "all" ? "#ffffff" : "transparent",
+                  color: rosterTierFilter === "all" ? "#0f172a" : "#64748b",
+                  boxShadow: rosterTierFilter === "all" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                }}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setRosterTierFilter("high")}
+                style={{
+                  padding: "4px 2px",
+                  fontSize: "10.5px",
+                  fontWeight: 700,
+                  borderRadius: "6px",
+                  border: "none",
+                  cursor: "pointer",
+                  textAlign: "center",
+                  background: rosterTierFilter === "high" ? "#ffffff" : "transparent",
+                  color: rosterTierFilter === "high" ? "#15803d" : "#64748b",
+                  boxShadow: rosterTierFilter === "high" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                }}
+              >
+                ★ 4.0+
+              </button>
+              <button
+                type="button"
+                onClick={() => setRosterTierFilter("mid")}
+                style={{
+                  padding: "4px 2px",
+                  fontSize: "10.5px",
+                  fontWeight: 700,
+                  borderRadius: "6px",
+                  border: "none",
+                  cursor: "pointer",
+                  textAlign: "center",
+                  background: rosterTierFilter === "mid" ? "#ffffff" : "transparent",
+                  color: rosterTierFilter === "mid" ? "#b45309" : "#64748b",
+                  boxShadow: rosterTierFilter === "mid" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                }}
+              >
+                3.0-3.9
+              </button>
+              <button
+                type="button"
+                onClick={() => setRosterTierFilter("low")}
+                style={{
+                  padding: "4px 2px",
+                  fontSize: "10.5px",
+                  fontWeight: 700,
+                  borderRadius: "6px",
+                  border: "none",
+                  cursor: "pointer",
+                  textAlign: "center",
+                  background: rosterTierFilter === "low" ? "#ffffff" : "transparent",
+                  color: rosterTierFilter === "low" ? "#b91c1c" : "#64748b",
+                  boxShadow: rosterTierFilter === "low" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                }}
+              >
+                &lt;3.0
+              </button>
+            </div>
+
+            {/* Scrollable Faculty Card List */}
+            <div style={{ maxHeight: "calc(100vh - 300px)", overflowY: "auto", paddingRight: "4px" }}>
+              {displayedReportData.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "30px 10px", color: "#94a3b8", fontSize: "12px" }}>
+                  No faculty records match filters.
+                </div>
+              ) : (
+                displayedReportData.map(report => {
+                  const isSelected = selectedFacultyId === report.id;
+                  const color = getPerformanceColor(report.rating);
+                  return (
+                    <div
+                      key={report.id}
+                      onClick={() => setSelectedFacultyId(report.id)}
+                      className={`ad-facultyCardItem ${isSelected ? "ad-facultyCardItem--active" : ""}`}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "6px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+                          <div
+                            className="ad-facultyMonogram"
+                            style={{
+                              width: "28px",
+                              height: "28px",
+                              fontSize: "11px",
+                              flexShrink: 0,
+                              background: isSelected ? "#1e3a8a" : undefined,
+                              color: isSelected ? "#ffffff" : undefined,
+                            }}
+                          >
+                            {getInitials(report.faculty)}
+                          </div>
+                          <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <div style={{ fontSize: "12.5px", fontWeight: 700, color: isSelected ? "#1e3a8a" : "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {report.faculty}
+                            </div>
+                            <div style={{ fontSize: "11px", color: "#64748b" }}>
+                              {report.department}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Rating pill */}
+                        {report.rating !== "—" ? (
+                          <div
+                            style={{
+                              padding: "3px 8px",
+                              borderRadius: "999px",
+                              fontSize: "11px",
+                              fontWeight: 800,
+                              background: `${color}15`,
+                              color: color,
+                              border: `1px solid ${color}30`,
+                              flexShrink: 0,
+                            }}
+                          >
+                            ★ {report.rating}
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: "10.5px", color: "#9ca3af", flexShrink: 0 }}>—</span>
+                        )}
+                      </div>
+
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "#64748b", borderTop: "1px solid #f1f5f9", paddingTop: "6px", marginTop: "4px" }}>
+                        <span>{report.sectionsCount} {report.sectionsCount === 1 ? "Section" : "Sections"} &bull; {report.students} St.</span>
+                        <span style={{ fontWeight: 600, color: isSelected ? "#2563eb" : "#475569" }}>
+                          {report.formCount} {report.formCount === 1 ? "form" : "forms"} &rarr;
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT: DETAIL PANEL */}
+          <div style={{ minWidth: 0 }}>
+            {selectedReport ? (
+              /* INDIVIDUAL FACULTY DETAIL INSPECTOR */
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                {/* Faculty Hero Card */}
+                <div className="ad-tableCard" style={{ padding: "20px 24px", marginBottom: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "14px", marginBottom: "18px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                      <div className="ad-facultyMonogram" style={{ width: "48px", height: "48px", fontSize: "16px", background: "#1e3a8a", color: "#ffffff" }}>
+                        {getInitials(selectedReport.faculty)}
+                      </div>
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>
+                            {selectedReport.faculty}
+                          </h2>
+                          <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", background: "#e0e7ff", color: "#4338ca", borderRadius: "999px" }}>
+                            {selectedReport.department}
+                          </span>
+                        </div>
+                        <p style={{ margin: "4px 0 0", fontSize: "12.5px", color: "#64748b" }}>
+                          Faculty Performance Evaluation Breakdown &bull; {filterAY || "All AY"} {filterSem || ""}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFacultyId(null)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "6px",
+                        border: "1px solid #cbd5e1",
+                        background: "#ffffff",
+                        color: "#475569",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      &larr; View Dept Overview
+                    </button>
+                  </div>
+
+                  {/* Score Hero Ribbon */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "16px 20px",
+                      borderRadius: "12px",
+                      background: selectedReport.rating !== "—" ? `${getPerformanceColor(selectedReport.rating)}10` : "#f8fafc",
+                      border: `1.5px solid ${selectedReport.rating !== "—" ? getPerformanceColor(selectedReport.rating) + '35' : '#e2e8f0'}`,
+                      flexWrap: "wrap",
+                      gap: "14px",
+                      marginBottom: "18px",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.6px" }}>
+                        Consolidated Faculty Rating
+                      </div>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: "8px", marginTop: "2px" }}>
+                        <span style={{ fontSize: "32px", fontWeight: 900, color: getPerformanceColor(selectedReport.rating) }}>
+                          {selectedReport.rating !== "—" ? selectedReport.rating : "—"}
+                        </span>
+                        <span style={{ fontSize: "14px", fontWeight: 700, color: "#64748b" }}>/ 5.00</span>
+                      </div>
+                    </div>
+
+                    {selectedReport.rating !== "—" ? (
+                      <span
+                        style={{
+                          padding: "6px 16px",
+                          borderRadius: "999px",
+                          fontSize: "13px",
+                          fontWeight: 800,
+                          background: getPerformanceColor(selectedReport.rating),
+                          color: "#ffffff",
+                          boxShadow: "0 2px 6px rgba(0,0,0,0.12)",
+                        }}
+                      >
+                        {getPerformanceLabel(selectedReport.rating)}
+                      </span>
+                    ) : (
+                      <span style={{ padding: "6px 14px", borderRadius: "999px", fontSize: "12px", background: "#9ca3af", color: "#fff" }}>
+                        No Submissions Yet
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 4 Summary Stat Tiles */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "10px" }}>
+                    <div style={{ padding: "10px 12px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                      <div style={{ fontSize: "10.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Students</div>
+                      <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a", marginTop: "2px" }}>{selectedReport.students} unique</div>
+                    </div>
+                    <div style={{ padding: "10px 12px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                      <div style={{ fontSize: "10.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Forms</div>
+                      <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a", marginTop: "2px" }}>{selectedReport.formCount} submissions</div>
+                    </div>
+                    <div style={{ padding: "10px 12px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                      <div style={{ fontSize: "10.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Subjects</div>
+                      <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a", marginTop: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={selectedReport.subjects}>
+                        {selectedReport.subjects}
+                      </div>
+                    </div>
+                    <div style={{ padding: "10px 12px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                      <div style={{ fontSize: "10.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Sections</div>
+                      <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a", marginTop: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={selectedReport.sectionsList}>
+                        {selectedReport.sectionsCount} ({selectedReport.sectionsList})
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section Breakdown Table */}
+                <div className="ad-tableCard" style={{ padding: "20px 24px", marginBottom: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                    <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 800, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      Class Section Performance Breakdown
+                    </h3>
+                    <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>
+                      {selectedReport.sectionBreakdown?.length || 0} Assigned Section{(selectedReport.sectionBreakdown?.length || 0) === 1 ? "" : "s"}
+                    </span>
+                  </div>
+
+                  {(!selectedReport.sectionBreakdown || selectedReport.sectionBreakdown.length === 0) ? (
+                    <div style={{ padding: "40px 20px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                      No section assignments recorded for this faculty member.
+                    </div>
+                  ) : (
+                    <div className="ad-tableWrap" style={{ border: "1px solid #e2e8f0", borderRadius: "8px" }}>
+                      <table className="ad-table" style={{ margin: 0 }}>
+                        <thead>
+                          <tr>
+                            <th>SUBJECT CODE & NAME</th>
+                            <th>SECTION</th>
+                            <th style={{ textAlign: "center" }}>SUBMISSIONS</th>
+                            <th style={{ textAlign: "right" }}>MEAN RATING</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedReport.sectionBreakdown.map((sec, idx) => {
+                            const secRating = sec.rating;
+                            const secColor = getPerformanceColor(secRating);
+                            return (
+                              <tr key={idx}>
+                                <td>
+                                  <div style={{ fontWeight: 700, color: "#1e293b" }}>{sec.subject}</div>
+                                  {sec.subjectName && <div style={{ fontSize: "11px", color: "#64748b" }}>{sec.subjectName}</div>}
+                                </td>
+                                <td>
+                                  <span className="ad-sectionBadge">{sec.section}</span>
+                                </td>
+                                <td style={{ textAlign: "center", fontWeight: 600 }}>
+                                  {sec.formCount}
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  {secRating !== "—" ? (
+                                    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end" }}>
+                                      <span style={{ fontWeight: 800, color: secColor, fontSize: "13px" }}>
+                                        {secRating} / 5.0
+                                      </span>
+                                      <div style={{ width: "70px", height: "4px", background: "#f1f5f9", borderRadius: "999px", overflow: "hidden", marginTop: "3px" }}>
+                                        <div style={{ width: `${Math.min(100, (parseFloat(secRating) / 5) * 100)}%`, height: "100%", background: secColor }} />
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <span style={{ color: "#9ca3af", fontSize: "12px" }}>No data</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* DEPARTMENT OVERVIEW CHARTS */
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div className="ad-tableCard" style={{ padding: "16px 20px", marginBottom: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 800, color: "#1e293b" }}>
+                        Department Analytics & Visual Insights
+                      </h3>
+                      <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#64748b" }}>
+                        Click any faculty member on the left directory to inspect their individual evaluation breakdown
+                      </p>
+                    </div>
+                    <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "4px 10px", borderRadius: "6px" }}>
+                      Dept Scope Avg: <strong style={{ color: getPerformanceColor(instAvgRating) }}>{instAvgRating} / 5.0</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {!loading && !scopeLoading && hasChartData ? (
+                  <>
+                    {/* TOP: Full-Width Performance Breakdown (By Year Level / AY Trend / Program) */}
+                    <div className="ad-tableCard" style={{ marginBottom: 0 }}>
+                      <div className="ad-chartHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1.5px solid #e5e7eb' }}>
+                        <div className="ad-chartHeaderInner" style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                          <span className="ad-chartIcon" style={{ background: '#1e3a8a', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
+                            <BarChartIcon />
+                          </span>
+                          <span className="ad-chartTitle" style={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
+                            {leftChartMode === "yearLevel"
+                              ? "PERFORMANCE BY YEAR LEVEL"
+                              : leftChartMode === "ayTrend"
+                              ? "ACADEMIC YEAR TREND"
+                              : "PROGRAM PERFORMANCE"}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          {/* Orientation Switcher */}
+                          <div style={{ display: 'inline-flex', border: '1px solid #cbd5e1', borderRadius: 6, overflow: 'hidden' }}>
+                            <button
+                              type="button"
+                              title="Horizontal Bars"
+                              onClick={() => setLeftChartOrientation("horizontal")}
+                              style={{
+                                padding: '4px 8px',
+                                fontSize: 11,
+                                fontWeight: 700,
+                                background: leftChartOrientation === "horizontal" ? "#1e3a8a" : "#ffffff",
+                                color: leftChartOrientation === "horizontal" ? "#ffffff" : "#64748b",
+                                border: 'none',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <line x1="3" y1="6" x2="21" y2="6"/>
+                                <line x1="3" y1="12" x2="16" y2="12"/>
+                                <line x1="3" y1="18" x2="19" y2="18"/>
+                              </svg>
+                              Horizontal
+                            </button>
+                            <button
+                              type="button"
+                              title="Vertical Columns"
+                              onClick={() => setLeftChartOrientation("vertical")}
+                              style={{
+                                padding: '4px 8px',
+                                fontSize: 11,
+                                fontWeight: 700,
+                                background: leftChartOrientation === "vertical" ? "#1e3a8a" : "#ffffff",
+                                color: leftChartOrientation === "vertical" ? "#ffffff" : "#64748b",
+                                border: 'none',
+                                borderLeft: '1px solid #cbd5e1',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <line x1="6" y1="21" x2="6" y2="3"/>
+                                <line x1="12" y1="21" x2="12" y2="8"/>
+                                <line x1="18" y1="21" x2="18" y2="5"/>
+                              </svg>
+                              Vertical
+                            </button>
+                          </div>
+
+                          <select
+                            value={leftChartMode}
+                            onChange={(e) => setLeftChartMode(e.target.value)}
+                            style={{
+                              border: '1px solid #cbd5e1',
+                              borderRadius: 6,
+                              padding: '5px 10px',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: '#1e293b',
+                              background: '#ffffff',
+                              cursor: 'pointer',
+                              outline: 'none',
+                            }}
+                          >
+                            <option value="yearLevel">By Year Level</option>
+                            <option value="ayTrend">By Academic Year (Trend)</option>
+                            {(isSuper && !filterDept && deptData.length > 1) && (
+                              <option value="program">By Program</option>
+                            )}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="ad-chartBody">
+                        {activeLeftChartData.length === 0 ? (
+                          <div style={{ padding: '70px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                            No evaluation data recorded for this view.
+                          </div>
+                        ) : (
+                          <ResponsiveContainer width="100%" height={280}>
+                            {leftChartOrientation === "horizontal" ? (
+                              <BarChart
+                                data={activeLeftChartData}
+                                layout="vertical"
+                                margin={{ top: 10, right: 30, left: 10, bottom: 10 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                                <XAxis
+                                  type="number"
+                                  domain={[0, 5]}
+                                  ticks={[1, 2, 3, 4, 5]}
+                                  tick={{ fontSize: 11, fill: "#9ca3af" }}
+                                  axisLine={false}
+                                  tickLine={false}
+                                />
+                                <YAxis
+                                  type="category"
+                                  dataKey="name"
+                                  tick={{ fontSize: 12, fill: "#374151", fontWeight: 600 }}
+                                  axisLine={false}
+                                  tickLine={false}
+                                  width={leftChartMode === "ayTrend" ? 140 : 80}
+                                />
+                                <Tooltip
+                                  formatter={(v, name, item) => [
+                                    `${v} / 5.0 (${item?.payload?.responses || 0} response${item?.payload?.responses === 1 ? '' : 's'})`,
+                                    "Average Rating"
+                                  ]}
+                                  contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}
+                                />
+                                <Bar
+                                  dataKey="avg"
+                                  name="Average Rating"
+                                  fill={leftChartMode === "ayTrend" ? "#4f46e5" : "#2563eb"}
+                                  radius={[0, 4, 4, 0]}
+                                  barSize={22}
+                                />
+                              </BarChart>
+                            ) : (
+                              <BarChart
+                                data={activeLeftChartData}
+                                layout="horizontal"
+                                margin={{ top: 10, right: 20, left: -10, bottom: 10 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                <XAxis
+                                  dataKey="name"
+                                  tick={{ fontSize: 11, fill: "#374151", fontWeight: 600 }}
+                                  axisLine={false}
+                                  tickLine={false}
+                                  interval={0}
+                                />
+                                <YAxis
+                                  type="number"
+                                  domain={[0, 5]}
+                                  ticks={[1, 2, 3, 4, 5]}
+                                  tick={{ fontSize: 11, fill: "#9ca3af" }}
+                                  axisLine={false}
+                                  tickLine={false}
+                                />
+                                <Tooltip
+                                  formatter={(v, name, item) => [
+                                    `${v} / 5.0 (${item?.payload?.responses || 0} response${item?.payload?.responses === 1 ? '' : 's'})`,
+                                    "Average Rating"
+                                  ]}
+                                  contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}
+                                />
+                                <Bar
+                                  dataKey="avg"
+                                  name="Average Rating"
+                                  fill={leftChartMode === "ayTrend" ? "#4f46e5" : "#2563eb"}
+                                  radius={[4, 4, 0, 0]}
+                                  barSize={leftChartMode === "ayTrend" ? 28 : 36}
+                                />
+                              </BarChart>
+                            )}
+                          </ResponsiveContainer>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* BOTTOM ROW: Donut Rating Distribution + Benchmark Scale */}
+                    <div className="ad-chartsRow" style={{ marginBottom: 0 }}>
+                      {/* Rating Distribution — donut + custom table */}
+                      <div className="ad-tableCard" style={{ marginBottom: 0 }}>
+                        <div className="ad-chartHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1.5px solid #e5e7eb' }}>
+                          <div className="ad-chartHeaderInner" style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                            <span className="ad-chartIcon" style={{ background: '#1e3a8a', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
+                              <PieChartIcon />
+                            </span>
+                            <span className="ad-chartTitle" style={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.5px' }}>RATING DISTRIBUTION</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+                            <select
+                              value={distYearFilter}
+                              onChange={(e) => setDistYearFilter(e.target.value)}
+                              style={{
+                                border: '1px solid #cbd5e1',
+                                borderRadius: 6,
+                                padding: '5px 10px',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#1e293b',
+                                background: '#ffffff',
+                                cursor: 'pointer',
+                                outline: 'none',
+                              }}
+                            >
+                              <option value="all">All Year Levels</option>
+                              <option value="1">1st Year Only</option>
+                              <option value="2">2nd Year Only</option>
+                              <option value="3">3rd Year Only</option>
+                              <option value="4">4th Year Only</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="ad-chartBody" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                          {pieData.length === 0 ? (
+                            <div style={{ flex: 1, padding: '70px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                              No rating distribution recorded for this cohort.
+                            </div>
+                          ) : (
+                            <>
+                              {/* Donut */}
+                              <div style={{ flexShrink: 0 }}>
+                                <ResponsiveContainer width={180} height={180}>
+                                  <PieChart>
+                                    <Pie
+                                      data={pieData}
+                                      cx="50%"
+                                      cy="50%"
+                                      innerRadius={50}
+                                      outerRadius={80}
+                                      paddingAngle={2}
+                                      dataKey="value"
+                                      startAngle={90}
+                                      endAngle={-270}
+                                    >
+                                      {pieData.map((entry, i) => (
+                                        <Cell key={i} fill={tierColors[entry.name] || "#9ca3af"} />
+                                      ))}
+                                    </Pie>
+                                    <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }} />
+                                  </PieChart>
+                                </ResponsiveContainer>
+                              </div>
+
+                              {/* Custom legend table */}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                  <thead>
+                                    <tr>
+                                      <th style={{ textAlign: 'left', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>Range</th>
+                                      <th style={{ textAlign: 'center', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>Resp.</th>
+                                      <th style={{ textAlign: 'right', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>Pct</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {pieData.map((entry, i) => {
+                                      const total = pieData.reduce((s, e) => s + e.value, 0);
+                                      const pct = total > 0 ? Math.round((entry.value / total) * 100) : 0;
+                                      return (
+                                        <tr key={i}>
+                                          <td style={{ padding: '6px 0', borderBottom: '1px solid #f9fafb' }}>
+                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: tierColors[entry.name] || '#9ca3af', flexShrink: 0 }} />
+                                              {entry.name.split(' ')[0]}
+                                            </span>
+                                          </td>
+                                          <td style={{ textAlign: 'center', padding: '6px 0', borderBottom: '1px solid #f9fafb', fontWeight: 600 }}>{entry.value}</td>
+                                          <td style={{ textAlign: 'right', padding: '6px 0', borderBottom: '1px solid #f9fafb', fontWeight: 700, color: tierColors[entry.name] || '#374151' }}>{pct}%</td>
+                                        </tr>
+                                      );
+                                    })}
+                                    <tr>
+                                      <td style={{ padding: '8px 0 0', fontWeight: 700, color: '#111827' }}>Total</td>
+                                      <td style={{ textAlign: 'center', padding: '8px 0 0', fontWeight: 700, color: '#111827' }}>{pieData.reduce((s, e) => s + e.value, 0)}</td>
+                                      <td style={{ textAlign: 'right', padding: '8px 0 0', fontWeight: 700, color: '#111827' }}>100%</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Benchmark Matrix */}
+                      <div className="ad-tableCard" style={{ padding: "18px 20px", marginBottom: 0, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                            <span className="ad-chartIcon" style={{ background: '#0284c7', borderRadius: 8, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
+                              ★
+                            </span>
+                            <div style={{ fontSize: "12px", fontWeight: 800, color: "#1e3a8a", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                              Performance Rating Benchmark Matrix
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "8px 12px" }}>
+                              <span style={{ fontSize: "12px", fontWeight: 700, color: "#14532d" }}>Outstanding</span>
+                              <span style={{ fontSize: "11.5px", fontWeight: 800, color: "#15803d" }}>4.50 – 5.00</span>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "8px 12px" }}>
+                              <span style={{ fontSize: "12px", fontWeight: 700, color: "#1e3a8a" }}>Excellent</span>
+                              <span style={{ fontSize: "11.5px", fontWeight: 800, color: "#1d4ed8" }}>4.00 – 4.49</span>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: "8px", padding: "8px 12px" }}>
+                              <span style={{ fontSize: "12px", fontWeight: 700, color: "#0369a1" }}>Very Good</span>
+                              <span style={{ fontSize: "11.5px", fontWeight: 800, color: "#0284c7" }}>3.50 – 3.99</span>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "8px 12px" }}>
+                              <span style={{ fontSize: "12px", fontWeight: 700, color: "#92400e" }}>Good</span>
+                              <span style={{ fontSize: "11.5px", fontWeight: 800, color: "#b45309" }}>3.00 – 3.49</span>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "8px 12px" }}>
+                              <span style={{ fontSize: "12px", fontWeight: 700, color: "#991b1b" }}>Needs Improvement</span>
+                              <span style={{ fontSize: "11.5px", fontWeight: 800, color: "#b91c1c" }}>Below 3.00</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="ad-tableCard" style={{ padding: "60px 20px", textAlign: "center", color: "#94a3b8" }}>
+                    <BarChartIcon />
+                    <div style={{ fontSize: "14px", fontWeight: 700, color: "#334155", marginTop: "10px" }}>No Analytics Available</div>
+                    <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>Select an academic period with submitted student evaluations.</div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
-
-        {/* Executive Data Table */}
-        <div className="ad-tableCard">
-          {loading || scopeLoading ? (
-            <div style={{ padding: "40px", textAlign: "center", color: "#6b7280" }}>Loading report data...</div>
-          ) : (
-            <div className="ad-tableWrap">
-              <table className="ad-table ad-table--executive">
-                <thead>
-                  <tr>
-                    <th>FACULTY MEMBER</th>
-                    <th>PROGRAM</th>
-                    <th>SUBJECTS TAUGHT</th>
-                    <th>SECTIONS</th>
-                    <th style={{ textAlign: "center" }}>STUDENTS</th>
-                    <th style={{ textAlign: "center" }}>FORMS</th>
-                    <th>OVERALL RATING</th>
-                    <th style={{ textAlign: 'right' }}>ACTIONS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayedReportData.length === 0 ? (
-                    <tr>
-                      <td colSpan="8" style={{ textAlign: "center", padding: "48px 20px", color: "#6b7280" }}>
-                        <svg style={{ display: 'block', margin: '0 auto 12px auto', color: '#9ca3af' }} width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                          <circle cx="9" cy="7" r="4"></circle>
-                          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                        </svg>
-                        <span style={{ fontSize: '15px', fontWeight: '600', color: '#334155' }}>No evaluation records found</span>
-                        <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#64748b' }}>
-                          {searchTerm ? `No results match "${searchTerm}". Try resetting your search.` : "No evaluation records available for the selected filters."}
-                        </p>
-                      </td>
-                    </tr>
-                  ) : (
-                    displayedReportData.map(report => (
-                      <tr key={report.id}>
-                        <td>
-                          <div className="ad-facultyCell">
-                            <div className="ad-facultyMonogram" title={report.faculty}>
-                              {getInitials(report.faculty)}
-                            </div>
-                            <div className="ad-facultyInfo">
-                              <span className="ad-facultyName">{report.faculty}</span>
-                              <span className="ad-facultyDept">{report.department}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="ad-engagement">
-                          <span style={{ fontWeight: 600, color: "#334155", fontSize: "13px" }}>
-                            {report.department}
-                          </span>
-                        </td>
-                        <td className="ad-engagement">
-                          <div className="ad-subjectChipsWrap">
-                            {report.subjectList && report.subjectList.length > 0 ? (
-                              report.subjectList.map((code, idx) => (
-                                <span key={idx} className="ad-subjectChip">
-                                  {code}
-                                </span>
-                              ))
-                            ) : (
-                              <span style={{ color: "#9ca3af" }}>—</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="ad-engagement">
-                          <span className="ad-sectionBadge" title={report.sectionsList}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
-                            </svg>
-                            {report.sectionsCount} {report.sectionsCount === 1 ? "Section" : "Sections"}
-                          </span>
-                        </td>
-                        <td className="ad-engagement" style={{ textAlign: "center", fontWeight: 600 }}>
-                          {report.students}
-                        </td>
-                        <td className="ad-engagement" style={{ textAlign: "center", fontWeight: 600 }}>
-                          {report.formCount}
-                        </td>
-                        <td className="ad-engagement">
-                          {report.rating !== "—" ? (
-                            <div className="ad-ratingBlock">
-                              <div className="ad-ratingNumRow">
-                                <span
-                                  className="ad-ratingNum"
-                                  style={{ color: getPerformanceColor(report.rating) }}
-                                >
-                                  {report.rating}
-                                </span>
-                                <span className="ad-ratingMax">/ 5.0</span>
-                              </div>
-                              <div className="ad-ratingMiniBar">
-                                <div
-                                  className="ad-ratingFillMini"
-                                  style={{
-                                    width: `${Math.min(100, (parseFloat(report.rating) / 5) * 100)}%`,
-                                    backgroundColor: getPerformanceColor(report.rating),
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ) : (
-                            <span style={{ color: "#9ca3af", fontSize: "12px" }}>No data</span>
-                          )}
-                        </td>
-                        <td className="ad-tableActions" style={{ justifyContent: 'flex-end' }}>
-                          <button
-                            className="ad-actionBtn ad-actionBtn--view"
-                            title="View Class Section Breakdown"
-                            onClick={() => setViewingReport(report)}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Charts */}
-        {!loading && !scopeLoading && hasChartData && (
-          <div className="ad-chartsRow">
-
-            {/* LEFT: Program Performance — horizontal bar chart */}
-            <div className="ad-tableCard" style={{ marginBottom: 0 }}>
-              <div className="ad-chartHeader">
-                <div className="ad-chartHeaderInner">
-                  <span className="ad-chartIcon" style={{ background: '#1e3a8a', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
-                    <BarChartIcon />
-                  </span>
-                  <span className="ad-chartTitle">PROGRAM PERFORMANCE</span>
-                </div>
-                <span className="ad-chartBadge" style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 10px', fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  By Overall Rating
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
-                </span>
-              </div>
-              <div className="ad-chartBody">
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart
-                    data={deptData}
-                    layout="vertical"
-                    margin={{ top: 10, right: 30, left: 10, bottom: 10 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                    <XAxis
-                      type="number"
-                      domain={[0, 5]}
-                      ticks={[1, 2, 3, 4, 5]}
-                      tick={{ fontSize: 11, fill: "#9ca3af" }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="dept"
-                      tick={{ fontSize: 12, fill: "#374151", fontWeight: 600 }}
-                      axisLine={false}
-                      tickLine={false}
-                      width={60}
-                    />
-                    <Tooltip
-                      formatter={(v) => [v, "Average Rating"]}
-                      contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}
-                    />
-                    <Bar dataKey="avg" name="Average Rating" fill="#2563eb" radius={[0, 4, 4, 0]} barSize={22} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* RIGHT: Rating Distribution — donut + custom table */}
-            <div className="ad-tableCard" style={{ marginBottom: 0 }}>
-              <div className="ad-chartHeader">
-                <div className="ad-chartHeaderInner">
-                  <span className="ad-chartIcon" style={{ background: '#1e3a8a', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
-                    <PieChartIcon />
-                  </span>
-                  <span className="ad-chartTitle">RATING DISTRIBUTION</span>
-                </div>
-                <span className="ad-chartBadge" style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 10px', fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  Current Semester
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
-                </span>
-              </div>
-              <div className="ad-chartBody" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                {/* Donut */}
-                <div style={{ flexShrink: 0 }}>
-                  <ResponsiveContainer width={200} height={200}>
-                    <PieChart>
-                      <Pie
-                        data={pieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={90}
-                        paddingAngle={2}
-                        dataKey="value"
-                        startAngle={90}
-                        endAngle={-270}
-                      >
-                        {pieData.map((entry, i) => (
-                          <Cell key={i} fill={tierColors[entry.name] || "#9ca3af"} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Custom legend table */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    <thead>
-                      <tr>
-                        <th style={{ textAlign: 'left', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>Rating Range</th>
-                        <th style={{ textAlign: 'center', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>Responses</th>
-                        <th style={{ textAlign: 'right', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>Percentage</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pieData.map((entry, i) => {
-                        const total = pieData.reduce((s, e) => s + e.value, 0);
-                        const pct = total > 0 ? Math.round((entry.value / total) * 100) : 0;
-                        return (
-                          <tr key={i}>
-                            <td style={{ padding: '8px 0', borderBottom: '1px solid #f9fafb' }}>
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: tierColors[entry.name] || '#9ca3af', flexShrink: 0 }} />
-                                {entry.name}
-                              </span>
-                            </td>
-                            <td style={{ textAlign: 'center', padding: '8px 0', borderBottom: '1px solid #f9fafb', fontWeight: 600 }}>{entry.value}</td>
-                            <td style={{ textAlign: 'right', padding: '8px 0', borderBottom: '1px solid #f9fafb', fontWeight: 700, color: tierColors[entry.name] || '#374151' }}>{pct}%</td>
-                          </tr>
-                        );
-                      })}
-                      <tr>
-                        <td style={{ padding: '10px 0 0', fontWeight: 700, color: '#111827' }}>Total</td>
-                        <td style={{ textAlign: 'center', padding: '10px 0 0', fontWeight: 700, color: '#111827' }}>{pieData.reduce((s, e) => s + e.value, 0)}</td>
-                        <td style={{ textAlign: 'right', padding: '10px 0 0', fontWeight: 700, color: '#111827' }}>100%</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        )}
 
       </section>
 

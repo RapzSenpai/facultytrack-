@@ -5,7 +5,6 @@ import { useAuth } from "../../context/AuthContext";
 import { is_period_released } from "../../utils/periodRelease";
 import { isPeriodActive } from "../../utils/periodStatus";
 import { logAdminAction } from "../../utils/audit";
-import { notifyFacultyOnRelease } from "../../utils/notifications";
 import {
   ClipboardCheck,
   Calendar,
@@ -98,17 +97,18 @@ export default function AdminReleaseManagement() {
         setYears(y);
         setDepartments(dRes.data || []);
 
+        let userDeptIds = [];
         if (currentUser && !isSuper) {
           const { data: mine } = await supabase
             .from("admin_program_assignments")
             .select("department_id")
             .eq("admin_id", currentUser.id);
-          if (!cancelled) setMyDeptIds((mine || []).map((a) => a.department_id));
+          userDeptIds = (mine || []).map((a) => a.department_id);
+          if (!cancelled) setMyDeptIds(userDeptIds);
         }
 
-        const inScopeY = (r) => isSuper || !r.department_id || myDeptIds.includes(r.department_id);
-        const active = y.find((row) => inScopeY(row) && isPeriodActive(row))
-          || y.find((row) => isPeriodActive(row)) || y[0];
+        const inScopeY = (r) => isSuper || !r.department_id || userDeptIds.includes(r.department_id);
+        const active = y.find((row) => inScopeY(row) && isPeriodActive(row));
         if (active) {
           setFilterYear(active.year);
           setFilterSem(active.semester);
@@ -255,14 +255,7 @@ export default function AdminReleaseManagement() {
 
       showToast("Release settings saved successfully.", "success");
 
-      // Notify faculty if period is live and released
-      if (payload.approved && payload.release_date && payload.release_date <= today) {
-        notifyFacultyOnRelease({
-          academicYear: filterYear,
-          semester: filterSem,
-          department: targetDept,
-        }).catch((err) => console.warn("notifyFacultyOnRelease warning:", err));
-      }
+      // The database trigger sends the faculty alert when a release becomes active.
     } catch (err) {
       console.error("Failed to save release:", err);
       showToast("Could not save release settings: " + (err.message || "Please try again."), "error");
@@ -314,7 +307,7 @@ export default function AdminReleaseManagement() {
   const StatusIcon = statusInfo.icon;
 
   return (
-    <AdminLayout title={<span style={{ color: "#9ca3af" }}>Admin &gt; <strong style={{ color: "#111827" }}>Release Management</strong></span>}>
+    <AdminLayout title="Release Management">
       <section className="ad-content">
         {/* Welcome Header */}
         <div className="ad-welcomeHeader" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", marginBottom: "22px" }}>

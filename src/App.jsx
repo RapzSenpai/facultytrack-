@@ -15,6 +15,7 @@ import PendingApproval from "./pages/PendingApproval.jsx";
 import StudentDashboard from "./pages/student/StudentDashboard.jsx";
 import StudentEvaluation from "./pages/student/StudentEvaluation.jsx";
 import StudentProfile from "./pages/student/StudentProfile.jsx";
+import StudentReports from "./pages/student/StudentReports.jsx";
 import FacultyDashboard from "./pages/faculty/FacultyDashboard.jsx";
 import FacultyEvalResult from "./pages/faculty/FacultyEvalResult.jsx";
 import FacultyProfile from "./pages/faculty/FacultyProfile.jsx";
@@ -84,6 +85,7 @@ export default function App() {
                   {/* Student routes */}
                   <Route path="/student/dashboard" element={<ProtectedRoute role="student"><StudentDashboard /></ProtectedRoute>} />
                   <Route path="/student/evaluate" element={<ProtectedRoute role="student"><StudentEvaluation /></ProtectedRoute>} />
+                  <Route path="/student/reports" element={<ProtectedRoute role="student"><StudentReports /></ProtectedRoute>} />
                   <Route path="/student/profile" element={<ProtectedRoute role="student"><StudentProfile /></ProtectedRoute>} />
 
                   {/* Faculty routes */}

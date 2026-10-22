@@ -91,27 +91,20 @@ export default function FacultyLayout({ children, breadcrumb }) {
             onClick={() => navigate("/faculty/profile")}
             title={sidebarCollapsed ? `${displayName} (FACULTY)` : undefined}
           >
-            <div className="fd-userAvatar">
-              {(() => {
-                const parts = displayName.trim().split(" ");
-                if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-                return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-              })()}
-            </div>
+            {sidebarCollapsed && (
+              <div className="fd-userAvatar">
+                {(() => {
+                  const parts = displayName.trim().split(" ");
+                  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+                  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+                })()}
+              </div>
+            )}
             <div className="fd-userFooterInfo">
               <div className="fd-userFooterName">{displayName}</div>
               <div className="fd-userFooterSub">FACULTY</div>
             </div>
           </div>
-          <button
-            type="button"
-            className="fd-userLogoutBtn"
-            onClick={handleLogout}
-            title={sidebarCollapsed ? "Log out" : undefined}
-          >
-            <LogOut size={16} />
-            <span className="fd-userLogoutText">Log out</span>
-          </button>
         </div>
       </aside>
 

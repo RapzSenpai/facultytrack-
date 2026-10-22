@@ -212,7 +212,7 @@ export default function AdminApprovals() {
 
   
   return (
-        <AdminLayout title={<span style={{ color: '#9ca3af' }}>Admin &gt; <strong style={{ color: '#111827' }}>Approvals</strong></span>}>
+        <AdminLayout title="Approvals">
             <section className="ad-content">
 
                 {/* HEADER */}

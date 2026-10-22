@@ -9,21 +9,11 @@ import {
   Camera,
   Upload,
   Info,
-  UserCheck,
-  ChevronDown
+  UserCheck
 } from "lucide-react";
 import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
 import StudentLayout from "./StudentLayout";
-
-const YEAR_LEVEL_OPTIONS = [
-  { value: "1st", label: "1st Year" },
-  { value: "2nd", label: "2nd Year" },
-  { value: "3rd", label: "3rd Year" },
-  { value: "4th", label: "4th Year" },
-];
-
-const SECTION_OPTIONS = ["A", "B", "C", "D", "E"];
 
 export default function StudentProfile() {
   const { currentUser, userProfile, refreshUserProfile } = useAuth();
@@ -31,7 +21,6 @@ export default function StudentProfile() {
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  const [departmentOptions, setDepartmentOptions] = useState([]);
 
   const [form, setForm] = useState({
     fullName: "",
@@ -98,31 +87,6 @@ export default function StudentProfile() {
     return () => { isMounted = false; };
   }, [userProfile, currentUser]);
 
-  useEffect(() => {
-    const fetchDepartments = async () => {
-      try {
-        const { data, error } = await supabase.from("departments").select("name");
-        if (!error && Array.isArray(data) && data.length > 0) {
-          const unique = [...new Set(data.map((d) => d.name).filter(Boolean))].sort();
-          setDepartmentOptions(unique.map((d) => ({ code: d, name: d })));
-        } else {
-          const fallbacks = [
-            "BSIT - BACHELOR OF SCIENCE IN INFORMATION TECHNOLOGY",
-            "BSEntrep - BACHELOR OF SCIENCE IN ENTREPRENEURSHIP",
-            "BPED - BACHELOR OF SCIENCE PHYSICAL EDUCATION",
-            "BSHM - BACHELOR OF SCIENCE IN HOSPITALITY MANAGEMENT",
-            "BSED - BACHELOR OF SECONDARY EDUCATION",
-            "BEED - BACHELOR OF ELEMENTARY EDUCATION"
-          ];
-          setDepartmentOptions(fallbacks.map((d) => ({ code: d, name: d })));
-        }
-      } catch (err) {
-        console.error("Failed to load departments:", err);
-      }
-    };
-    fetchDepartments();
-  }, []);
-
   const handleChange = (field, val) => {
     setForm((prev) => ({ ...prev, [field]: val }));
   };
@@ -165,10 +129,6 @@ export default function StudentProfile() {
     try {
       const updatedData = {
         full_name: form.fullName.trim(),
-        email: form.email.trim(),
-        department: form.department,
-        year_level: form.yearLevel,
-        section: form.section,
         contact_number: form.contactNumber.trim(),
         photo_url: form.photoUrl,
       };
@@ -316,84 +276,28 @@ export default function StudentProfile() {
                     className="sp-input"
                     value={form.fullName}
                     onChange={(e) => handleChange("fullName", e.target.value)}
+                    autoComplete="off"
                     placeholder="Enter full name"
                   />
                 </div>
 
                 <div className="sp-formGroup">
-                  <label className="sp-label">Email Address (Gmail)</label>
+                  <label className="sp-label">Email Address</label>
                   <input
                     type="email"
                     className="sp-input"
                     value={form.email}
-                    onChange={(e) => handleChange("email", e.target.value)}
-                    placeholder="Enter email address"
+                    readOnly
+                    style={{ background: "#f8fafc", color: "#64748b", cursor: "not-allowed" }}
+                    title="Institutional email cannot be edited directly"
                   />
+                  <span style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                    Institutional email managed by administration.
+                  </span>
                 </div>
               </div>
 
-              <div className="sp-formRow sp-formRow--3col">
-                <div className="sp-formGroup">
-                  <label className="sp-label">Program</label>
-                  <div className="sp-selectWrap">
-                    <select
-                      className="sp-select"
-                      value={form.department}
-                      onChange={(e) => handleChange("department", e.target.value)}
-                    >
-                      {departmentOptions.length > 0 ? (
-                        departmentOptions.map((d) => (
-                          <option key={d.code} value={d.code}>
-                            {d.code} - {d.name}
-                          </option>
-                        ))
-                      ) : (
-                        <>
-                          <option value="BSIT">BSIT</option>
-                          <option value="BSCS">BSCS</option>
-                          <option value="BSIS">BSIS</option>
-                          <option value="BSED">BSED</option>
-                        </>
-                      )}
-                    </select>
-                    <ChevronDown size={16} className="sp-selectCaret" />
-                  </div>
-                </div>
-
-                <div className="sp-formGroup">
-                  <label className="sp-label">Year Level</label>
-                  <div className="sp-selectWrap">
-                    <select
-                      className="sp-select"
-                      value={form.yearLevel}
-                      onChange={(e) => handleChange("yearLevel", e.target.value)}
-                    >
-                      {YEAR_LEVEL_OPTIONS.map((y) => (
-                        <option key={y.value} value={y.value}>{y.label}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={16} className="sp-selectCaret" />
-                  </div>
-                </div>
-
-                <div className="sp-formGroup">
-                  <label className="sp-label">Section</label>
-                  <div className="sp-selectWrap">
-                    <select
-                      className="sp-select"
-                      value={form.section}
-                      onChange={(e) => handleChange("section", e.target.value)}
-                    >
-                      {SECTION_OPTIONS.map((sec) => (
-                        <option key={sec} value={sec}>{sec}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={16} className="sp-selectCaret" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="sp-formRow">
+              <div className="sp-formRow sp-formRow--2col">
                 <div className="sp-formGroup">
                   <label className="sp-label">Contact Number</label>
                   <input
@@ -401,12 +305,36 @@ export default function StudentProfile() {
                     className="sp-input"
                     value={form.contactNumber}
                     onChange={(e) => handleChange("contactNumber", e.target.value)}
-                    placeholder="Enter contact number (optional)"
+                    autoComplete="off"
+                    placeholder="Enter contact number (e.g. 09123456789)"
                   />
                 </div>
               </div>
 
-              <div className="sp-formGroup" style={{ marginTop: "12px" }}>
+              <div className="sp-academicSection" style={{ background: "#f8fafc", padding: "14px 16px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
+                  <GraduationCap size={16} color="#2563eb" />
+                  <span style={{ fontSize: "11.5px", fontWeight: "800", color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Verified Institutional Assignment
+                  </span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px" }}>
+                  <div>
+                    <span style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#64748b" }}>Program / Department</span>
+                    <span style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>{form.department || "—"}</span>
+                  </div>
+                  <div>
+                    <span style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#64748b" }}>Year Level</span>
+                    <span style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>{form.yearLevel || "—"}</span>
+                  </div>
+                  <div>
+                    <span style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#64748b" }}>Section</span>
+                    <span style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>{form.section || "—"}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="sp-formGroup" style={{ marginTop: "8px" }}>
                 <label className="sp-label">Profile Picture</label>
                 <div className="sp-photoUploadCard">
                   <div className="sp-photoMiniAvatar">

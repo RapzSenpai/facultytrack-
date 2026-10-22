@@ -15,7 +15,6 @@ import {
   LogOut,
   ChevronRight,
   ShieldCheck,
-  Sparkles,
   Activity,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -24,8 +23,6 @@ import { useSuperScope } from "../../context/SuperScopeContext";
 import { supabase } from "../../config/supabase";
 import logo from "../../assets/logo.jpg";
 import NotificationBell from "../../components/notifications/NotificationBell";
-import { useAIAnalyst } from "../../context/AIAnalystContext";
-import AdminAICopilotDrawer from "../../components/admin/AdminAICopilotDrawer";
 
 // Phase 7 [Req 10]: the Program Assignments page is super-admin-only;
 // RLS enforces the same rule server-side.
@@ -69,14 +66,12 @@ const navSections = [
       { key: "moderation", label: "Moderation & Priority", path: "/admin/moderation", icon: ClipboardCheck },
       { key: "release-management", label: "Release Management", path: "/admin/release-management", icon: ClipboardCheck, scopedOnly: true },
       { key: "report", label: "Evaluation Report", path: "/admin/report", icon: FileText },
-      { key: "ai-analyst", label: "EvalIQ", path: "/admin/ai-analyst", icon: Sparkles },
     ],
   },
   {
     id: "oversight",
     label: "OVERSIGHT",
     items: [
-      { key: "monitor", label: "System Monitor", path: "/admin/monitor", icon: Activity, superOnly: true },
       { key: "program-assignments", label: "Program Assignments", path: "/admin/program-assignments", icon: UserCircle2, superOnly: true },
       { key: "reports", label: "Reports & Export", path: "/admin/reports", icon: FileText, superOnly: true },
       { key: "analytics", label: "Analytics", path: "/admin/analytics", icon: BarChart3, superOnly: true },
@@ -95,7 +90,6 @@ function AdminLayoutInner({ title, children }) {
   const { logout, userProfile } = useAuth();
   const superAdmin = isSuperAdmin(userProfile);
   const { inScopeName, loading: scopeLoading } = useScopedAdmin();
-  const { toggleDrawer } = useAIAnalyst();
 
   useEffect(() => {
     const fetchPending = async () => {
@@ -159,14 +153,6 @@ function AdminLayoutInner({ title, children }) {
   const userFullName = userProfile?.fullName || "Admin";
   const { scopeDeptId, setScopeDeptId, departments: scopeDepts } = useSuperScope();
   const scopeDeptName = scopeDepts.find((d) => d.id === scopeDeptId)?.name || "";
-  // Fallback Admin Tools collapse for super (persisted, shut by default).
-  const [fallbackOpen, setFallbackOpen] = useState(() => localStorage.getItem("superFallbackOpen") === "1");
-  const toggleFallback = () => {
-    setFallbackOpen((v) => {
-      localStorage.setItem("superFallbackOpen", v ? "0" : "1");
-      return !v;
-    });
-  };
 
   return (
     <div className={`ad ${sidebarOpen ? "ad--open" : ""} ${mobileOpen ? "ad--mobile-open" : ""}`}>
@@ -184,118 +170,254 @@ function AdminLayoutInner({ title, children }) {
 
         {/* Super program picker: scopes fallback Admin Tools only.
             Oversight + Dashboard + Release stay global. Default All. */}
-        {superAdmin && (
-          <div style={{ padding: "10px 14px 2px" }}>
-            {sidebarOpen && (
-              <div className="ad-menuLabel" style={{ marginBottom: "4px" }}>Viewing</div>
-            )}
-            <select
-              className="ad-filterSelect"
-              style={{ width: "100%" }}
-              value={scopeDeptId}
-              onChange={(e) => setScopeDeptId(e.target.value)}
-              title="Scope fallback Admin Tools to a program (Oversight stays global)"
-            >
-              <option value="">All Programs</option>
-              {scopeDepts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+        {/* Super program picker */}
+        {superAdmin && sidebarOpen && (
+          <div style={{ padding: "10px 14px 6px" }}>
+            <div className="ad-menuLabel" style={{ marginBottom: "6px" }}>Viewing</div>
+            <div style={{ position: "relative" }}>
+              <select
+                style={{
+                  width: "100%",
+                  padding: "8px 30px 8px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid rgba(255, 255, 255, 0.15)",
+                  background: "rgba(255, 255, 255, 0.08)",
+                  color: "#ffffff",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  outline: "none",
+                  cursor: "pointer",
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  transition: "all 0.2s ease",
+                }}
+                value={scopeDeptId}
+                onChange={(e) => setScopeDeptId(e.target.value)}
+                title="Filter views to a specific program"
+              >
+                <option value="" style={{ background: "#0f172a", color: "#ffffff" }}>All Programs</option>
+                {scopeDepts.map((d) => (
+                  <option key={d.id} value={d.id} style={{ background: "#0f172a", color: "#ffffff" }}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  position: "absolute",
+                  right: "12px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                  color: "rgba(255, 255, 255, 0.7)",
+                }}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </div>
           </div>
         )}
 
-        {navSections.map((section) => {
-          // Super: management screens collapse into a fallback group so
-          // the sidebar stays oversight-focused. Admins see everything flat.
-          const isFallbackSection = superAdmin && section.isFallback;
-          if (isFallbackSection) return null;
-
-          const visibleItems = section.items.filter(
-            (item) => (!item.superOnly || superAdmin) && (!item.scopedHide || superAdmin) && (!item.scopedOnly || !superAdmin)
-          );
-          if (visibleItems.length === 0) return null;
-
-          return (
-            <div key={section.id}>
-              {section.label && <div className="ad-menuLabel">{section.label}</div>}
+        {superAdmin ? (
+          <>
+            {/* OVERVIEW */}
+            <div>
+              <div className="ad-menuLabel">OVERVIEW</div>
               <nav className="ad-nav">
-                {visibleItems.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.key}
-                      className={`ad-link ${isActive(item.path) ? "ad-link--active" : ""}`}
-                      type="button"
-                      onClick={() => handleNavClick(item.path)}
-                      title={!sidebarOpen ? item.label : undefined}
-                    >
-                      <span className="ad-linkIcon"><Icon size={18} /></span>
-                      <span className="ad-linkText">{item.label}</span>
-                      {item.key === "approvals" && pendingCount > 0 && (
-                        <span style={{
-                          marginLeft: "auto",
-                          background: isActive(item.path) ? "#1e3a5f" : "#f5c400",
-                          color: isActive(item.path) ? "#fff" : "#1e3a5f",
-                          padding: "2px 6px",
-                          borderRadius: "12px",
-                          fontSize: "10px",
-                          fontWeight: "800",
-                          display: (!sidebarOpen && !mobileOpen) ? "none" : "inline-flex"
-                        }}>{pendingCount}</span>
-                      )}
-                    </button>
-                  );
-                })}
+                <button
+                  className={`ad-link ${isActive("/admin/dashboard") ? "ad-link--active" : ""}`}
+                  type="button"
+                  onClick={() => handleNavClick("/admin/dashboard")}
+                  title={!sidebarOpen ? "Dashboard" : undefined}
+                >
+                  <span className="ad-linkIcon"><LayoutDashboard size={18} /></span>
+                  <span className="ad-linkText">Dashboard</span>
+                </button>
+                <button
+                  className={`ad-link ${isActive("/admin/analytics") ? "ad-link--active" : ""}`}
+                  type="button"
+                  onClick={() => handleNavClick("/admin/analytics")}
+                  title={!sidebarOpen ? "Analytics" : undefined}
+                >
+                  <span className="ad-linkIcon"><BarChart3 size={18} /></span>
+                  <span className="ad-linkText">Analytics</span>
+                </button>
+                <button
+                  className={`ad-link ${isActive("/admin/reports") ? "ad-link--active" : ""}`}
+                  type="button"
+                  onClick={() => handleNavClick("/admin/reports")}
+                  title={!sidebarOpen ? "Reports & Export" : undefined}
+                >
+                  <span className="ad-linkIcon"><FileText size={18} /></span>
+                  <span className="ad-linkText">Reports &amp; Export</span>
+                </button>
               </nav>
             </div>
-          );
-        })}
-        {/* Super fallback Admin Tools: same pages, collapsed by default. */}
-        {superAdmin && (
-          <div>
-            <div className="ad-menuLabel">Fallback</div>
-            <nav className="ad-nav">
-              <button
-                className="ad-link"
-                type="button"
-                onClick={toggleFallback}
-                title={!sidebarOpen ? "Admin Tools" : undefined}
-              >
-                <span className="ad-linkIcon"><ChevronRight size={18} style={{ transform: fallbackOpen ? "rotate(90deg)" : "none" }} /></span>
-                <span className="ad-linkText">Admin Tools</span>
-              </button>
-              {fallbackOpen && navSections
-                .filter((s) => s.isFallback)
-                .flatMap((s) => s.items)
-                .filter((item) => (!item.superOnly || superAdmin) && (!item.scopedHide || superAdmin) && (!item.scopedOnly || !superAdmin))
-                .map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.key}
-                      className={`ad-link ${isActive(item.path) ? "ad-link--active" : ""}`}
-                      type="button"
-                      onClick={() => handleNavClick(item.path)}
-                      title={!sidebarOpen ? item.label : undefined}
-                      style={{ paddingLeft: "38px" }}
-                    >
-                      <span className="ad-linkIcon"><Icon size={16} /></span>
-                      <span className="ad-linkText">{item.label}</span>
-                      {item.key === "approvals" && pendingCount > 0 && (
-                        <span style={{
-                          marginLeft: "auto",
-                          background: isActive(item.path) ? "#1e3a5f" : "#f5c400",
-                          color: isActive(item.path) ? "#fff" : "#1e3a5f",
-                          padding: "2px 6px",
-                          borderRadius: "12px",
-                          fontSize: "10px",
-                          fontWeight: "800",
-                          display: (!sidebarOpen && !mobileOpen) ? "none" : "inline-flex"
-                        }}>{pendingCount}</span>
-                      )}
-                    </button>
-                  );
-                })}
-            </nav>
-          </div>
+
+            {/* SYSTEM USERS */}
+            <div>
+              <div className="ad-menuLabel">SYSTEM USERS</div>
+              <nav className="ad-nav">
+                <button
+                  className={`ad-link ${isActive("/admin/program-assignments") ? "ad-link--active" : ""}`}
+                  type="button"
+                  onClick={() => handleNavClick("/admin/program-assignments")}
+                  title={!sidebarOpen ? "Program Heads" : undefined}
+                >
+                  <span className="ad-linkIcon"><UserCircle2 size={18} /></span>
+                  <span className="ad-linkText">Program Heads</span>
+                </button>
+                <button
+                  className={`ad-link ${isActive("/admin/faculty") ? "ad-link--active" : ""}`}
+                  type="button"
+                  onClick={() => handleNavClick("/admin/faculty")}
+                  title={!sidebarOpen ? "Faculty" : undefined}
+                >
+                  <span className="ad-linkIcon"><Users size={18} /></span>
+                  <span className="ad-linkText">Faculty</span>
+                </button>
+                <button
+                  className={`ad-link ${isActive("/admin/student") ? "ad-link--active" : ""}`}
+                  type="button"
+                  onClick={() => handleNavClick("/admin/student")}
+                  title={!sidebarOpen ? "Students" : undefined}
+                >
+                  <span className="ad-linkIcon"><UserCircle2 size={18} /></span>
+                  <span className="ad-linkText">Students</span>
+                </button>
+                <button
+                  className={`ad-link ${isActive("/admin/approvals") ? "ad-link--active" : ""}`}
+                  type="button"
+                  onClick={() => handleNavClick("/admin/approvals")}
+                  title={!sidebarOpen ? "Pending Approvals" : undefined}
+                >
+                  <span className="ad-linkIcon"><ShieldCheck size={18} /></span>
+                  <span className="ad-linkText">Pending Approvals</span>
+                  {pendingCount > 0 && (
+                    <span style={{
+                      marginLeft: "auto",
+                      background: isActive("/admin/approvals") ? "#1e3a5f" : "#f5c400",
+                      color: isActive("/admin/approvals") ? "#fff" : "#1e3a5f",
+                      padding: "2px 6px",
+                      borderRadius: "12px",
+                      fontSize: "10px",
+                      fontWeight: "800",
+                      display: (!sidebarOpen && !mobileOpen) ? "none" : "inline-flex"
+                    }}>{pendingCount}</span>
+                  )}
+                </button>
+              </nav>
+            </div>
+
+            {/* ACADEMIC SETUP */}
+            <div>
+              <div className="ad-menuLabel">ACADEMIC SETUP</div>
+              <nav className="ad-nav">
+                <button
+                  className={`ad-link ${isActive("/admin/department") ? "ad-link--active" : ""}`}
+                  type="button"
+                  onClick={() => handleNavClick("/admin/department")}
+                  title={!sidebarOpen ? "Curriculum & Sections" : undefined}
+                >
+                  <span className="ad-linkIcon"><GraduationCap size={18} /></span>
+                  <span className="ad-linkText">Curriculum &amp; Sections</span>
+                </button>
+                <button
+                  className={`ad-link ${isActive("/admin/academic-year") ? "ad-link--active" : ""}`}
+                  type="button"
+                  onClick={() => handleNavClick("/admin/academic-year")}
+                  title={!sidebarOpen ? "Evaluation Periods" : undefined}
+                >
+                  <span className="ad-linkIcon"><CalendarDays size={18} /></span>
+                  <span className="ad-linkText">Evaluation Periods</span>
+                </button>
+                <button
+                  className={`ad-link ${isActive("/admin/questionnaire") ? "ad-link--active" : ""}`}
+                  type="button"
+                  onClick={() => handleNavClick("/admin/questionnaire")}
+                  title={!sidebarOpen ? "Questionnaire" : undefined}
+                >
+                  <span className="ad-linkIcon"><FileText size={18} /></span>
+                  <span className="ad-linkText">Questionnaire</span>
+                </button>
+                <button
+                  className={`ad-link ${isActive("/admin/class-assignment") ? "ad-link--active" : ""}`}
+                  type="button"
+                  onClick={() => handleNavClick("/admin/class-assignment")}
+                  title={!sidebarOpen ? "Class Assignments" : undefined}
+                >
+                  <span className="ad-linkIcon"><ClipboardList size={18} /></span>
+                  <span className="ad-linkText">Class Assignments</span>
+                </button>
+              </nav>
+            </div>
+
+            {/* SYSTEM */}
+            <div>
+              <div className="ad-menuLabel">SYSTEM</div>
+              <nav className="ad-nav">
+                <button
+                  className={`ad-link ${isActive("/admin/monitor") ? "ad-link--active" : ""}`}
+                  type="button"
+                  onClick={() => handleNavClick("/admin/monitor")}
+                  title={!sidebarOpen ? "System Monitor & Audit" : undefined}
+                >
+                  <span className="ad-linkIcon"><Activity size={18} /></span>
+                  <span className="ad-linkText">System Monitor &amp; Audit</span>
+                </button>
+              </nav>
+            </div>
+          </>
+        ) : (
+          navSections.map((section) => {
+            const visibleItems = section.items.filter(
+              (item) => (!item.superOnly || superAdmin) && (!item.scopedHide || superAdmin) && (!item.scopedOnly || !superAdmin)
+            );
+            if (visibleItems.length === 0) return null;
+
+            return (
+              <div key={section.id}>
+                {section.label && <div className="ad-menuLabel">{section.label}</div>}
+                <nav className="ad-nav">
+                  {visibleItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.key}
+                        className={`ad-link ${isActive(item.path) ? "ad-link--active" : ""}`}
+                        type="button"
+                        onClick={() => handleNavClick(item.path)}
+                        title={!sidebarOpen ? item.label : undefined}
+                      >
+                        <span className="ad-linkIcon"><Icon size={18} /></span>
+                        <span className="ad-linkText">{item.label}</span>
+                        {item.key === "approvals" && pendingCount > 0 && (
+                          <span style={{
+                            marginLeft: "auto",
+                            background: isActive(item.path) ? "#1e3a5f" : "#f5c400",
+                            color: isActive(item.path) ? "#fff" : "#1e3a5f",
+                            padding: "2px 6px",
+                            borderRadius: "12px",
+                            fontSize: "10px",
+                            fontWeight: "800",
+                            display: (!sidebarOpen && !mobileOpen) ? "none" : "inline-flex"
+                          }}>{pendingCount}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </nav>
+              </div>
+            );
+          })
         )}
 
         {/* Sidebar Footer User Card */}
@@ -303,30 +425,23 @@ function AdminLayoutInner({ title, children }) {
           <div
             className="ad-userFooterHeader"
             onClick={() => navigate("/admin/profile")}
-            title={!sidebarOpen ? `${userFullName} (ADMIN)` : undefined}
+            title={!sidebarOpen ? `${userFullName} (${superAdmin ? "SUPER ADMIN" : "ADMIN"})` : undefined}
           >
-            <div className="ad-userAvatar">
-              {(() => {
-                const name = userFullName;
-                const parts = name.trim().split(" ");
-                if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-                return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-              })()}
-            </div>
+            {!sidebarOpen && (
+              <div className="ad-userAvatar">
+                {(() => {
+                  const name = userFullName;
+                  const parts = name.trim().split(" ");
+                  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+                  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+                })()}
+              </div>
+            )}
             <div className="ad-userFooterInfo">
               <div className="ad-userFooterName">{userFullName}</div>
-              <div className="ad-userFooterSub">ADMIN</div>
+              <div className="ad-userFooterSub">{superAdmin ? "SUPER ADMIN" : "ADMIN"}</div>
             </div>
           </div>
-          <button
-            type="button"
-            className="ad-userLogoutBtn"
-            onClick={handleLogout}
-            title={!sidebarOpen ? "Log out" : undefined}
-          >
-            <LogOut size={16} />
-            <span className="ad-userLogoutText">Log out</span>
-          </button>
         </div>
       </aside>
 
@@ -409,21 +524,7 @@ function AdminLayoutInner({ title, children }) {
 
         {children}
 
-        {/* Floating Copilot Trigger Button (hidden when on full AI Analyst page) */}
-        {location.pathname !== "/admin/ai-analyst" && (
-          <button
-            type="button"
-            className="ad-floatingCopilotBtn"
-            onClick={toggleDrawer}
-            title="Ask EvalIQ Assistant"
-          >
-            <Sparkles size={16} color="#f5c400" />
-            <span>EvalIQ</span>
-          </button>
-        )}
 
-        {/* Slide-over Copilot Drawer */}
-        <AdminAICopilotDrawer />
       </main>
     </div>
   );

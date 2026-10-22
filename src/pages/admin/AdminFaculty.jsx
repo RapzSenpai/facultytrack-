@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
@@ -93,8 +94,13 @@ export default function AdminFaculty() {
           return;
         }
       } else {
-        // Step 1: Create the auth user
-        const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        // Step 1: Create the auth user with an isolated client so active admin session is not replaced
+        const tempAuth = createClient(
+          import.meta.env.VITE_SUPABASE_URL,
+          import.meta.env.VITE_SUPABASE_ANON_KEY,
+          { auth: { persistSession: false, autoRefreshToken: false } }
+        );
+        const { data: authData, error: signUpError } = await tempAuth.auth.signUp({
           email: formData.email,
           password: formData.password,
           options: {

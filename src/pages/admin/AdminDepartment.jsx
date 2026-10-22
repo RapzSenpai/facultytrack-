@@ -46,13 +46,8 @@ export default function AdminDepartment() {
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Accordion open state for Year Levels: Map of yearLevel -> boolean
-  const [openYears, setOpenYears] = useState({
-    "1st": true,
-    "2nd": false,
-    "3rd": false,
-    "4th": false,
-  });
+  // Accordion open state for Year Levels: Map of yearLevel -> boolean (all closed by default)
+  const [openYears, setOpenYears] = useState({});
 
   // Active subtab for each Year Level: Map of yearLevel -> "subjects" | "sections"
   const [yearTabs, setYearTabs] = useState({
@@ -171,6 +166,11 @@ export default function AdminDepartment() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuper, scopeLoading, departments, myDeptNames, scopeDeptId]);
+
+  // Reset year level accordion cards to closed when entering or switching a program
+  useEffect(() => {
+    setOpenYears({});
+  }, [selectedProgram?.id]);
 
   // 2. Program CRUD (super-only; scoped admins manage subjects/sections inside their program)
   const handleSaveProgram = async (e) => {
@@ -742,7 +742,7 @@ export default function AdminDepartment() {
             {activeYearLevels.map((yl) => {
               const ylSubjects = currentProgramSubjects.filter((s) => normYear(s.year_level) === normYear(yl));
               const ylSections = currentProgramSections.filter((sec) => normYear(sec.year_level) === normYear(yl));
-              const isOpen = openYears[yl] ?? true;
+              const isOpen = Boolean(openYears[yl]);
               const activeTab = yearTabs[yl] || "subjects";
 
               return (
