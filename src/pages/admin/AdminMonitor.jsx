@@ -98,7 +98,7 @@ export default function AdminMonitor() {
 
   if (!isSuper) {
     return (
-      <AdminLayout title="System Monitor">
+      <AdminLayout title="Settings">
         <section className="ad-content">
           <div className="ad-tableCard ad-tableCard--padded">Super admin only.</div>
         </section>
@@ -118,12 +118,12 @@ export default function AdminMonitor() {
   ];
 
   return (
-    <AdminLayout title="System Monitor">
+    <AdminLayout title="Settings">
       <section className="ad-content">
         <div className="ad-welcomeHeader" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
           <div>
-            <h2 className="ad-title">System Monitor</h2>
-            <p className="ad-subtitle">Cross-program activity and data health. Read-only.</p>
+            <h2 className="ad-title">Settings</h2>
+            <p className="ad-subtitle">Cross-program activity audit logs and institutional data health monitoring.</p>
           </div>
         </div>
 

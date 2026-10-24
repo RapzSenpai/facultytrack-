@@ -27,7 +27,7 @@ const MOD_COLORS = {
 
 export default function AdminModeration() {
   const { currentUser } = useAuth();
-  const { showNotice } = useDialog();
+  const { showNotice, showConfirm } = useDialog();
   const { isSuper, myDeptIds, inScopeName, loading: scopeLoading } = useScopedAdmin();
   const { scopeDeptId, scopeDeptName } = useSuperScope();
   const sameDept = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
@@ -53,6 +53,10 @@ export default function AdminModeration() {
   const [newSeverity, setNewSeverity] = useState("flag");
   const [savingWord, setSavingWord] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("all"); // all | new | acknowledged | resolved | dismissed
+  const [search, setSearch] = useState("");
+  const [resolveTarget, setResolveTarget] = useState(null);
+  const [resolveNote, setResolveNote] = useState("");
 
   useEffect(() => {
     const load = async () => {
@@ -258,42 +262,161 @@ export default function AdminModeration() {
     }
   };
 
-  const renderEvalContext = (evaluation) => {
-    if (!evaluation) return <em style={{ color: "#9ca3af" }}>Evaluation not found</em>;
+  // ---------- UI helpers (presentation only) ----------
+  const STATUS_LABEL = { new: "New", acknowledged: "In Review", resolved: "Resolved", dismissed: "Dismissed" };
+  const MOD_LABEL = { allow: "Allowed", flag: "Flagged", block: "Withheld" };
+  const STATUS_ORDER = { new: 0, acknowledged: 1, resolved: 2, dismissed: 3 };
+
+  const fmtDate = (v) =>
+    v ? new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+
+  const initials = (name) => {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "—";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  const sourceLabel = (src) => {
+    if (!src) return null;
+    return String(src).toLowerCase().includes("ai") ? "AI auto-priority" : `Source: ${src}`;
+  };
+
+  const q = search.trim().toLowerCase();
+  const matchesSearch = (evaluation) => {
+    if (!q) return true;
+    if (!evaluation) return false;
+    return [
+      facultyName(evaluation.faculty_id),
+      facultyDept(evaluation.faculty_id),
+      evaluation.original_comment,
+      evaluation.academic_year,
+      evaluation.semester,
+    ].join(" ").toLowerCase().includes(q);
+  };
+
+  const newCount = reviews.filter((r) => r.status === "new").length;
+  const ackCount = reviews.filter((r) => r.status === "acknowledged").length;
+  const blockWords = words.filter((w) => w.severity === "block");
+  const flagWords = words.filter((w) => w.severity !== "block");
+
+  const visibleReviews = reviews
+    .filter((r) => (statusFilter === "all" || r.status === statusFilter) && matchesSearch(evalById.get(r.evaluation_id)))
+    .sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9));
+  const visibleFlagged = flaggedEvals.filter(matchesSearch);
+
+  const confirmDismiss = async (r) => {
+    const ok = await showConfirm("Dismiss this priority case? It will be closed without a resolution.", {
+      title: "Dismiss Case",
+      confirmText: "Dismiss",
+      type: "warning",
+    });
+    if (ok) updateReview(r, { status: "dismissed", resolution_note: "Dismissed by admin." });
+  };
+
+  const confirmWithhold = async (e) => {
+    const ok = await showConfirm("Withhold this comment? It will stay hidden from the faculty member.", {
+      title: "Withhold Comment",
+      confirmText: "Withhold",
+      type: "warning",
+    });
+    if (ok) setModeration(e, "block");
+  };
+
+  const submitResolve = async () => {
+    if (!resolveTarget) return;
+    const target = resolveTarget;
+    await updateReview(target, {
+      status: "resolved",
+      resolution_note: resolveNote.trim() || "Reviewed and handled by admin.",
+    });
+    setResolveTarget(null);
+    setResolveNote("");
+  };
+
+  const renderCaseHeader = (evaluation, chipLabel, chipColor, dateValue) => {
+    const name = evaluation ? facultyName(evaluation.faculty_id) : "Unknown faculty";
     return (
-      <div style={{ fontSize: "13px", color: "#374151", lineHeight: 1.5 }}>
-        <div><strong>{facultyName(evaluation.faculty_id)}</strong> · {facultyDept(evaluation.faculty_id)} · {evaluation.academic_year} {evaluation.semester}</div>
-        {evaluation.original_comment && (
-          <div style={{ marginTop: "6px", padding: "8px 12px", background: "#f8fafc", borderLeft: "3px solid #3b82f6", borderRadius: "6px" }}>
-            “{evaluation.original_comment}”
+      <div className="mod-caseTop">
+        <div className="mod-caseWho">
+          <div className="mod-avatar">{initials(name)}</div>
+          <div className="mod-caseName">
+            <strong>{name}</strong>
+            {evaluation && <span className="mod-chip mod-chip--program">{facultyDept(evaluation.faculty_id)}</span>}
+            {evaluation && (
+              <span className="mod-casePeriod">{evaluation.academic_year} · {evaluation.semester}</span>
+            )}
           </div>
-        )}
-        <div style={{ marginTop: "6px", fontSize: "12px", color: "#6b7280" }}>
-          moderation: <strong style={{ color: MOD_COLORS[evaluation.moderation_status] || "#6b7280" }}>{evaluation.moderation_status}</strong>
-          {evaluation.priority_source && <> · priority source: <strong>{evaluation.priority_source}</strong></>}
+        </div>
+        <div className="mod-caseMeta">
+          <span className="mod-status" style={{ color: chipColor, background: `${chipColor}18`, borderColor: `${chipColor}40` }}>
+            {chipLabel}
+          </span>
+          {dateValue && <span className="mod-date">{fmtDate(dateValue)}</span>}
         </div>
       </div>
     );
   };
 
+  const emptyState = (title, hint) => (
+    <div className="mod-empty">
+      <div className="mod-emptyIcon">✓</div>
+      <div className="mod-emptyTitle">{title}</div>
+      <div className="mod-emptyHint">{hint}</div>
+    </div>
+  );
+
+  const searchBox = (
+    <div className="ad-searchFilterWrap mod-search">
+      <svg className="ad-searchFilterIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+      <input
+        type="text"
+        className="ad-searchFilterInput"
+        placeholder="Search faculty or comment..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+    </div>
+  );
+
   return (
     <AdminLayout title="Moderation & Priority">
       <section className="ad-content">
-        <div className="ad-welcomeHeader" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
+        <div className="ad-welcomeHeader">
           <div>
             <h2 className="ad-title">Moderation &amp; Priority</h2>
-            <p className="ad-subtitle">
-              Priority concerns [D7], flagged comments (Req 3), and the blocked-words list.
-            </p>
+            <p className="ad-subtitle">Review priority student concerns, flagged comments, and the blocked-words filter.</p>
+          </div>
+        </div>
+
+        {/* KPI strip */}
+        <div className="mod-kpiGrid">
+          <div className="mod-kpi mod-kpi--red">
+            <span className="mod-kpiIcon">!</span>
+            <div><div className="mod-kpiLabel">Open Priority</div><div className="mod-kpiValue">{newCount}</div></div>
+          </div>
+          <div className="mod-kpi mod-kpi--amber">
+            <span className="mod-kpiIcon">◔</span>
+            <div><div className="mod-kpiLabel">In Review</div><div className="mod-kpiValue">{ackCount}</div></div>
+          </div>
+          <div className="mod-kpi mod-kpi--blue">
+            <span className="mod-kpiIcon">⚑</span>
+            <div><div className="mod-kpiLabel">Flagged to Review</div><div className="mod-kpiValue">{flaggedEvals.length}</div></div>
+          </div>
+          <div className="mod-kpi mod-kpi--gray">
+            <span className="mod-kpiIcon">⦸</span>
+            <div><div className="mod-kpiLabel">Blocked Words</div><div className="mod-kpiValue">{words.length}</div></div>
           </div>
         </div>
 
         {/* Tabs */}
         <div className="ad-tabs">
           {[
-            { key: "priority", label: `Priority Queue (${openReviews.length})` },
-            { key: "flagged", label: `Flagged Comments (${flaggedEvals.length})` },
-            { key: "words", label: `Blocked Words (${words.length})` },
+            { key: "priority", label: "Priority Queue", count: openReviews.length, hot: newCount > 0 },
+            { key: "flagged", label: "Flagged Comments", count: flaggedEvals.length },
+            { key: "words", label: "Blocked Words", count: words.length },
           ].map((t) => (
             <button
               key={t.key}
@@ -302,10 +425,10 @@ export default function AdminModeration() {
               className={`ad-tab ${tab === t.key ? "ad-tab--active" : ""}`}
             >
               {t.label}
+              <span className={`ad-tabBadge ${t.hot ? "mod-badgeHot" : ""}`}>{t.count}</span>
             </button>
           ))}
         </div>
-
 
         {loading ? (
           <div className="ad-tableCard" style={{ padding: "40px", textAlign: "center", color: "#6b7280" }}>
@@ -313,244 +436,226 @@ export default function AdminModeration() {
           </div>
         ) : (
           <>
-            {/* PRIORITY QUEUE [D7] */}
+            {/* PRIORITY QUEUE */}
             {tab === "priority" && (
-              <div className="ad-tableCard">
-                <div className="fd-tableHeader" style={{ padding: "20px 24px", borderBottom: "1px solid #f1f5f9" }}>
-                  <h3 className="fd-tableTitle" style={{ fontSize: "14px", fontWeight: 800, textTransform: "uppercase" }}>
-                    Priority Reviews — {openReviews.length} open
-                  </h3>
+              <div>
+                <div className="mod-toolbar">
+                  <div className="mod-pills">
+                    {["all", "new", "acknowledged", "resolved", "dismissed"].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        className={`mod-pill ${statusFilter === s ? "mod-pill--active" : ""}`}
+                        onClick={() => setStatusFilter(s)}
+                      >
+                        {s === "all" ? "All" : STATUS_LABEL[s]}
+                      </button>
+                    ))}
+                  </div>
+                  {searchBox}
                 </div>
-                <div className="ad-tableWrap">
-                  <table className="ad-table">
-                    <thead>
-                      <tr>
-                        <th>PRIORITY CONCERN</th>
-                        <th>STATUS</th>
-                        <th style={{ textAlign: "right" }}>ACTIONS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {reviews.length === 0 ? (
-                        <tr><td colSpan="3" style={{ textAlign: "center", padding: "24px", color: "#6b7280" }}>No priority reviews yet.</td></tr>
-                      ) : (
-                        reviews.map((r) => {
-                          const evaluation = evalById.get(r.evaluation_id);
-                          return (
-                            <tr key={r.id}>
-                              <td style={{ maxWidth: "520px" }}>{renderEvalContext(evaluation)}</td>
-                              <td>
-                                <span style={{
-                                  padding: "4px 12px",
-                                  borderRadius: "999px",
-                                  fontSize: "12px",
-                                  fontWeight: 700,
-                                  color: STATUS_COLORS[r.status],
-                                  background: `${STATUS_COLORS[r.status]}15`,
-                                }}>
-                                  {r.status}
+
+                {visibleReviews.length === 0 ? (
+                  emptyState("No priority cases", reviews.length === 0 ? "Severe comments flagged by AI will appear here." : "No cases match your filters.")
+                ) : (
+                  <div className="mod-caseList">
+                    {visibleReviews.map((r) => {
+                      const evaluation = evalById.get(r.evaluation_id);
+                      const color = STATUS_COLORS[r.status] || "#6b7280";
+                      const src = sourceLabel(evaluation?.priority_source);
+                      const open = r.status === "new" || r.status === "acknowledged";
+                      return (
+                        <div key={r.id} className="mod-case" style={{ borderLeftColor: color }}>
+                          {renderCaseHeader(evaluation, STATUS_LABEL[r.status] || r.status, color, r.created_at)}
+                          {evaluation ? (
+                            evaluation.original_comment && (
+                              <blockquote className="mod-quote">“{evaluation.original_comment}”</blockquote>
+                            )
+                          ) : (
+                            <em style={{ color: "#9ca3af" }}>Evaluation not found</em>
+                          )}
+                          <div className="mod-caseBottom">
+                            <div className="mod-caseTags">
+                              {src && <span className="mod-chip mod-chip--source">{src}</span>}
+                              {evaluation?.moderation_status && (
+                                <span className="mod-chip" style={{ color: MOD_COLORS[evaluation.moderation_status], background: `${MOD_COLORS[evaluation.moderation_status]}15` }}>
+                                  {MOD_LABEL[evaluation.moderation_status] || evaluation.moderation_status}
                                 </span>
-                              </td>
-                              <td className="ad-tableActions" style={{ justifyContent: "flex-end", gap: "6px", flexWrap: "wrap" }}>
+                              )}
+                              {r.status === "resolved" && r.resolution_note && (
+                                <span className="mod-note">Note: {r.resolution_note}</span>
+                              )}
+                            </div>
+                            {open && (
+                              <div className="mod-actions">
                                 {r.status === "new" && (
-                                  <button
-                                    type="button"
-                                    className="ad-actionBtn ad-actionBtn--view"
-                                    disabled={busyId === r.id}
-                                    onClick={() => updateReview(r, { status: "acknowledged" })}
-                                  >
+                                  <button type="button" className="mod-btn mod-btn--outline" disabled={busyId === r.id} onClick={() => updateReview(r, { status: "acknowledged" })}>
                                     Acknowledge
                                   </button>
                                 )}
-                                {(r.status === "new" || r.status === "acknowledged") && (
-                                  <>
-                                    <button
-                                      type="button"
-                                      className="ad-actionBtn--approve"
-                                      disabled={busyId === r.id}
-                                      onClick={() => updateReview(r, { status: "resolved", resolution_note: "Reviewed and handled by admin." })}
-                                    >
-                                      Resolve
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="ad-actionBtn ad-actionBtn--delete"
-                                      disabled={busyId === r.id}
-                                      onClick={() => updateReview(r, { status: "dismissed", resolution_note: "Dismissed by admin." })}
-                                    >
-                                      Dismiss
-                                    </button>
-                                  </>
-                                )}
-                                {r.status === "resolved" && r.resolution_note && (
-                                  <span style={{ fontSize: "12px", color: "#6b7280" }}>{r.resolution_note}</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                                <button type="button" className="mod-btn mod-btn--green" disabled={busyId === r.id} onClick={() => { setResolveTarget(r); setResolveNote(""); }}>
+                                  Resolve
+                                </button>
+                                <button type="button" className="mod-btn mod-btn--danger" disabled={busyId === r.id} onClick={() => confirmDismiss(r)}>
+                                  Dismiss
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* FLAGGED COMMENTS (Req 3 triage) */}
+            {/* FLAGGED COMMENTS */}
             {tab === "flagged" && (
-              <div className="ad-tableCard">
-                <div className="fd-tableHeader" style={{ padding: "20px 24px", borderBottom: "1px solid #f1f5f9" }}>
-                  <h3 className="fd-tableTitle" style={{ fontSize: "14px", fontWeight: 800, textTransform: "uppercase" }}>
-                    Flagged &amp; Unreviewed Comments
-                  </h3>
+              <div>
+                <div className="mod-toolbar">
+                  <div className="mod-hint">Comments the filter marked for review. Allow to release them, or withhold to keep them hidden.</div>
+                  {searchBox}
                 </div>
-                <div className="ad-tableWrap">
-                  <table className="ad-table">
-                    <thead>
-                      <tr>
-                        <th>COMMENT</th>
-                        <th>MODERATION</th>
-                        <th style={{ textAlign: "right" }}>ACTIONS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {flaggedEvals.length === 0 ? (
-                        <tr><td colSpan="3" style={{ textAlign: "center", padding: "24px", color: "#6b7280" }}>Nothing flagged. 🎉</td></tr>
-                      ) : (
-                        flaggedEvals.map((e) => {
-                          const unreviewed = e.moderation_labels?.unreviewed === true;
-                          return (
-                            <tr key={e.id}>
-                              <td style={{ maxWidth: "520px" }}>
-                                {renderEvalContext(e)}
-                                {unreviewed && (
-                                  <div style={{ marginTop: "6px", fontSize: "12px", fontWeight: 700, color: "#d97706" }}>
-                                    ⚠ Wordlist-only verdict (AI was unavailable) — please re-review.
-                                  </div>
-                                )}
-                              </td>
-                              <td>
-                                <span style={{
-                                  padding: "4px 12px",
-                                  borderRadius: "999px",
-                                  fontSize: "12px",
-                                  fontWeight: 700,
-                                  color: MOD_COLORS[e.moderation_status],
-                                  background: `${MOD_COLORS[e.moderation_status]}15`,
-                                }}>
-                                  {e.moderation_status}
-                                </span>
-                              </td>
-                              <td className="ad-tableActions" style={{ justifyContent: "flex-end", gap: "6px", flexWrap: "wrap" }}>
-                                <button
-                                  type="button"
-                                  className="ad-actionBtn--approve"
-                                  disabled={busyId === e.id}
-                                  onClick={() => setModeration(e, "allow")}
-                                >
-                                  Allow
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ad-actionBtn ad-actionBtn--delete"
-                                  disabled={busyId === e.id}
-                                  onClick={() => setModeration(e, "block")}
-                                >
-                                  Withhold
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                {visibleFlagged.length === 0 ? (
+                  emptyState("Nothing to review", flaggedEvals.length === 0 ? "No flagged comments right now." : "No comments match your search.")
+                ) : (
+                  <div className="mod-caseList">
+                    {visibleFlagged.map((e) => {
+                      const unreviewed = e.moderation_labels?.unreviewed === true;
+                      const color = MOD_COLORS[e.moderation_status] || "#d97706";
+                      return (
+                        <div key={e.id} className="mod-case" style={{ borderLeftColor: color }}>
+                          {renderCaseHeader(e, MOD_LABEL[e.moderation_status] || e.moderation_status, color, e.submitted_on || e.created_at)}
+                          {e.original_comment && <blockquote className="mod-quote">“{e.original_comment}”</blockquote>}
+                          {unreviewed && (
+                            <div className="mod-warn">⚠ Wordlist-only verdict (AI was unavailable) — please re-review.</div>
+                          )}
+                          <div className="mod-caseBottom">
+                            <div className="mod-caseTags">
+                              {sourceLabel(e.priority_source) && (
+                                <span className="mod-chip mod-chip--source">{sourceLabel(e.priority_source)}</span>
+                              )}
+                            </div>
+                            <div className="mod-actions">
+                              <button type="button" className="mod-btn mod-btn--green" disabled={busyId === e.id} onClick={() => setModeration(e, "allow")}>
+                                Allow
+                              </button>
+                              <button type="button" className="mod-btn mod-btn--danger" disabled={busyId === e.id} onClick={() => confirmWithhold(e)}>
+                                Withhold
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* BLOCKED WORDS CRUD */}
+            {/* BLOCKED WORDS */}
             {tab === "words" && (
-              <div className="ad-tableCard">
-                <div className="fd-tableHeader" style={{ padding: "20px 24px", borderBottom: "1px solid #f1f5f9" }}>
-                  <h3 className="fd-tableTitle" style={{ fontSize: "14px", fontWeight: 800, textTransform: "uppercase" }}>
-                    Blocked Words (tier-1 filter)
-                  </h3>
-                </div>
-                <div style={{ padding: "20px 24px" }}>
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
-                    <input
-                      type="text"
-                      value={newWord}
-                      onChange={(e) => setNewWord(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addWord()}
-                      placeholder="Add a word or phrase..."
-                      style={{ flex: "1 1 220px", padding: "9px 12px", borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "14px" }}
-                    />
-                    <select
-                      value={newSeverity}
-                      onChange={(e) => setNewSeverity(e.target.value)}
-                      style={{ padding: "9px 12px", borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "14px" }}
-                    >
-                      <option value="flag">Flag (review)</option>
-                      <option value="block">Block (reject submission)</option>
-                    </select>
-                    <button
-                      type="button"
-                      className="ad-btnSearch"
-                      onClick={addWord}
-                      disabled={savingWord || !newWord.trim()}
-                      style={{ opacity: savingWord || !newWord.trim() ? 0.6 : 1 }}
-                    >
-                      {savingWord ? "Adding..." : "Add Word"}
+              <div className="mod-wordsGrid">
+                <div className="ad-tableCard mod-card">
+                  <h3 className="mod-cardTitle">Add Blocked Word</h3>
+                  <input
+                    type="text"
+                    className="mod-input"
+                    value={newWord}
+                    onChange={(e) => setNewWord(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addWord()}
+                    placeholder="Add a word or phrase..."
+                  />
+                  <div className="mod-segment">
+                    <button type="button" className={`mod-segBtn ${newSeverity === "flag" ? "mod-segBtn--flag" : ""}`} onClick={() => setNewSeverity("flag")}>
+                      Flag (review)
+                    </button>
+                    <button type="button" className={`mod-segBtn ${newSeverity === "block" ? "mod-segBtn--block" : ""}`} onClick={() => setNewSeverity("block")}>
+                      Block (reject)
                     </button>
                   </div>
+                  <button
+                    type="button"
+                    className="ad-btnSearch"
+                    onClick={addWord}
+                    disabled={savingWord || !newWord.trim()}
+                    style={{ opacity: savingWord || !newWord.trim() ? 0.6 : 1, width: "100%", marginTop: 4 }}
+                  >
+                    {savingWord ? "Adding..." : "Add Word"}
+                  </button>
+                  <div className="mod-info">
+                    <p><strong>Block</strong> rejects the submission outright.</p>
+                    <p><strong>Flag</strong> stores it for review in the Flagged Comments tab.</p>
+                    <p>Legit criticism never matches these rules — the AI tier allows professional negative feedback.</p>
+                  </div>
+                </div>
+
+                <div className="ad-tableCard mod-card">
+                  <h3 className="mod-cardTitle">Word List</h3>
                   {words.length === 0 ? (
-                    <div style={{ textAlign: "center", color: "#6b7280", padding: "16px", fontSize: "14px" }}>
-                      No blocked words yet. The AI classifier still runs on every comment.
-                    </div>
+                    emptyState("No blocked words yet", "The AI classifier still runs on every comment.")
                   ) : (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                      {words.map((w) => (
-                        <span
-                          key={w.id}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            padding: "6px 12px",
-                            borderRadius: "999px",
-                            fontSize: "13px",
-                            fontWeight: 600,
-                            border: "1px solid #e5e7eb",
-                            background: w.severity === "block" ? "#fef2f2" : "#fffbeb",
-                            color: w.severity === "block" ? "#b91c1c" : "#92400e",
-                          }}
-                        >
-                          {w.word}
-                          <small style={{ fontWeight: 800, opacity: 0.75 }}>{w.severity}</small>
-                          <button
-                            type="button"
-                            onClick={() => removeWord(w)}
-                            title="Remove"
-                            style={{ border: "none", background: "transparent", cursor: "pointer", fontWeight: 800, color: "inherit" }}
-                          >
-                            ✕
-                          </button>
-                        </span>
+                    <>
+                      {[
+                        { key: "block", label: "Block", list: blockWords, color: "#b91c1c", bg: "#fef2f2", border: "#fecaca" },
+                        { key: "flag", label: "Flag", list: flagWords, color: "#92400e", bg: "#fffbeb", border: "#fde68a" },
+                      ].map((g) => (
+                        <div key={g.key} className="mod-wordGroup">
+                          <div className="mod-wordGroupHead" style={{ color: g.color }}>
+                            {g.label} · {g.list.length} word{g.list.length === 1 ? "" : "s"}
+                          </div>
+                          {g.list.length === 0 ? (
+                            <div className="mod-wordNone">None</div>
+                          ) : (
+                            <div className="mod-wordChips">
+                              {g.list.map((w) => (
+                                <span key={w.id} className="mod-wordChip" style={{ color: g.color, background: g.bg, borderColor: g.border }}>
+                                  {w.word}
+                                  <button type="button" onClick={() => removeWord(w)} title="Remove" aria-label={`Remove ${w.word}`}>✕</button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       ))}
-                    </div>
+                    </>
                   )}
-                  <p style={{ marginTop: "14px", fontSize: "12.5px", color: "#6b7280" }}>
-                    <strong>Block</strong> rejects the submission outright; <strong>Flag</strong> stores it for review here.
-                    Legit criticism never matches these rules — the AI tier is instructed to allow professional negative feedback.
-                  </p>
                 </div>
               </div>
             )}
           </>
         )}
       </section>
+
+      {/* Resolve note modal */}
+      {resolveTarget && (
+        <div className="ad-modal">
+          <div className="ad-modalOverlay" onClick={() => setResolveTarget(null)} />
+          <div className="ad-modalContent" style={{ maxWidth: "480px" }}>
+            <div className="ad-modalHeader">
+              <h3 className="ad-modalTitle" style={{ fontSize: "16px" }}>Resolve Priority Case</h3>
+              <button className="ad-modalClose" onClick={() => setResolveTarget(null)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+            <div className="ad-modalBody">
+              <label className="ad-label" style={{ fontSize: "12.5px" }}>Resolution note (optional)</label>
+              <textarea
+                className="mod-textarea"
+                rows={4}
+                value={resolveNote}
+                onChange={(e) => setResolveNote(e.target.value)}
+                placeholder="Describe how this concern was handled..."
+              />
+            </div>
+            <div className="ad-modalFooter">
+              <button className="ad-btnSecondary" onClick={() => setResolveTarget(null)}>Cancel</button>
+              <button className="ad-btnPrimary" onClick={submitResolve} disabled={busyId === resolveTarget.id}>Mark Resolved</button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }

@@ -100,21 +100,43 @@ function isFieldMatch(kind: "dept" | "year" | "section", a: unknown, b: unknown)
 // Tier 1: wordlist. Whole-word, case-insensitive substring match
 // against blocked_words. 'block' beats 'flag'.
 // ------------------------------------------------------------
+// Strip accents, undo common character swaps (g@go -> gago) and
+// collapse stretched letters (gagooo -> gago) so spelling tricks in
+// any language (incl. Tagalog/Bisaya) still match the wordlist.
+function foldForMatch(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/@/g, "a")
+    .replace(/\$/g, "s")
+    .replace(/0/g, "o")
+    .replace(/1/g, "i")
+    .replace(/3/g, "e")
+    .replace(/(\p{L})\1{2,}/gu, "$1")
+    .replace(/(\p{L})\1+(?=[^\p{L}]|$)/gu, "$1");
+}
+
 function wordlistVerdict(
   text: string,
   words: { word: string; severity: string }[],
 ): { status: "allow" | "flag" | "block"; labels: string[] } {
   const lower = text.toLowerCase();
+  const folded = foldForMatch(text);
   const labels: string[] = [];
   let status: "allow" | "flag" | "block" = "allow";
   for (const { word, severity } of words) {
     const w = word.toLowerCase().trim();
     if (!w) continue;
-    const pattern = new RegExp(
-      `(^|[^a-z])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z]|$)`,
-      "i",
-    );
-    if (pattern.test(lower)) {
+    const escape = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Unicode-aware boundaries: a neighbouring letter/digit in ANY
+    // script (incl. accented letters) means it is not a whole word.
+    const rawPattern = new RegExp(`(^|[^\\p{L}\\p{N}])${escape(w)}([^\\p{L}\\p{N}]|$)`, "iu");
+    const wf = foldForMatch(w);
+    const foldedPattern = wf
+      ? new RegExp(`(^|[^\\p{L}\\p{N}])${escape(wf)}([^\\p{L}\\p{N}]|$)`, "iu")
+      : null;
+    if (rawPattern.test(lower) || (foldedPattern && foldedPattern.test(folded))) {
       labels.push(`${severity}:${w}`);
       if (severity === "block") status = "block";
       else if (status === "allow") status = "flag";
@@ -163,16 +185,18 @@ async function aiClassify(text: string): Promise<AiVerdict | null> {
     );
   }
   if (candidates.length === 0) return null; // not configured -> wordlist-only
-  const prompt = `You are a content moderator for university teacher evaluations.
+  const prompt = `You are a content moderator for university teacher evaluations in the Philippines.
 Decide if this student comment is acceptable to show to the teacher.
 
+The comment may be written in English, Tagalog/Filipino, Bisaya/Cebuano, or a mix (Taglish, Bislish). Judge the MEANING in whatever language is used, including slang, abbreviations and disguised spellings (e.g. "g@go", "tangina", "yawa", "pisti", "atay", "buang" used as an insult).
+
 Rules:
-- "allow": any professional criticism, complaint, or negative feedback about teaching. This MUST be allowed.
-- "flag": borderline rudeness, sarcasm, mild insults, personal remarks that are not profanity.
-- "block": genuine profanity, slurs, sexual content, threats, or harassment.
+- "allow": any professional criticism, complaint, or negative feedback about teaching, in any of those languages (e.g. "mahirap intindihin ang lesson", "dili klaro mo-explain"). This MUST be allowed.
+- "flag": borderline rudeness, sarcasm, mild insults, personal remarks that are not profanity (e.g. "bobo magturo", "walay pulos" aimed at the person).
+- "block": genuine profanity, slurs, sexual content, threats, or harassment in any language (e.g. "putangina", "gago", "yawa ka", "patayin kita").
 
 Reply ONLY with compact JSON:
-{"status":"allow|flag|block","severity":"low|medium|high","labels":["<short label>", ...]}
+{"status":"allow|flag|block","severity":"low|medium|high","labels":["<short label in English>", ...]}
 
 Comment:
 """

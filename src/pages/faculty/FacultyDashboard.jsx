@@ -4,13 +4,31 @@ import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import FacultyLayout from "./FacultyLayout";
 import { fetchFacultyReleaseStatus } from "../../utils/releaseStatus";
-import { pickActivePeriod } from "../../utils/periodStatus";
+import {
+  pickActivePeriod,
+  isPeriodActive,
+  periodNotStarted,
+  periodEndPassed,
+} from "../../utils/periodStatus";
+import {
+  Calendar,
+  Award,
+  MessageSquare,
+  BookOpen,
+  TrendingUp,
+  ShieldCheck,
+  ChevronRight,
+  Clock,
+  CheckCircle2,
+  GraduationCap,
+} from "lucide-react";
 
 export default function FacultyDashboard() {
   const [overallRating, setOverallRating] = useState(null);
   const [totalResponses, setTotalResponses] = useState(null);
   const [activeYear, setActiveYear] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [assignedClasses, setAssignedClasses] = useState([]);
   // Phase 5: release gating [D2]
   const [releaseStatus, setReleaseStatus] = useState([]);
   const navigate = useNavigate();
@@ -24,31 +42,43 @@ export default function FacultyDashboard() {
     // Phase 5: the view is now release-aware, so everything it
     // returns belongs to released periods by definition.
     Promise.all([
-      supabase.from('faculty_evaluations_anon').select('*'),
-      supabase.from('academic_years').select('*, departments(name)'),
+      supabase.from("faculty_evaluations_anon").select("*"),
+      supabase.from("academic_years").select("*, departments(name)"),
       fetchFacultyReleaseStatus().catch(() => []),
+      supabase.from("class_assignments").select("*"),
+      supabase.from("questions").select("*"),
+      supabase.from("criteria").select("*"),
     ])
-      .then(([evalRes, yearRes, statusRows]) => {
-        const evals = evalRes.data || [];
+      .then(([evalRes, yearRes, statusRows, classRes, questRes, critRes]) => {
+        const rawEvals = evalRes.data || [];
         const years = yearRes.data || [];
         const statuses = statusRows || [];
+        const classes = classRes.data || [];
+        const rawQuestions = questRes.data || [];
+        const criteria = critRes.data || [];
+
+        const questions = rawQuestions.map((q) => ({
+          ...q,
+          criteriaId: q.criteria_id,
+        }));
+
+        setAssignedClasses(classes);
 
         // Exclude data from deleted academic periods
         const existingPeriodKeys = new Set(
           years.map((y) => `${y.year}__${y.semester}`)
         );
 
-        setReleaseStatus(statuses.filter((s) => existingPeriodKeys.has(`${s.academic_year}__${s.semester}`)));
-
-        // Only count evaluations for periods currently existing in academic_years!
-        const validEvals = evals.filter((e) =>
-          existingPeriodKeys.has(`${e.academic_year}__${e.semester}`)
+        const filteredStatuses = statuses.filter((s) =>
+          existingPeriodKeys.has(`${s.academic_year}__${s.semester}`)
         );
+        setReleaseStatus(filteredStatuses);
 
-        const allScores = validEvals
-          .flatMap(e => Object.values(e.ratings || {}).map(Number));
-        setOverallRating(allScores.length ? allScores.reduce((a, b) => a + b, 0) / allScores.length : null);
-        setTotalResponses(validEvals.length);
+        const releasedKeys = new Set(
+          filteredStatuses
+            .filter((s) => s.released)
+            .map((s) => `${s.academic_year}__${s.semester}`)
+        );
 
         const active = pickActivePeriod(years, userProfile?.department);
         if (active) {
@@ -60,32 +90,130 @@ export default function FacultyDashboard() {
         } else {
           setActiveYear(null);
         }
+
+        // Target the active period if picked, else fallback to latest period
+        const targetYear = active?.year;
+        const targetSemester = active?.semester;
+        const targetKey = targetYear && targetSemester ? `${targetYear}__${targetSemester}` : null;
+        const isTargetReleased = targetKey ? releasedKeys.has(targetKey) : false;
+
+        const evals = rawEvals.map((e) => ({
+          ...e,
+          academicYear: e.academic_year,
+        }));
+
+        const periodEvals = evals.filter((e) => {
+          if (targetYear && targetSemester) {
+            return e.academicYear === targetYear && e.semester === targetSemester;
+          }
+          return existingPeriodKeys.has(`${e.academicYear}__${e.semester}`);
+        });
+
+        setTotalResponses(periodEvals.length);
+
+        // Calculate institutional category-weighted rating matching FacultyEvalResult
+        if (periodEvals.length > 0 && isTargetReleased) {
+          const qScores = {};
+          periodEvals.forEach((ev) => {
+            Object.entries(ev.ratings || {}).forEach(([qId, score]) => {
+              if (!qScores[qId]) qScores[qId] = [];
+              qScores[qId].push(Number(score));
+            });
+          });
+
+          const activeOrHistoricalCriteria = criteria.filter((c) => {
+            const hasRatingsInPeriod = questions.some(
+              (q) => q.criteriaId === c.id && qScores[q.id]?.length > 0
+            );
+            return hasRatingsInPeriod || c.enabled;
+          });
+
+          const categories = activeOrHistoricalCriteria
+            .map((c) => {
+              const cQuestions = questions.filter((q) => {
+                if (q.criteriaId !== c.id) return false;
+                if (periodEvals.length > 0) {
+                  return qScores[q.id] && qScores[q.id].length > 0;
+                }
+                return q.is_active !== false;
+              });
+              const items = cQuestions.map((q) => {
+                const scores = qScores[q.id] || [];
+                return {
+                  rating: scores.length
+                    ? scores.reduce((a, b) => a + b, 0) / scores.length
+                    : 0,
+                };
+              });
+              return {
+                id: c.id,
+                rating: items.length
+                  ? items.reduce((a, b) => a + b.rating, 0) / items.length
+                  : 0,
+                items,
+              };
+            })
+            .filter((c) => c.items.length > 0);
+
+          const finalOverall = categories.length
+            ? categories.reduce((a, b) => a + b.rating, 0) / categories.length
+            : null;
+
+          setOverallRating(finalOverall);
+        } else if (!isTargetReleased) {
+          setOverallRating(null);
+        } else {
+          setOverallRating(null);
+        }
       })
-      .catch(err => console.error(err))
+      .catch((err) => console.error("Faculty dashboard fetch error:", err))
       .finally(() => setLoading(false));
-  }, [currentUser]);
+  }, [currentUser, userProfile?.department]);
 
   const displayName = userProfile?.fullName || "Faculty";
   const firstName = displayName.split(" ")[0];
 
   const now = new Date();
   const hour = now.getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-
-
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
   // Phase 5: status of the ACTIVE period for banner + card.
   const activeStatus = activeYear
     ? releaseStatus.find(
-        (r) => r.academic_year === activeYear.year && r.semester === activeYear.semester,
+        (r) =>
+          r.academic_year === activeYear.year &&
+          r.semester === activeYear.semester
       )
     : null;
-  // Evaluations exist in the base table even when the period is not
-  // yet released — surface the true participation signal via the
-  // status view rather than counting released rows only.
-  const activeHasEvaluations = activeStatus ? activeStatus.has_evaluations : overallRating !== null;
   const activeReleased = activeStatus ? activeStatus.released : false;
 
+  // Active period timeline checks (consistent with Student & Admin dashboards)
+  const isPeriodEnded = activeYear ? periodEndPassed(activeYear, now) : false;
+  const isPeriodScheduled = activeYear
+    ? periodNotStarted(activeYear, now)
+    : false;
+  const isEvaluationOpen =
+    !loading && activeYear !== null && isPeriodActive(activeYear, now);
+
+  // Filter assigned classes for the active period
+  const normSem = (s) =>
+    String(s || "")
+      .toLowerCase()
+      
+      .replace(/[^a-z0-9]/g, "");
+  const periodClasses = activeYear
+    ? assignedClasses.filter((c) => {
+        const matchY =
+          !c.academic_year ||
+          String(c.academic_year).trim() === String(activeYear.year).trim();
+        const matchS =
+          !c.semester || normSem(c.semester) === normSem(activeYear.semester);
+        return matchY && matchS;
+      })
+    : assignedClasses;
+  const activeClasses =
+    periodClasses.length > 0 ? periodClasses : assignedClasses;
 
   // Phase 6 [D6]: neutral escalation notice — booleans only, from
   // the SECURITY DEFINER RPC. Never any comment content.
@@ -93,12 +221,14 @@ export default function FacultyDashboard() {
   useEffect(() => {
     if (!activeYear) return;
     let cancelled = false;
-    supabase.rpc("get_faculty_escalation_status", {
-      p_year: activeYear.year,
-      p_semester: activeYear.semester,
-    })
+    supabase
+      .rpc("get_faculty_escalation_status", {
+        p_year: activeYear.year,
+        p_semester: activeYear.semester,
+      })
       .then(({ data }) => {
-        if (!cancelled) setEscalation(Array.isArray(data) && data.length > 0 ? data[0] : null);
+        if (!cancelled)
+          setEscalation(Array.isArray(data) && data.length > 0 ? data[0] : null);
       })
       .catch(() => {
         if (!cancelled) setEscalation(null);
@@ -120,26 +250,64 @@ export default function FacultyDashboard() {
   return (
     <FacultyLayout breadcrumb="Dashboard">
       <section className="fd-content">
-        {/* Modern Integrated Executive Header */}
+        {/* Modern Integrated Executive Header (Uniform with Admin & Student) */}
         <div className="fd-welcomeHeader">
           <div className="fd-welcomeText">
-            <span className="fd-welcomeBadge">Faculty Portal</span>
-            <h2 className="fd-title">{greeting}, {firstName}!</h2>
-            <p className="fd-subtitle">Overview of your teaching evaluation results and academic performance</p>
+            <span className="fd-welcomeRolePill">
+              <GraduationCap size={13} />
+              {userProfile?.department
+                ? `${userProfile.department} • Faculty Member`
+                : "College Faculty"}
+            </span>
+            <h2 className="fd-title">
+              {greeting}, <span className="fd-titleHighlight">{displayName}</span>!
+            </h2>
+            <p className="fd-subtitle">
+              Overview of your teaching evaluation results and academic performance
+            </p>
           </div>
+
+          {/* Period Card matching Admin & Student header card */}
           <div className="fd-periodCard">
-            <div className="fd-periodHeader">
-              <span className={`fd-periodDot ${!activeReleased ? "fd-periodDot--pending" : ""}`} />
-              <span className="fd-periodLabel">Active Evaluation Period</span>
+            <div className="fd-periodCardIcon">
+              <Calendar size={22} />
             </div>
-            <div className="fd-periodTitle">
-              {activeYear ? `${activeYear.year} • ${activeYear.semester}` : "No Active Period"}
-            </div>
-            {activeYear && (
-              <div className="fd-periodMeta">
-                {activeReleased ? "✓ Results Released" : "⏳ Pending Admin Release"}
+            <div className="fd-periodCardInfo">
+              <span className="fd-periodCardLabel">Current Academic Period</span>
+              <div className="fd-periodCardTitle">
+                {activeYear
+                  ? `${activeYear.year} • ${activeYear.semester}`
+                  : "No Active Period"}
               </div>
-            )}
+              <div className="fd-periodCardStatus">
+                Evaluation Status:{" "}
+                {activeYear ? (
+                  <span
+                    className={`fd-statusBadge ${
+                      activeReleased
+                        ? "fd-statusBadge--released"
+                        : isEvaluationOpen
+                        ? "fd-statusBadge--open"
+                        : isPeriodScheduled
+                        ? "fd-statusBadge--scheduled"
+                        : "fd-statusBadge--pending"
+                    }`}
+                  >
+                    {activeReleased
+                      ? "Results Released"
+                      : isEvaluationOpen
+                      ? "Evaluation Open"
+                      : isPeriodScheduled
+                      ? "Scheduled"
+                      : "Pending Release"}
+                  </span>
+                ) : (
+                  <span className="fd-statusBadge fd-statusBadge--closed">
+                    Closed
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -147,9 +315,7 @@ export default function FacultyDashboard() {
         {escalation?.has_escalation && (
           <div className="fd-alertBanner fd-alertBanner--escalation">
             <div className="fd-alertBannerIcon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
+              <ShieldCheck size={20} color="#475569" />
             </div>
             <div>
               <strong style={{ color: "#1e293b" }}>Evaluation Notice: </strong>
@@ -164,122 +330,327 @@ export default function FacultyDashboard() {
         {activeYear && !activeReleased && (
           <div className="fd-alertBanner fd-alertBanner--warning">
             <div className="fd-alertBannerIcon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
+              <Clock size={20} color="#d97706" />
             </div>
             <div>
-              <strong style={{ color: "#78350f" }}>Results Pending Release: </strong>
-              Evaluation results for <strong>{activeYear.year} {activeYear.semester}</strong> are currently finalized in the system. They will automatically unlock and display here once approved and published by the administration.
+              <strong style={{ color: "#78350f" }}>
+                Pending Administrative Release:{" "}
+              </strong>
+              Student evaluations for the current period have closed. Numerical
+              ratings and qualitative summaries will unlock immediately upon
+              Dean / VPAA publication approval.
             </div>
           </div>
         )}
 
-        {/* 3-Card Executive Stats Grid */}
+        {/* 4-Card Executive Stats Grid */}
         <div className="fd-statsGrid">
-          {/* Card 1: Overall Rating */}
-          <div className="fd-statCard">
+          {/* Card 1: Overall Rating (Blue) */}
+          <div className="fd-statCard fd-statCard--rating">
             <div className="fd-statCard--header">
-              <div className="fd-statLabel">OVERALL RATING</div>
+              <span className="fd-statLabel">Overall Rating</span>
               <div className="fd-statIcon fd-statIcon--rating">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                </svg>
+                <Award size={19} />
               </div>
             </div>
-            <div className="fd-statNum">
-              {loading ? "—" : activeReleased ? (overallRating !== null ? overallRating.toFixed(1) : "N/A") : "Pending"}
-              {activeReleased && overallRating !== null && (
-                <span style={{ fontSize: "16px", color: "#94a3b8", fontWeight: 600, marginLeft: "4px" }}>/ 5.0</span>
-              )}
+            <div className="fd-statMainRow">
+              <div className="fd-statNum">
+                {loading
+                  ? "—"
+                  : activeReleased
+                  ? overallRating !== null
+                    ? overallRating.toFixed(1)
+                    : "N/A"
+                  : "Pending"}
+                {activeReleased && overallRating !== null && (
+                  <span className="fd-statScale">/ 5.0</span>
+                )}
+              </div>
             </div>
             <div className="fd-statTitle">
               {loading
                 ? "Calculating ratings..."
                 : activeReleased && overallRating !== null
-                  ? `${getPerformanceLabel(overallRating)} performance standing`
-                  : "Awaiting admin release approval"}
+                ? "Institutional performance standing"
+                : "Awaiting administrative publication"}
             </div>
           </div>
 
-          {/* Card 2: Student Responses */}
-          <div className="fd-statCard">
+          {/* Card 2: Student Forms (Green) */}
+          <div className="fd-statCard fd-statCard--responses">
             <div className="fd-statCard--header">
-              <div className="fd-statLabel">STUDENT RESPONSES</div>
+              <span className="fd-statLabel">Student Evaluations</span>
               <div className="fd-statIcon fd-statIcon--responses">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                </svg>
+                <MessageSquare size={19} />
               </div>
             </div>
-            <div className="fd-statNum">{loading ? "—" : totalResponses ?? 0}</div>
-            <div className="fd-statTitle">Total evaluation forms submitted</div>
+            <div className="fd-statMainRow">
+              <div className="fd-statNum">
+                {loading ? "—" : totalResponses ?? 0}
+              </div>
+            </div>
+            <div className="fd-statTitle">
+              {loading
+                ? "Loading forms..."
+                : "Total student submissions recorded"}
+            </div>
           </div>
 
-          {/* Card 3: Release Status */}
-          <div className="fd-statCard">
+          {/* Card 3: Teaching Load (Orange) */}
+          <div className="fd-statCard fd-statCard--load">
             <div className="fd-statCard--header">
-              <div className="fd-statLabel">PERIOD STATUS</div>
-              <div className="fd-statIcon fd-statIcon--period">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                  <polyline points="22 4 12 14.01 9 11.01" />
-                </svg>
+              <span className="fd-statLabel">Teaching Load</span>
+              <div className="fd-statIcon fd-statIcon--load">
+                <BookOpen size={19} />
               </div>
             </div>
-            <div className="fd-statNum" style={{ fontSize: "24px", paddingTop: "6px", paddingBottom: "6px" }}>
-              {loading ? "—" : activeReleased ? "Published" : "Pending"}
+            <div className="fd-statMainRow">
+              <div className="fd-statNum">
+                {loading ? "—" : activeClasses.length}
+              </div>
+            </div>
+            <div className="fd-statTitle">
+              {loading
+                ? "Loading classes..."
+                : "Class sections assigned this cycle"}
+            </div>
+          </div>
+
+          {/* Card 4: Cycle Status (Purple) */}
+          <div className="fd-statCard fd-statCard--period">
+            <div className="fd-statCard--header">
+              <span className="fd-statLabel">Cycle Status</span>
+              <div className="fd-statIcon fd-statIcon--period">
+                <TrendingUp size={19} />
+              </div>
+            </div>
+            <div className="fd-statMainRow">
+              <div className="fd-statNum fd-statNum--status">
+                {loading
+                  ? "—"
+                  : activeReleased
+                  ? "Published"
+                  : "Pending"}
+              </div>
             </div>
             <div className="fd-statTitle">
               {activeReleased
-                ? "Results are live and visible to faculty"
-                : "Awaiting admin release publication"}
+                ? "Results live & visible to faculty"
+                : "Evaluation awaiting release approval"}
             </div>
           </div>
         </div>
 
-        {/* Modern Active Period Overview Card */}
-        <div className="fd-overviewCard">
-          <div className="fd-overviewHeader">
-            <h3 className="fd-overviewTitle">Current Evaluation Overview</h3>
-            <span className="fd-criteriaPillMain" style={{ background: activeReleased ? "#dcfce7" : "#fef3c7", color: activeReleased ? "#15803d" : "#b45309" }}>
-              {activeReleased ? "✓ Published" : "⏳ Pending Release"}
-            </span>
-          </div>
-
-          <div className="fd-overviewGrid">
-            {/* Faculty Info */}
-            <div className="fd-overviewUserCell">
-              <div className="fd-overviewAvatar">
-                {(displayName || "FC").substring(0, 2).toUpperCase()}
+        {/* Two-Tier Balanced Dashboard Layout */}
+        <div className="fd-dashboardGrid">
+          {/* Top Row: Current Evaluation Overview (Left) & Academic Period Details (Right) */}
+          <div className="fd-overviewRow">
+            {/* 1. Current Evaluation Overview Card */}
+            <div className="fd-card fd-overviewProfileCard">
+              <div className="fd-cardHeader">
+                <h3 className="fd-cardTitle">Current Evaluation Overview</h3>
+                <span className="fd-verifiedLoadBadge">
+                  <CheckCircle2 size={13} />
+                  Verified Teaching Load
+                </span>
               </div>
-              <div>
-                <div className="fd-overviewName">{displayName}</div>
-                <div className="fd-overviewRole">{userProfile?.department ? `${userProfile.department} Department` : "Faculty Member"}</div>
+
+              <div className="fd-profileOverviewBody">
+                <div className="fd-overviewUserCell">
+                  <div className="fd-overviewAvatar">
+                    {(displayName || "FC").substring(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="fd-overviewName">{displayName}</div>
+                    <div className="fd-overviewRole">
+                      {userProfile?.department
+                        ? `${userProfile.department} • Full-Time Faculty`
+                        : "College Faculty Member"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="fd-overviewMiniGrid">
+                  <div className="fd-overviewMiniCard">
+                    <div className="fd-miniCardIcon fd-miniCardIcon--blue">
+                      <BookOpen size={16} />
+                    </div>
+                    <div>
+                      <span className="fd-miniCardLabel">Instructional Load</span>
+                      <span className="fd-miniCardValue">
+                        {loading
+                          ? "—"
+                          : `${activeClasses.length} Active ${
+                              activeClasses.length === 1 ? "Section" : "Sections"
+                            }`}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="fd-overviewMiniCard">
+                    <div className="fd-miniCardIcon fd-miniCardIcon--purple">
+                      <GraduationCap size={16} />
+                    </div>
+                    <div>
+                      <span className="fd-miniCardLabel">Department</span>
+                      <span className="fd-miniCardValue">
+                        {userProfile?.department || "General Faculty"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="fd-overviewBtn fd-overviewBtn--full"
+                  onClick={() => navigate("/faculty/evaluations")}
+                >
+                  <span>View Full Evaluation Breakdown</span>
+                  <ChevronRight size={16} />
+                </button>
               </div>
             </div>
 
-            {/* Academic Period */}
-            <div className="fd-overviewMetaBlock">
-              <span className="fd-overviewMetaLabel">Evaluation Cycle</span>
-              <span className="fd-overviewMetaValue">
-                {activeYear ? `${activeYear.year} • ${activeYear.semester}` : "—"}
+            {/* 2. Academic Period Details Card */}
+            <div className="fd-card fd-periodDetailsCard">
+              <div className="fd-cardHeader">
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  }}
+                >
+                  <Calendar size={18} className="fd-cardHeaderIcon" />
+                  <h3 className="fd-cardTitle">Academic Period Details</h3>
+                </div>
+                {activeYear && (
+                  <span className="fd-termPill">
+                    {activeYear.year}
+                  </span>
+                )}
+              </div>
+
+              <div className="fd-periodRows">
+                <div className="fd-periodRow">
+                  <div className="fd-periodRowLeft">
+                    <span className="fd-rowDot fd-rowDot--blue"></span>
+                    <span className="fd-periodRowLabel">Current Semester</span>
+                  </div>
+                  <span className="fd-periodRowValue">
+                    {activeYear ? activeYear.semester : "—"}
+                  </span>
+                </div>
+                <div className="fd-periodRow">
+                  <div className="fd-periodRowLeft">
+                    <span className="fd-rowDot fd-rowDot--indigo"></span>
+                    <span className="fd-periodRowLabel">Academic Year</span>
+                  </div>
+                  <span className="fd-periodRowValue">
+                    {activeYear ? activeYear.year : "—"}
+                  </span>
+                </div>
+                <div className="fd-periodRow">
+                  <div className="fd-periodRowLeft">
+                    <span className="fd-rowDot fd-rowDot--green"></span>
+                    <span className="fd-periodRowLabel">Results Release</span>
+                  </div>
+                  <span
+                    className={`fd-statusBadgeSmall ${
+                      activeReleased
+                        ? "fd-statusBadgeSmall--released"
+                        : "fd-statusBadgeSmall--pending"
+                    }`}
+                  >
+                    {activeReleased ? "✓ Published" : "⏳ Pending Release"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Full-Width Table: Assigned Teaching Sections */}
+          <div className="fd-card fd-tableSectionCard">
+            <div className="fd-cardHeader">
+              <div>
+                <h3 className="fd-cardTitle">Assigned Class Sections</h3>
+                <p className="fd-cardSubtitle">
+                  Classes under your instructional load for{" "}
+                  {activeYear
+                    ? `${activeYear.year} • ${activeYear.semester}`
+                    : "this academic period"}
+                  .
+                </p>
+              </div>
+              <span className="fd-countBadge">
+                {loading
+                  ? "Loading..."
+                  : `${activeClasses.length} ${
+                      activeClasses.length === 1 ? "Section" : "Sections"
+                    }`}
               </span>
             </div>
 
-            {/* CTA Action */}
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button
-                type="button"
-                className="fd-overviewBtn"
-                onClick={() => navigate("/faculty/evaluations")}
-              >
-                <span>View Full Results</span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-                </svg>
-              </button>
+            <div className="fd-tableWrap">
+              <table className="fd-table">
+                <thead>
+                  <tr>
+                    <th>Subject Code</th>
+                    <th>Subject Description</th>
+                    <th>Section</th>
+                    <th>Year Level</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td
+                        colSpan="4"
+                        style={{
+                          textAlign: "center",
+                          padding: "24px",
+                          color: "#64748b",
+                        }}
+                      >
+                        Loading class sections...
+                      </td>
+                    </tr>
+                  ) : activeClasses.length > 0 ? (
+                    activeClasses.map((cls, idx) => (
+                      <tr key={cls.id || idx}>
+                        <td>
+                          <span className="fd-codePill">
+                            {cls.subject_code || "N/A"}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 600 }}>
+                          {cls.subject_name || "—"}
+                        </td>
+                        <td>
+                          <span className="fd-sectionBadge">
+                            {cls.section || "—"}
+                          </span>
+                        </td>
+                        <td style={{ color: "#64748b" }}>
+                          {cls.year_level || "—"}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan="4"
+                        style={{
+                          textAlign: "center",
+                          padding: "28px 16px",
+                          color: "#64748b",
+                        }}
+                      >
+                        No class assignments registered for this period.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

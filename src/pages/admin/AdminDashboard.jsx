@@ -23,30 +23,222 @@ function timeAgo(dateStr) {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function formatAuditAction(a) {
-  if (!a) return "";
-  if (a.details?.summary) return a.details.summary;
-  if (a.details?.message) return a.details.message;
+function formatAuditSentence(actorName, a) {
+  const d = a?.details || {};
+  if (d.summary) return d.summary;
+  if (d.message) return d.message;
 
-  const rawAction = String(a.action || "").trim();
-  const entity = a.entity ? String(a.entity) : "";
-  const actionLower = rawAction.toLowerCase();
+  const rawAction = String(a?.action || "").toLowerCase().trim();
+  const entity = String(a?.entity || "").toLowerCase().trim();
+  const actor = String(actorName || "Admin")
+    .replace(/\bSuperAdmin\b/gi, "Super Admin")
+    .trim();
 
-  if (actionLower === "approve_user" || actionLower === "approved") {
-    return `approved ${a.details?.count ? `${a.details.count} ` : ""}${entity || "user"} account${a.details?.count > 1 ? "s" : ""}`;
-  }
-  if (actionLower === "reject_user" || actionLower === "rejected") {
-    return `rejected ${entity || "user"} account`;
-  }
-  if (actionLower === "assign_program" || actionLower === "program_assignment") {
-    return `assigned ${a.details?.department || a.details?.department_name || entity || "program"}${a.details?.admin_name ? ` to ${a.details.admin_name}` : ""}`;
-  }
-  if (actionLower === "release_results" || actionLower === "released") {
-    return `released evaluation results${a.details?.department ? ` for ${a.details.department}` : ""}`;
+  // 1. Report export (e.g. report.export on evaluations)
+  if (rawAction.includes("export") || rawAction.includes("report")) {
+    const dept = d.department || d.department_name || d.name || "";
+    return `${actor} exported evaluation report${dept ? ` for ${dept}` : ""}`;
   }
 
-  const formatted = rawAction.replace(/_/g, " ");
-  return entity ? `${formatted} on ${entity}` : formatted;
+  // 2. Account approved
+  if (rawAction.includes("approve") || rawAction === "account.approve") {
+    const target = d.user_name || d.name || d.full_name || d.target_user || (d.count ? `${d.count} user accounts` : "user account");
+    return `${actor} approved ${target}`;
+  }
+
+  // 3. Account rejected
+  if (rawAction.includes("reject") || rawAction === "account.reject") {
+    const target = d.user_name || d.name || d.full_name || d.target_user || "user account";
+    return `${actor} rejected ${target}`;
+  }
+
+  // 4. Program assigned / Admin created
+  if (
+    rawAction.includes("program_assignment") ||
+    rawAction.includes("assign_program") ||
+    rawAction === "program_assignments.save" ||
+    rawAction.startsWith("admin.")
+  ) {
+    const prog = d.department || d.department_name || d.program || "program";
+    const toUser = d.admin_name || d.target_name || "";
+    return `${actor} assigned ${prog}${toUser ? ` to ${toUser}` : ""}`;
+  }
+
+  // 5. Results released
+  if (rawAction.includes("release") || rawAction === "release.save") {
+    const dept = d.department || d.target_department || "";
+    return `${actor} released evaluations${dept ? ` for ${dept}` : ""}`;
+  }
+
+  // 6. Academic period
+  if (
+    rawAction.includes("period") ||
+    rawAction.includes("academic") ||
+    entity.includes("academic_year")
+  ) {
+    const sem = d.period_name || (d.year && d.semester ? `${d.year} ${d.semester}` : "") || "academic period";
+    return `${actor} scheduled ${sem}`;
+  }
+
+  // 7. Moderation / Priority reviews
+  if (rawAction.includes("moderate") || rawAction.includes("priority")) {
+    return `${actor} reviewed evaluation comment`;
+  }
+
+  // 8. Blocked words
+  if (rawAction.includes("blocked_words")) {
+    return `${actor} ${rawAction.includes("add") ? "added word to" : "removed word from"} moderation filter`;
+  }
+
+  // 9. Subject correction requests
+  if (rawAction.includes("correction")) {
+    if (rawAction.includes("delete")) {
+      return `${actor} deleted subject correction request`;
+    }
+    if (d.status === "rejected") {
+      return `${actor} rejected subject correction request`;
+    }
+    if (d.status === "approved") {
+      return `${actor} approved subject correction request`;
+    }
+    return `${actor} resolved subject correction request`;
+  }
+
+  // 10. Enrollment overrides
+  if (rawAction.includes("enrollment")) {
+    return `${actor} updated student enrollment records`;
+  }
+
+  // 11. Generic clean natural sentence converter
+  const parts = rawAction.split(/[._]/).filter(Boolean);
+  if (parts.length === 2) {
+    const [noun, verb] = parts;
+    const pastVerb = verb.endsWith("e") ? `${verb}d` : `${verb}ed`;
+    return `${actor} ${pastVerb} ${noun}${entity ? ` for ${entity}` : ""}`;
+  }
+
+  const cleanAction = rawAction.replace(/[._]/g, " ");
+  return `${actor} performed ${cleanAction}${entity ? ` on ${entity}` : ""}`;
+}
+
+function getAuditMeta(a, actorMap = {}) {
+  const rawActor = (a?.actor_id && actorMap[a.actor_id]) ? actorMap[a.actor_id] : "Admin";
+  const actorName = String(rawActor).replace(/\bSuperAdmin\b/gi, "Super Admin").trim();
+  const rawAction = String(a?.action || "").toLowerCase().trim();
+  const entity = String(a?.entity || "").toLowerCase();
+  const d = a?.details || {};
+
+  // 1. Report Export
+  if (rawAction.includes("export") || rawAction.includes("report")) {
+    return {
+      title: "Report Exported",
+      dotColor: "#2563eb",
+      description: formatAuditSentence(actorName, a),
+    };
+  }
+
+  // 2. Account Approved
+  if (rawAction.includes("approve") || rawAction === "account.approve") {
+    return {
+      title: "Account Approved",
+      dotColor: "#16a34a",
+      description: formatAuditSentence(actorName, a),
+    };
+  }
+
+  // 3. Account Rejected
+  if (rawAction.includes("reject") || rawAction === "account.reject") {
+    return {
+      title: "Account Rejected",
+      dotColor: "#dc2626",
+      description: formatAuditSentence(actorName, a),
+    };
+  }
+
+  // 4. Program Head Assigned
+  if (
+    rawAction.includes("program_assignment") ||
+    rawAction.includes("assign_program") ||
+    rawAction === "program_assignments.save" ||
+    rawAction.startsWith("admin.")
+  ) {
+    return {
+      title: "Program Head Assigned",
+      dotColor: "#2563eb",
+      description: formatAuditSentence(actorName, a),
+    };
+  }
+
+  // 5. Results Released
+  if (rawAction.includes("release") || rawAction === "release.save") {
+    return {
+      title: "Results Released",
+      dotColor: "#9333ea",
+      description: formatAuditSentence(actorName, a),
+    };
+  }
+
+  // 6. Period Scheduled / Academic Year
+  if (
+    rawAction.includes("period") ||
+    rawAction.includes("academic") ||
+    entity.includes("academic_year")
+  ) {
+    return {
+      title: "Period Scheduled",
+      dotColor: "#ea580c",
+      description: formatAuditSentence(actorName, a),
+    };
+  }
+
+  // 7. Moderation / Priority Reviews
+  if (rawAction.includes("moderate") || rawAction.includes("priority")) {
+    return {
+      title: "Comment Moderated",
+      dotColor: "#9333ea",
+      description: formatAuditSentence(actorName, a),
+    };
+  }
+
+  // 8. Correction requests
+  if (rawAction.includes("correction")) {
+    if (rawAction.includes("delete")) {
+      return {
+        title: "Correction Deleted",
+        dotColor: "#e11d48", // rose / red
+        description: formatAuditSentence(actorName, a),
+      };
+    }
+    if (d.status === "rejected") {
+      return {
+        title: "Correction Rejected",
+        dotColor: "#dc2626",
+        description: formatAuditSentence(actorName, a),
+      };
+    }
+    if (d.status === "approved") {
+      return {
+        title: "Correction Approved",
+        dotColor: "#16a34a",
+        description: formatAuditSentence(actorName, a),
+      };
+    }
+    return {
+      title: "Correction Resolved",
+      dotColor: "#0284c7",
+      description: formatAuditSentence(actorName, a),
+    };
+  }
+
+  // Fallback
+  const cleanTitle = rawAction
+    .replace(/[._]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return {
+    title: cleanTitle || "Activity Logged",
+    dotColor: "#2563eb",
+    description: formatAuditSentence(actorName, a),
+  };
 }
 
 export default function AdminDashboard() {
@@ -86,6 +278,11 @@ export default function AdminDashboard() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "evaluation_releases" },
+        () => setRefreshKey((k) => k + 1)
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "audit_log" },
         () => setRefreshKey((k) => k + 1)
       )
       .subscribe();
@@ -357,10 +554,6 @@ export default function AdminDashboard() {
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
                       Program Assignments
                     </button>
-                    <button className="mockup-btn" onClick={() => navigate('/admin/release-management')}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
-                      Release Management
-                    </button>
                   </>
                 ) : (
                   <>
@@ -465,8 +658,8 @@ export default function AdminDashboard() {
 
           {/* Evaluation Overview (super only): real lifecycle states */}
           {isSuper && (
-            <div className="mockup-panel" style={{ marginBottom: '16px' }}>
-              <div className="mockup-panel-header" style={{ marginBottom: '12px' }}>
+            <div className="mockup-panel">
+              <div className="mockup-panel-header">
                 <div>
                   <h3 className="mockup-panel-title">Evaluation Overview</h3>
                   <p className="mockup-panel-subtitle">System-wide period and release states.</p>
@@ -508,70 +701,215 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* Attention Needed (super only) */}
+          {/* Split Row for Super Admin: Left = Attention Needed, Right = Live Activity Log */}
           {isSuper && (
-            <div className="mockup-panel" style={{ marginBottom: '16px' }}>
-              <div className="mockup-panel-header" style={{ marginBottom: '14px' }}>
-                <div>
-                  <h3 className="mockup-panel-title">Attention Needed</h3>
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
-                {/* Pending approvals */}
-                <div style={{
-                  background: attentionData.pendingApprovals > 0 ? "#fff7ed" : "#f0fdf4",
-                  border: `1px solid ${attentionData.pendingApprovals > 0 ? "#fed7aa" : "#bbf7d0"}`,
-                  borderRadius: "12px",
-                  padding: "16px 20px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
-                    <span style={{ fontSize: "20px", fontWeight: "800", color: attentionData.pendingApprovals > 0 ? "#c2410c" : "#15803d" }}>
-                      {attentionData.pendingApprovals}
-                    </span>
-                    <span style={{ fontWeight: "600", fontSize: "14px", color: attentionData.pendingApprovals > 0 ? "#9a3412" : "#166534" }}>
-                      Pending approvals
-                    </span>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+                gap: "16px",
+              }}
+            >
+              {/* Left Column: Attention Needed */}
+              <div className="mockup-panel" style={{ display: "flex", flexDirection: "column" }}>
+                <div className="mockup-panel-header">
+                  <div>
+                    <h3 className="mockup-panel-title">Attention Needed</h3>
+                    <p className="mockup-panel-subtitle">Items requiring administrative action.</p>
                   </div>
-                  {attentionData.pendingApprovals > 0 ? (
-                    <Link to="/admin/approvals" style={{ color: "#c2410c", fontWeight: "700", fontSize: "13px", textDecoration: "underline" }}>
-                      Review
-                    </Link>
-                  ) : (
-                    <span style={{ color: "#15803d", fontWeight: "600", fontSize: "13px" }}>
-                      All clear
-                    </span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px", flex: 1 }}>
+                  {/* Pending approvals */}
+                  <div
+                    style={{
+                      background: attentionData.pendingApprovals > 0 ? "#fff7ed" : "#f0fdf4",
+                      border: `1px solid ${attentionData.pendingApprovals > 0 ? "#fed7aa" : "#bbf7d0"}`,
+                      borderRadius: "10px",
+                      padding: "12px 16px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
+                      <span
+                        style={{
+                          fontSize: "19px",
+                          fontWeight: "800",
+                          color: attentionData.pendingApprovals > 0 ? "#c2410c" : "#15803d",
+                        }}
+                      >
+                        {attentionData.pendingApprovals}
+                      </span>
+                      <span
+                        style={{
+                          fontWeight: "600",
+                          fontSize: "13.5px",
+                          color: attentionData.pendingApprovals > 0 ? "#9a3412" : "#166534",
+                        }}
+                      >
+                        Pending approvals
+                      </span>
+                    </div>
+                    {attentionData.pendingApprovals > 0 ? (
+                      <Link
+                        to="/admin/approvals"
+                        style={{ color: "#c2410c", fontWeight: "700", fontSize: "13px", textDecoration: "underline" }}
+                      >
+                        Review
+                      </Link>
+                    ) : (
+                      <span style={{ color: "#15803d", fontWeight: "600", fontSize: "13px" }}>All clear</span>
+                    )}
+                  </div>
+
+                  {/* Programs with no admin */}
+                  <div
+                    style={{
+                      background: attentionData.uncoveredPrograms > 0 ? "#fff7ed" : "#f0fdf4",
+                      border: `1px solid ${attentionData.uncoveredPrograms > 0 ? "#fed7aa" : "#bbf7d0"}`,
+                      borderRadius: "10px",
+                      padding: "12px 16px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
+                      <span
+                        style={{
+                          fontSize: "19px",
+                          fontWeight: "800",
+                          color: attentionData.uncoveredPrograms > 0 ? "#c2410c" : "#15803d",
+                        }}
+                      >
+                        {attentionData.uncoveredPrograms}
+                      </span>
+                      <span
+                        style={{
+                          fontWeight: "600",
+                          fontSize: "13.5px",
+                          color: attentionData.uncoveredPrograms > 0 ? "#9a3412" : "#166534",
+                        }}
+                      >
+                        {attentionData.uncoveredPrograms === 1 ? "Program with no admin" : "Programs with no admin"}
+                      </span>
+                    </div>
+                    {attentionData.uncoveredPrograms > 0 ? (
+                      <Link
+                        to="/admin/program-assignments"
+                        style={{ color: "#c2410c", fontWeight: "700", fontSize: "13px", textDecoration: "underline" }}
+                      >
+                        Assign
+                      </Link>
+                    ) : (
+                      <span style={{ color: "#15803d", fontWeight: "600", fontSize: "13px" }}>All clear</span>
+                    )}
+                  </div>
+
+                  {/* Flagged comments (if any) */}
+                  {attentionData.flaggedComments > 0 && (
+                    <div
+                      style={{
+                        background: "#fef2f2",
+                        border: "1px solid #fecaca",
+                        borderRadius: "10px",
+                        padding: "12px 16px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
+                        <span style={{ fontSize: "19px", fontWeight: "800", color: "#b91c1c" }}>
+                          {attentionData.flaggedComments}
+                        </span>
+                        <span style={{ fontWeight: "600", fontSize: "13.5px", color: "#991b1b" }}>
+                          Flagged comments
+                        </span>
+                      </div>
+                      <Link
+                        to="/admin/moderation"
+                        style={{ color: "#b91c1c", fontWeight: "700", fontSize: "13px", textDecoration: "underline" }}
+                      >
+                        Moderate
+                      </Link>
+                    </div>
                   )}
                 </div>
+              </div>
 
-                {/* Programs with no admin */}
-                <div style={{
-                  background: attentionData.uncoveredPrograms > 0 ? "#fff7ed" : "#f0fdf4",
-                  border: `1px solid ${attentionData.uncoveredPrograms > 0 ? "#fed7aa" : "#bbf7d0"}`,
-                  borderRadius: "12px",
-                  padding: "16px 20px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
-                    <span style={{ fontSize: "20px", fontWeight: "800", color: attentionData.uncoveredPrograms > 0 ? "#c2410c" : "#15803d" }}>
-                      {attentionData.uncoveredPrograms}
-                    </span>
-                    <span style={{ fontWeight: "600", fontSize: "14px", color: attentionData.uncoveredPrograms > 0 ? "#9a3412" : "#166534" }}>
-                      {attentionData.uncoveredPrograms === 1 ? "Program with no admin" : "Programs with no admin"}
-                    </span>
+              {/* Right Column: Live Activity Log */}
+              <div className="mockup-panel" style={{ display: "flex", flexDirection: "column" }}>
+                <div
+                  className="mockup-panel-header"
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <div>
+                    <h3 className="mockup-panel-title" style={{ fontSize: "15px", fontWeight: "800", color: "#0f172a", margin: 0 }}>
+                      Live Activity Log
+                    </h3>
                   </div>
-                  {attentionData.uncoveredPrograms > 0 ? (
-                    <Link to="/admin/program-assignments" style={{ color: "#c2410c", fontWeight: "700", fontSize: "13px", textDecoration: "underline" }}>
-                      Assign
-                    </Link>
+                  <Link
+                    to="/admin/monitor"
+                    className="mockup-panel-action"
+                    style={{ color: "#2563eb", fontWeight: "700", fontSize: "12.5px", textDecoration: "none" }}
+                  >
+                    View All →
+                  </Link>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1 }}>
+                  {loading ? (
+                    <div style={{ textAlign: "center", color: "#64748b", padding: "24px 0", fontSize: "13px" }}>
+                      Loading live activity...
+                    </div>
+                  ) : sysActivity.length === 0 ? (
+                    <div style={{ textAlign: "center", color: "#94a3b8", padding: "24px 0", fontSize: "13px" }}>
+                      No activity recorded yet
+                    </div>
                   ) : (
-                    <span style={{ color: "#15803d", fontWeight: "600", fontSize: "13px" }}>
-                      All clear
-                    </span>
+                    sysActivity.slice(0, 5).map((a) => {
+                      const meta = getAuditMeta(a, actorMap);
+                      return (
+                        <div key={a.id} style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span
+                                style={{
+                                  width: "8px",
+                                  height: "8px",
+                                  borderRadius: "50%",
+                                  backgroundColor: meta.dotColor,
+                                  display: "inline-block",
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <span style={{ fontWeight: "700", fontSize: "13.5px", color: "#0f172a" }}>
+                                {meta.title}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: "12px", color: "#64748b", whiteSpace: "nowrap" }}>
+                              {timeAgo(a.created_at)}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "12.5px",
+                              color: "#64748b",
+                              paddingLeft: "16px",
+                              lineHeight: "1.3",
+                            }}
+                          >
+                            {meta.description}
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -704,52 +1042,6 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* Recent Activity (super only): latest audit trail */}
-          {isSuper && (
-            <div className="mockup-panel" style={{ marginTop: '20px' }}>
-              <div className="mockup-panel-header" style={{ marginBottom: '16px' }}>
-                <div>
-                  <h3 className="mockup-panel-title">Recent Activity</h3>
-                  <p className="mockup-panel-subtitle">Latest actions across all programs.</p>
-                </div>
-                <Link to="/admin/monitor" className="mockup-panel-action">View all</Link>
-              </div>
-              <div>
-                {loading ? (
-                  <div style={{ textAlign: 'center', color: '#6b7280', padding: '20px' }}>Loading...</div>
-                ) : sysActivity.length === 0 ? (
-                  <div style={{ textAlign: 'center', color: '#6b7280', padding: '20px' }}>No activity yet</div>
-                ) : (
-                  sysActivity.map((a, idx) => {
-                    const actorName = a.actor_id && actorMap[a.actor_id] ? actorMap[a.actor_id] : "Admin";
-                    const actionText = formatAuditAction(a);
-                    const isLast = idx === sysActivity.length - 1;
-                    return (
-                      <div
-                        key={a.id}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          padding: "13px 0",
-                          borderBottom: isLast ? "none" : "1px solid #f1f5f9",
-                          fontSize: "13.5px",
-                        }}
-                      >
-                        <div style={{ color: "#334155" }}>
-                          <strong style={{ color: "#0f172a", fontWeight: "700" }}>{actorName}</strong>{" "}
-                          <span>{actionText}</span>
-                        </div>
-                        <span style={{ color: "#64748b", fontSize: "12.5px", whiteSpace: "nowrap", marginLeft: "16px" }}>
-                          {timeAgo(a.created_at)}
-                        </span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          )}
 
         </div>
       </div>

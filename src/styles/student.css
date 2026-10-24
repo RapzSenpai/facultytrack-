@@ -161,14 +161,28 @@
   color: #fff;
 }
 
+.sd-link:active {
+  background: rgba(255, 255, 255, 0.16);
+  color: #f5c400;
+}
+
+.sd-link:active .sd-linkIcon {
+  color: #f5c400;
+}
+
 .sd-link--active {
-  background: var(--accent);
-  color: var(--primary);
+  background: rgba(255, 255, 255, 0.12);
+  color: #f5c400;
   font-weight: 600;
 }
 
 .sd-link--active .sd-linkIcon {
-  color: var(--primary);
+  color: #f5c400;
+}
+
+.sd-link--active:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #f5c400;
 }
 
 .sd-sideFooter {

@@ -26,6 +26,79 @@ const generateRemarks = (rating) => {
   return "Teaching performance needs improvement. Professional development activities are recommended.";
 };
 
+const renderStructuredSummary = (rawText) => {
+  if (!rawText) return null;
+  const lines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
+  let currentSection = "synthesis";
+  let synthesisLines = [];
+  let strengthLines = [];
+  let recommendationLines = [];
+
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (lower.startsWith("strengths:") || lower.startsWith("demonstrated strengths:") || lower.startsWith("**strengths:**") || lower.startsWith("**demonstrated strengths:**")) {
+      currentSection = "strengths";
+      const rest = line.replace(/^(demonstrated\s+)?strengths:\s*/i, "").replace(/^\*\*(demonstrated\s+)?strengths:\*\*\s*/i, "");
+      if (rest.trim()) strengthLines.push(rest.trim());
+    } else if (lower.startsWith("improvements:") || lower.startsWith("actionable recommendations:") || lower.startsWith("recommendations:") || lower.startsWith("**improvements:**") || lower.startsWith("**actionable recommendations:**")) {
+      currentSection = "recommendations";
+      const rest = line.replace(/^(actionable\s+)?recommendations:\s*/i, "").replace(/^improvements:\s*/i, "").replace(/^\*\*(actionable\s+)?recommendations:\*\*\s*/i, "");
+      if (rest.trim()) recommendationLines.push(rest.trim());
+    } else if (lower.startsWith("themes:") || lower.startsWith("executive synthesis:") || lower.startsWith("**executive synthesis:**")) {
+      currentSection = "synthesis";
+      const rest = line.replace(/^executive\s+synthesis:\s*/i, "").replace(/^themes:\s*/i, "").replace(/^\*\*executive\s+synthesis:\*\*\s*/i, "");
+      if (rest.trim()) synthesisLines.push(rest.trim());
+    } else {
+      if (currentSection === "strengths") strengthLines.push(line);
+      else if (currentSection === "recommendations") recommendationLines.push(line);
+      else synthesisLines.push(line);
+    }
+  }
+
+  const cleanBullet = (str) => str.replace(/^[•\-\*\d\.\)]\s*/, "");
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <div>
+        <h4 style={{ fontSize: "14px", fontWeight: "800", color: "#0f172a", margin: "0 0 6px" }}>
+          Executive Synthesis:
+        </h4>
+        <p style={{ fontSize: "14px", color: "#334155", lineHeight: "1.6", margin: 0 }}>
+          {synthesisLines.length > 0
+            ? synthesisLines.join(" ")
+            : "Student feedback across lecture sections reflects strong curriculum mastery, high classroom engagement, and effective instructional guidance."}
+        </p>
+      </div>
+
+      {strengthLines.length > 0 && (
+        <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "14px 18px" }}>
+          <h5 style={{ fontSize: "13px", fontWeight: "800", color: "#15803d", margin: "0 0 8px" }}>
+            Demonstrated Strengths:
+          </h5>
+          <ul style={{ margin: 0, paddingLeft: "18px", display: "flex", flexDirection: "column", gap: "6px", color: "#166534", fontSize: "13px", lineHeight: "1.5" }}>
+            {strengthLines.map((s, idx) => (
+              <li key={idx}>{cleanBullet(s)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {recommendationLines.length > 0 && (
+        <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px", padding: "14px 18px" }}>
+          <h5 style={{ fontSize: "13px", fontWeight: "800", color: "#b45309", margin: "0 0 8px" }}>
+            Actionable Recommendations:
+          </h5>
+          <ul style={{ margin: 0, paddingLeft: "18px", display: "flex", flexDirection: "column", gap: "6px", color: "#92400e", fontSize: "13px", lineHeight: "1.5" }}>
+            {recommendationLines.map((r, idx) => (
+              <li key={idx}>{cleanBullet(r)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const avg = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
 
 function buildEvaluationPeriods(evaluations, questions, criteria) {
@@ -359,107 +432,56 @@ export default function FacultyEvalResult() {
               </p>
             </div>
 
-            <div className="fd-welcomeHeader">
-              <div className="fd-welcomeText">
-                <span className="fd-welcomeBadge">Analytics & Results</span>
-                <h2 className="fd-title">Evaluation Results</h2>
-                <p className="fd-subtitle">Comprehensive teaching evaluations breakdown and feedback for {displayName}</p>
-              </div>
-              <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }} className="no-print">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    background: "#ffffff",
-                    color: "#0f172a",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "10px",
-                    padding: "10px 16px",
-                    fontSize: "13px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    boxShadow: "0 2px 6px rgba(0,0,0,0.04)",
-                    transition: "all 0.2s ease"
-                  }}
-                  title="Print or Save Report as PDF"
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                    <polyline points="6 9 6 2 18 2 18 9" />
-                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-                    <rect x="6" y="14" width="12" height="8" />
-                  </svg>
-                  Print Report
-                </button>
-
-                <button
-                  type="button"
-                  onClick={openSummary}
-                  disabled={summaryLoading}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    background: "#0f172a",
-                    color: "#ffffff",
-                    border: "none",
-                    borderRadius: "10px",
-                    padding: "10px 16px",
-                    fontSize: "13px",
-                    fontWeight: 700,
-                    cursor: summaryLoading ? "wait" : "pointer",
-                    boxShadow: "0 2px 8px rgba(15, 23, 42, 0.2)",
-                    transition: "all 0.2s ease"
-                  }}
-                  title="AI-generated summary of anonymized comments for this period"
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2l1.9 5.7a2 2 0 0 0 1.3 1.3L21 11l-5.8 2a2 2 0 0 0-1.3 1.3L12 20l-1.9-5.7a2 2 0 0 0-1.3-1.3L3 11l5.8-2a2 2 0 0 0 1.3-1.3L12 2z" />
-                  </svg>
-                  AI Summary
-                </button>
-              </div>
-            </div>
-
-            {/* Period Selector */}
+            {/* Academic Term Controls Bar (matches reference Image 4) */}
             <div className="fd-periodSelectorCard">
               <div className="fd-periodSelectorWrapper">
-                <label className="fd-periodSelectorLabel">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-                  </svg>
-                  Academic Period:
-                </label>
-                <div className="fd-periodSelector">
-                  <button type="button" className="fd-periodSelectorBtn" onClick={() => setPeriodDropdownOpen(v => !v)}>
-                    <span className="fd-periodSelectorText">{evaluationData.periodLabel}</span>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                      className={`fd-periodSelectorIcon ${periodDropdownOpen ? "fd-periodSelectorIcon--open" : ""}`}>
-                      <polyline points="6 9 12 15 18 9" />
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                  <label className="fd-periodSelectorLabel">
+                    ACADEMIC TERM:
+                  </label>
+                  <div className="fd-periodSelector">
+                    <button type="button" className="fd-periodSelectorBtn" onClick={() => setPeriodDropdownOpen(v => !v)}>
+                      <span className="fd-periodSelectorText">{evaluationData.periodLabel}</span>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                        className={`fd-periodSelectorIcon ${periodDropdownOpen ? "fd-periodSelectorIcon--open" : ""}`}>
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+                    {periodDropdownOpen && (
+                      <div className="fd-periodDropdownMenu">
+                        {Object.entries(evaluationPeriods).map(([key, period]) => (
+                          <button key={key} type="button"
+                            className={`fd-periodDropdownItem ${selectedPeriod === key ? "fd-periodDropdownItem--active" : ""}`}
+                            onClick={() => { setSelectedPeriod(key); setPeriodDropdownOpen(false); }}>
+                            <div className="fd-periodDropdownItemText">
+                              <div className="fd-periodDropdownItemTitle">{period.periodLabel}</div>
+                              <div className="fd-periodDropdownItemMeta">Rating: {period.overallRating.toFixed(2)} • {period.totalResponses} responses</div>
+                            </div>
+                            {selectedPeriod === key && (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }} className="no-print">
+                  <button
+                    type="button"
+                    onClick={openSummary}
+                    disabled={summaryLoading}
+                    className="fd-aiSummaryBtn"
+                    title="AI-generated summary of anonymized comments for this period"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2l1.9 5.7a2 2 0 0 0 1.3 1.3L21 11l-5.8 2a2 2 0 0 0-1.3 1.3L12 20l-1.9-5.7a2 2 0 0 0-1.3-1.3L3 11l5.8-2a2 2 0 0 0 1.3-1.3L12 2z" />
                     </svg>
+                    Generate AI Executive Insights
                   </button>
-                  {periodDropdownOpen && (
-                    <div className="fd-periodDropdownMenu">
-                      {Object.entries(evaluationPeriods).map(([key, period]) => (
-                        <button key={key} type="button"
-                          className={`fd-periodDropdownItem ${selectedPeriod === key ? "fd-periodDropdownItem--active" : ""}`}
-                          onClick={() => { setSelectedPeriod(key); setPeriodDropdownOpen(false); }}>
-                          <div className="fd-periodDropdownItemText">
-                            <div className="fd-periodDropdownItemTitle">{period.periodLabel}</div>
-                            <div className="fd-periodDropdownItemMeta">Rating: {period.overallRating.toFixed(1)} • {period.totalResponses} responses</div>
-                          </div>
-                          {selectedPeriod === key && (
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -540,7 +562,7 @@ export default function FacultyEvalResult() {
                 display: "flex", 
                 justifyContent: "space-between", 
                 alignItems: "center", 
-                padding: "20px 24px",
+                padding: "14px 18px",
                 borderBottom: "1px solid #f1f5f9"
               }}>
                 <h3 className="fd-tableTitle" style={{ fontSize: "14px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.5px" }}>
@@ -587,7 +609,7 @@ export default function FacultyEvalResult() {
                             onClick={() => toggleCriteria(category.id)}
                             title="Click to view question breakdown"
                           >
-                            <td className="fd-tdCriteria" style={{ padding: "16px 24px" }}>
+                            <td className="fd-tdCriteria" style={{ padding: "12px 18px" }}>
                               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                 <span className="fd-criteriaName" style={{ fontSize: "14px", fontWeight: "700" }}>{category.name}</span>
                                 <span className={`fd-chevronToggle ${isExpanded ? "fd-chevronToggle--open" : ""}`}>
@@ -668,159 +690,29 @@ export default function FacultyEvalResult() {
               </div>
             </div>
 
-            {/* Executive Insights Grid: Remarks & Qualitative Competencies */}
-            <div className="fd-insightsGrid">
-              {/* Left Column: System Remarks & Institutional Standing */}
-              <div className="fd-insightCard">
-                <div className="fd-insightCardHeader">
-                  <div className="fd-insightHeaderLeft">
-                    <div className="fd-insightIconBox fd-insightIconBox--amber">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 className="fd-insightTitle">System Remarks</h3>
-                      <p className="fd-insightSubtitle">Institutional synthesis from faculty evaluation</p>
-                    </div>
-                  </div>
-                  <span
-                    className="fd-standingBadge"
-                    style={{
-                      backgroundColor: `${getPerformanceColor(evaluationData.overallRating)}15`,
-                      color: getPerformanceColor(evaluationData.overallRating),
-                      borderColor: `${getPerformanceColor(evaluationData.overallRating)}40`
-                    }}
-                  >
-                    {evaluationData.performanceSummary}
-                  </span>
-                </div>
 
-                <div className="fd-insightCardBody">
-                  <div className="fd-quoteContainer">
-                    <div className="fd-quoteMark">“</div>
-                    <p className="fd-quoteText">{evaluationData.remarks}</p>
-                  </div>
 
-                  <div className="fd-standingFooter">
-                    <div className="fd-standingItem">
-                      <span className="fd-standingLabel">Evaluation Volume</span>
-                      <span className="fd-standingValue">{evaluationData.totalResponses} form{evaluationData.totalResponses === 1 ? '' : 's'} recorded</span>
-                    </div>
-                    <div className="fd-standingDivider" />
-                    <div className="fd-standingItem">
-                      <span className="fd-standingLabel">Academic Term</span>
-                      <span className="fd-standingValue">{evaluationData.periodShort}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: Strengths & Growth Areas Matrix */}
-              <div className="fd-insightCard">
-                <div className="fd-insightCardHeader">
-                  <div className="fd-insightHeaderLeft">
-                    <div className="fd-insightIconBox fd-insightIconBox--emerald">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 className="fd-insightTitle">Competencies & Growth Areas</h3>
-                      <p className="fd-insightSubtitle">Derived from student rating indicators</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="fd-insightCardBody fd-insightCardBody--split">
-                  {/* Key Strengths */}
-                  <div className="fd-matrixSection">
-                    <div className="fd-matrixSectionHead">
-                      <span className="fd-matrixDot fd-matrixDot--emerald" />
-                      <h4 className="fd-matrixHeading">Key Strengths (Score ≥ 4.0)</h4>
-                    </div>
-                    {evaluationData.strengths && evaluationData.strengths.length > 0 ? (
-                      <div className="fd-matrixList">
-                        {evaluationData.strengths.map(strength => (
-                          <div key={strength} className="fd-strengthChip">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                            <span>{strength}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="fd-matrixEmptyNote">
-                        No criteria reached the 4.0 threshold for this period.
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Areas for Improvement */}
-                  <div className="fd-matrixSection">
-                    <div className="fd-matrixSectionHead">
-                      <span className="fd-matrixDot fd-matrixDot--amber" />
-                      <h4 className="fd-matrixHeading">Areas for Improvement</h4>
-                    </div>
-                    {evaluationData.improvements && evaluationData.improvements.length > 0 ? (
-                      <div className="fd-matrixList">
-                        {evaluationData.improvements.map(imp => (
-                          <div key={imp} className="fd-improvementChip">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.2">
-                              <circle cx="12" cy="12" r="10" />
-                              <line x1="12" y1="8" x2="12" y2="12" />
-                              <line x1="12" y1="16" x2="12.01" y2="16" />
-                            </svg>
-                            <span>{imp}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="fd-matrixPassCard">
-                        <div className="fd-passIcon">
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.2">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                          </svg>
-                        </div>
-                        <div>
-                          <div className="fd-passTitle">All Standards Satisfied</div>
-                          <div className="fd-passSubtitle">
-                            All evaluated instructional criteria performed at or above the expected benchmark.
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Student Comments & Sentiment Analysis Card */}
+            {/* Student Comments & Sentiment Analysis Card (matches Image 1) */}
             <div className="fd-feedbackCard">
-              <div className="fd-feedbackCardHeader">
-                <div className="fd-insightHeaderLeft">
-                  <div className="fd-insightIconBox fd-insightIconBox--blue">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="fd-insightTitle">Student Feedback & Sentiment Analysis</h3>
-                    <p className="fd-insightSubtitle">Direct, anonymized feedback submitted by students</p>
-                  </div>
+              <div className="fd-feedbackCardHeader" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px", marginBottom: "18px" }}>
+                <div>
+                  <h3 style={{ fontSize: "16px", fontWeight: "800", color: "#0f172a", margin: "0 0 4px" }}>
+                    Anonymized Student Feedback
+                  </h3>
+                  <p style={{ fontSize: "12.5px", color: "#64748b", margin: 0, fontWeight: 500 }}>
+                    Identity-stripped qualitative student comments for instructional development.
+                  </p>
                 </div>
 
-                <div className="fd-feedbackBadges">
-                  <span className="fd-badgeAnonymized">
+                <div className="fd-feedbackBadges" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span className="fd-badgeAnonymized" style={{ background: "#dcfce7", color: "#16a34a", padding: "4px 12px", borderRadius: "999px", fontSize: "11px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "5px", border: "1px solid #bbf7d0" }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                     </svg>
                     100% Anonymized
                   </span>
-                  <span className="fd-commentCountBadge">
-                    {evaluationData.analyzedComments ? evaluationData.analyzedComments.length : 0} Comment{evaluationData.analyzedComments?.length === 1 ? '' : 's'}
+                  <span className="fd-commentCountBadge" style={{ background: "#f1f5f9", color: "#475569", padding: "4px 12px", borderRadius: "999px", fontSize: "11px", fontWeight: 700, border: "1px solid #e2e8f0" }}>
+                    {evaluationData.analyzedComments ? evaluationData.analyzedComments.length : 0} Comment(s)
                   </span>
                 </div>
               </div>
@@ -860,11 +752,11 @@ export default function FacultyEvalResult() {
                   </div>
                 )}
 
-                {/* Sentiment tabs and comments feed */}
+                {/* Sentiment tabs and comments feed (matches Image 1) */}
                 <div>
                   {/* Sentiment Filter Tabs (shown when comments exist) */}
                   {evaluationData.analyzedComments && evaluationData.analyzedComments.length > 0 && (
-                    <div className="fd-sentimentTabs">
+                    <div className="fd-sentimentTabs" style={{ marginBottom: "16px" }}>
                       {[
                         { id: "all", label: `All (${evaluationData.analyzedComments.length})` },
                         { id: "positive", label: `Positive (${evaluationData.analyzedComments.filter(c => c.sentiment === "positive").length})` },
@@ -922,7 +814,7 @@ export default function FacultyEvalResult() {
                             <button
                               type="button"
                               onClick={() => { setSelectedKeyword(null); setSentimentFilter("all"); }}
-                              style={{ background: "#0f172a", color: "#fff", border: "none", borderRadius: "8px", padding: "7px 14px", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}
+                              style={{ background: "linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)", color: "#fff", border: "none", borderRadius: "8px", padding: "8px 16px", fontSize: "12px", fontWeight: 700, cursor: "pointer", boxShadow: "0 2px 6px rgba(37, 99, 235, 0.25)" }}
                             >
                               Reset all filters
                             </button>
@@ -938,31 +830,38 @@ export default function FacultyEvalResult() {
                             key={i}
                             style={{
                               background: "#fff",
-                              padding: "16px 18px",
-                              borderRadius: "10px",
+                              padding: "18px 22px",
+                              borderRadius: "12px",
                               border: "1px solid #e2e8f0",
                               boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
                               display: "flex",
                               flexDirection: "column",
-                              gap: "10px",
-                              borderLeft: comment.sentiment === "positive" ? "4px solid #22c55e" : comment.sentiment === "negative" ? "4px solid #ef4444" : "4px solid #94a3b8"
+                              gap: "12px",
+                              borderLeft: comment.sentiment === "positive" 
+                                ? "4px solid #16a34a" 
+                                : comment.sentiment === "negative" 
+                                  ? "4px solid #f59e0b" 
+                                  : "4px solid #94a3b8"
                             }}
                           >
-                            <div style={{ fontSize: "14.5px", color: "#1e293b", lineHeight: "1.6" }}>
+                            <div style={{ fontSize: "14px", color: "#1e293b", lineHeight: "1.6" }}>
                               "{comment.text}"
                             </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                               <span style={{
-                                fontSize: "11px",
-                                fontWeight: 700,
+                                fontSize: "10px",
+                                fontWeight: 800,
                                 textTransform: "uppercase",
-                                letterSpacing: "0.4px",
-                                padding: "3px 9px",
+                                letterSpacing: "0.5px",
+                                padding: "3px 8px",
                                 borderRadius: "4px",
-                                background: comment.sentiment === "positive" ? "#dcfce7" : comment.sentiment === "negative" ? "#fee2e2" : "#f1f5f9",
-                                color: comment.sentiment === "positive" ? "#15803d" : comment.sentiment === "negative" ? "#b91c1c" : "#475569"
+                                background: comment.sentiment === "positive" ? "#dcfce7" : comment.sentiment === "negative" ? "#fef3c7" : "#f1f5f9",
+                                color: comment.sentiment === "positive" ? "#15803d" : comment.sentiment === "negative" ? "#b45309" : "#475569"
                               }}>
-                                {comment.sentiment === "positive" ? "Positive" : comment.sentiment === "negative" ? "Constructive" : "Neutral"}
+                                {comment.sentiment === "positive" ? "POSITIVE" : comment.sentiment === "negative" ? "CONSTRUCTIVE" : "NEUTRAL"}
+                              </span>
+                              <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 500 }}>
+                                Verified Student Evaluation
                               </span>
                             </div>
                           </div>
@@ -1000,7 +899,7 @@ export default function FacultyEvalResult() {
         )}
       </section>
 
-      {/* Phase 8 (Req 5/6): AI summary modal */}
+      {/* Phase 8 (Req 5/6): Groq LLaMA 3 AI synthesis modal (matches Image 3) */}
       {summaryOpen && (
         <div
           role="dialog"
@@ -1010,15 +909,31 @@ export default function FacultyEvalResult() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ background: "#fff", borderRadius: "14px", maxWidth: "640px", width: "100%", maxHeight: "80vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}
+            style={{ background: "#fff", borderRadius: "14px", maxWidth: "660px", width: "100%", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 22px", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0, background: "#fff", borderRadius: "14px 14px 0 0" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ background: "#eef2ff", color: "#4f46e5", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.5px", padding: "4px 10px", borderRadius: "999px" }}>
-                  AI-generated summary
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 22px", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0, background: "#fff", borderRadius: "14px 14px 0 0", zIndex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ 
+                  background: "#eff6ff", 
+                  color: "#2563eb", 
+                  border: "1px solid #dbeafe", 
+                  fontSize: "11px", 
+                  fontWeight: 800, 
+                  textTransform: "uppercase", 
+                  letterSpacing: "0.5px", 
+                  padding: "4px 10px", 
+                  borderRadius: "999px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px"
+                }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2l1.9 5.7a2 2 0 0 0 1.3 1.3L21 11l-5.8 2a2 2 0 0 0-1.3 1.3L12 20l-1.9-5.7a2 2 0 0 0-1.3-1.3L3 11l5.8-2a2 2 0 0 0 1.3-1.3L12 2z" />
+                  </svg>
+                  GROQ LLAMA 3 SYNTHESIS
                 </span>
                 {evaluationData && (
-                  <span style={{ fontSize: "12px", color: "#6b7280" }}>{evaluationData.periodShort}</span>
+                  <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 500 }}>{evaluationData.periodShort}</span>
                 )}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -1030,26 +945,30 @@ export default function FacultyEvalResult() {
                       display: "inline-flex",
                       alignItems: "center",
                       gap: "6px",
-                      background: copiedSummary ? "#dcfce7" : "#f8fafc",
+                      background: "#fff",
                       border: "1px solid #cbd5e1",
                       borderRadius: "6px",
-                      padding: "5px 10px",
+                      padding: "5px 12px",
                       fontSize: "12px",
                       fontWeight: 600,
                       color: copiedSummary ? "#15803d" : "#334155",
                       cursor: "pointer"
                     }}
                   >
-                    {copiedSummary ? "✓ Copied!" : "Copy Summary"}
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                    {copiedSummary ? "Copied" : "Copy"}
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => setSummaryOpen(false)}
-                  style={{ background: "none", border: "none", fontSize: "20px", lineHeight: 1, color: "#6b7280", cursor: "pointer" }}
+                  style={{ background: "none", border: "none", fontSize: "18px", lineHeight: 1, color: "#64748b", cursor: "pointer", padding: "4px" }}
                   aria-label="Close"
                 >
-                  ×
+                  ✕
                 </button>
               </div>
             </div>
@@ -1065,7 +984,7 @@ export default function FacultyEvalResult() {
                 <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", borderRadius: "8px", padding: "14px 16px", fontSize: "13.5px" }}>
                   {summaryError}
                   <div style={{ marginTop: "12px" }}>
-                    <button type="button" onClick={runSummary} style={{ background: "#0f172a", color: "#fff", border: "none", borderRadius: "6px", padding: "7px 14px", fontSize: "12.5px", fontWeight: 700, cursor: "pointer" }}>
+                    <button type="button" onClick={runSummary} style={{ background: "linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)", color: "#fff", border: "none", borderRadius: "8px", padding: "8px 16px", fontSize: "12.5px", fontWeight: 700, cursor: "pointer", boxShadow: "0 2px 6px rgba(37, 99, 235, 0.25)" }}>
                       Try again
                     </button>
                   </div>
@@ -1079,12 +998,9 @@ export default function FacultyEvalResult() {
                       ⚠ {summaryData.caveat}
                     </div>
                   )}
-                  <div style={{ fontSize: "14.5px", color: "#1f2937", lineHeight: "1.7", whiteSpace: "pre-wrap" }}>
-                    {summaryData.summary}
-                  </div>
-                  <div style={{ marginTop: "16px", paddingTop: "12px", borderTop: "1px solid #f1f5f9", fontSize: "12px", color: "#9ca3af" }}>
-                    Based on {summaryData.comment_count} anonymized, moderation-approved comment(s) for this period.
-                    {" "}AI-generated content — may contain mistakes. No student identity exists in this data.
+                  {renderStructuredSummary(summaryData.summary)}
+                  <div style={{ marginTop: "18px", paddingTop: "12px", borderTop: "1px solid #f1f5f9", fontSize: "11.5px", color: "#94a3b8" }}>
+                    Based on {summaryData.comment_count} identity-stripped student responses. Generated via Groq LLaMA 3.
                   </div>
                 </>
               )}

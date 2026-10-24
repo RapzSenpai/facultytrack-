@@ -142,7 +142,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  transition: all 0.2s ease;
+  transition: all 0.2s ease, transform 0.2s ease;
   position: relative;
   white-space: nowrap;
 }
@@ -163,18 +163,49 @@
 }
 
 .fd-link:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   color: #fff;
+  transform: translateX(3px);
+}
+
+.fd--closed .fd-link:hover {
+  transform: translateY(-1px);
+}
+
+.fd-link:active {
+  background: rgba(255, 255, 255, 0.16);
+  color: #f5c400;
+}
+
+.fd-link:active .fd-linkIcon {
+  color: #f5c400;
 }
 
 .fd-link--active {
-  background: var(--accent);
-  color: var(--primary);
+  background: rgba(255, 255, 255, 0.12);
+  color: #f5c400;
   font-weight: 600;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.08);
+}
+
+.fd-link--active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: rgba(255, 255, 255, 0.85);
 }
 
 .fd-link--active .fd-linkIcon {
-  color: var(--primary);
+  color: #f5c400;
+}
+
+.fd-link--active:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #f5c400;
 }
 
 /* ── Sidebar User Footer Card ── */
@@ -464,10 +495,10 @@
 
 /* Dashboard section grid (section.fd-content in FacultyDashboard) */
 section.fd-content {
-  padding: 26px 26px 20px;
+  padding: 18px 22px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   background: #f3f4f8;
   min-height: 100%;
   position: relative;
@@ -507,10 +538,9 @@ section.fd-content {
   gap: 20px;
   background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
   border: 1px solid #e2e8f0;
-  border-left: 5px solid var(--accent, #f59e0b);
-  padding: 24px 28px;
-  border-radius: 18px;
-  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.04);
+  padding: 22px 26px;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   transition: all 0.25s ease;
   position: relative;
   overflow: hidden;
@@ -519,23 +549,23 @@ section.fd-content {
 }
 
 .fd-welcomeHeader:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+  border-color: #cbd5e1;
 }
 
-.fd-welcomeBadge {
+.fd-welcomeRolePill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
+  padding: 3px 10px;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  color: #1e40af;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
 }
 
 /* Left text block */
@@ -548,10 +578,19 @@ section.fd-content {
 
 .fd-title {
   margin: 0;
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 800;
   color: #0f172a;
-  letter-spacing: -0.4px;
+  letter-spacing: -0.025em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fd-titleHighlight {
+  color: #2563eb;
+  font-weight: 800;
 }
 
 .fd-subtitle {
@@ -562,18 +601,18 @@ section.fd-content {
   line-height: 1.5;
 }
 
-/* Period Card — integrated responsive badge inside welcome banner */
+/* Period Card — matching Admin & Student period cards */
 .fd-periodCard {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
-  padding: 14px 18px;
+  padding: 16px 20px;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
-  min-width: 240px;
+  align-items: center;
+  gap: 16px;
+  min-width: 250px;
   z-index: 2;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -582,66 +621,143 @@ section.fd-content {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
 }
 
-.fd-periodHeader {
+.fd-periodCardIcon {
+  width: 46px;
+  height: 46px;
+  background: #0f1f3a;
+  color: #ffffff;
+  border-radius: 12px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.fd-periodDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #22c55e;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
-  display: inline-block;
+  justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(15, 31, 58, 0.20);
 }
 
-.fd-periodDot--pending {
-  background: #f59e0b;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+.fd-periodCardInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.fd-periodLabel {
-  font-size: 10.5px;
-  font-weight: 800;
+.fd-periodCardLabel {
+  font-size: 11px;
+  font-weight: 700;
   color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.5px;
 }
 
-.fd-periodTitle {
-  font-size: 14.5px;
+.fd-periodCardTitle {
+  font-size: 15.5px;
   font-weight: 800;
   color: #0f172a;
-  margin-bottom: 2px;
+  letter-spacing: -0.01em;
 }
 
-.fd-periodMeta {
-  font-size: 11.5px;
-  font-weight: 600;
+.fd-periodCardStatus {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #475569;
+  font-weight: 500;
+}
+
+/* Pulsing Status Badges */
+.fd-statusBadge {
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.fd-statusBadge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.fd-statusBadge--released,
+.fd-statusBadge--open {
+  background: #ecfdf3;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+.fd-statusBadge--released::before,
+.fd-statusBadge--open::before {
+  background: #22c55e;
+  animation: pulse 2s infinite;
+}
+
+.fd-statusBadge--pending {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.fd-statusBadge--pending::before {
+  background: #f59e0b;
+}
+
+.fd-statusBadge--scheduled {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.fd-statusBadge--scheduled::before {
+  background: #3b82f6;
+}
+
+.fd-statusBadge--closed {
+  background: #f1f5f9;
   color: #64748b;
+  border: 1px solid #e2e8f0;
 }
 
-/* ── Stats Grid (matches sdb-metrics) ── */
+.fd-statusBadge--closed::before {
+  background: #94a3b8;
+}
+
+/* ── 4 Stats Grid (matches mockup-stats-grid and sdb-metrics) ── */
 .fd-statsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
 }
 
+@media (max-width: 1180px) {
+  .fd-statsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .fd-statsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .fd-statCard {
-  background: #fff;
+  background: #ffffff;
   border-radius: 14px;
-  padding: 20px 22px;
-  border: 1.5px solid #e5e7eb;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  padding: 18px 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
   animation: fd-fadeUp 0.5s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .fd-statCard::before {
@@ -650,51 +766,166 @@ section.fd-content {
   top: 0;
   left: 0;
   right: 0;
-  height: 4px;
-  border-radius: 14px 14px 0 0;
+  height: 3.5px;
+  background: #cbd5e1;
+  border-radius: 3.5px 3.5px 0 0;
 }
 
 .fd-statCard:hover {
   transform: translateY(-3px);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.10);
+  box-shadow: 0 10px 25px -4px rgba(15, 23, 42, 0.08);
+  border-color: #cbd5e1;
+}
+
+/* Card 1: Rating */
+.fd-statCard--rating {
+  background: radial-gradient(circle at top right, rgba(37, 99, 235, 0.06) 0%, rgba(255, 255, 255, 0) 65%), #ffffff;
+}
+.fd-statCard--rating::before {
+  background: linear-gradient(90deg, #2563eb, #60a5fa);
+}
+.fd-statCard--rating:hover {
+  border-color: #bfdbfe;
+}
+
+/* Card 2: Responses */
+.fd-statCard--responses {
+  background: radial-gradient(circle at top right, rgba(16, 185, 129, 0.06) 0%, rgba(255, 255, 255, 0) 65%), #ffffff;
+}
+.fd-statCard--responses::before {
+  background: linear-gradient(90deg, #059669, #34d399);
+}
+.fd-statCard--responses:hover {
+  border-color: #a7f3d0;
+}
+
+/* Card 3: Teaching Load */
+.fd-statCard--load {
+  background: radial-gradient(circle at top right, rgba(245, 158, 11, 0.06) 0%, rgba(255, 255, 255, 0) 65%), #ffffff;
+}
+.fd-statCard--load::before {
+  background: linear-gradient(90deg, #d97706, #fbbf24);
+}
+.fd-statCard--load:hover {
+  border-color: #fde68a;
+}
+
+/* Card 4: Period Status */
+.fd-statCard--period {
+  background: radial-gradient(circle at top right, rgba(139, 92, 246, 0.06) 0%, rgba(255, 255, 255, 0) 65%), #ffffff;
+}
+.fd-statCard--period::before {
+  background: linear-gradient(90deg, #7c3aed, #a78bfa);
+}
+.fd-statCard--period:hover {
+  border-color: #ddd6fe;
 }
 
 /* Top row inside stat card (label + icon) */
 .fd-statCard--header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
 }
 
-.fd-statContent {
-  display: flex;
-  flex-direction: column;
-}
-
-/* Stat label text (uppercase, colored per variant) */
+/* Stat label text */
 .fd-statLabel {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #64748b;
 }
 
-/* Large number */
-.fd-statNum {
-  font-size: 36px;
-  font-weight: 900;
-  line-height: 1;
+.fd-statMainRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 6px;
-  letter-spacing: -1px;
-  animation: fd-countUp 0.4s ease both;
+  flex-wrap: wrap;
+}
+
+/* Crisp number */
+.fd-statNum {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #0f172a;
+  letter-spacing: -0.025em;
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.fd-statNum--status {
+  font-size: 20px;
+  padding: 3px 0;
+}
+
+.fd-statScale {
+  font-size: 13.5px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+/* Micro badges */
+.fd-statBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.fd-statBadge--success {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.fd-statBadge--info {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.fd-statBadge--amber {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.fd-statBadge--live {
+  background: #f5f3ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+}
+
+.fd-statBadge--pending {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.fd-statusPulseDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+  display: inline-block;
 }
 
 /* Sub description */
 .fd-statTitle {
   font-size: 12px;
-  color: #6b7280;
+  color: #64748b;
   font-weight: 500;
+  line-height: 1.4;
 }
 
 /* Icon badge (top-right of card) */
@@ -706,43 +937,503 @@ section.fd-content {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: transform 0.2s ease;
 }
 
-/* ── Apply colors to fd-statCard based on icon class inside (CSS :has) ── */
-/* Rating card — yellow/gold */
-.fd-statCard:has(.fd-statIcon--rating)::before {
-  background: #eab308;
-}
-
-.fd-statCard:has(.fd-statIcon--rating) .fd-statLabel {
-  color: #ca8a04;
-}
-
-.fd-statCard:has(.fd-statIcon--rating) .fd-statNum {
-  color: #713f12;
+.fd-statCard:hover .fd-statIcon {
+  transform: scale(1.05);
 }
 
 .fd-statIcon--rating {
-  background: #fefce8;
-  color: #eab308;
-}
-
-/* Responses card — blue */
-.fd-statCard:has(.fd-statIcon--responses)::before {
-  background: #3b82f6;
-}
-
-.fd-statCard:has(.fd-statIcon--responses) .fd-statLabel {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
   color: #2563eb;
-}
-
-.fd-statCard:has(.fd-statIcon--responses) .fd-statNum {
-  color: #1e3a8a;
+  border: 1px solid rgba(191, 219, 254, 0.6);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.12);
 }
 
 .fd-statIcon--responses {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  color: #059669;
+  border: 1px solid rgba(167, 243, 208, 0.6);
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.12);
+}
+
+.fd-statIcon--load {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  color: #d97706;
+  border: 1px solid rgba(253, 230, 138, 0.6);
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.12);
+}
+
+.fd-statIcon--period {
+  background: linear-gradient(135deg, #faf5ff 0%, #ede9fe 100%);
+  color: #7c3aed;
+  border: 1px solid rgba(221, 214, 254, 0.6);
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.12);
+}
+
+/* Alert Banners (Warning & Escalation) */
+.fd-alertBanner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  margin-bottom: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.fd-alertBannerIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fd-alertBanner--warning {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.fd-alertBanner--escalation {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+}
+
+/* ── Main Balanced Dashboard Grid ── */
+.fd-dashboardGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: fd-fadeUp 0.5s ease 0.1s both;
+}
+
+.fd-overviewRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: stretch;
+}
+
+@media (max-width: 960px) {
+  .fd-overviewRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fd-overviewProfileCard {
+  display: flex;
+  flex-direction: column;
+}
+
+.fd-profileOverviewBody {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  flex: 1;
+}
+
+.fd-verifiedLoadBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.fd-overviewMiniGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .fd-overviewMiniGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fd-overviewMiniCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.fd-overviewMiniCard:hover {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+.fd-miniCardIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fd-miniCardIcon--blue {
   background: #eff6ff;
-  color: #3b82f6;
+  color: #2563eb;
+  border: 1px solid #dbeafe;
+}
+
+.fd-miniCardIcon--purple {
+  background: #faf5ff;
+  color: #7c3aed;
+  border: 1px solid #ede9fe;
+}
+
+.fd-miniCardLabel {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.fd-miniCardValue {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.fd-termPill {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 9px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+}
+
+.fd-periodRowLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fd-rowDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.fd-rowDot--blue {
+  background: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.fd-rowDot--indigo {
+  background: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+}
+
+.fd-rowDot--amber {
+  background: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+}
+
+.fd-rowDot--green {
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
+}
+
+.fd-periodRowValue--window {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.fd-overviewBtn--full {
+  width: 100%;
+  justify-content: center;
+}
+
+.fd-periodDetailsCard {
+  display: flex;
+  flex-direction: column;
+}
+
+.fd-periodDetailsCard .fd-periodRows {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.fd-tableSectionCard {
+  width: 100%;
+}
+
+.fd-mainGrid {
+  display: grid;
+  grid-template-columns: 1.65fr 1fr;
+  gap: 20px;
+  align-items: start;
+  animation: fd-fadeUp 0.5s ease 0.1s both;
+}
+
+@media (max-width: 1060px) {
+  .fd-mainGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fd-colMain,
+.fd-colSide {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Base card styling matching Admin & Student cards */
+.fd-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 22px 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.fd-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+.fd-cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 14px;
+  border-bottom: 1.5px solid #f1f5f9;
+  margin-bottom: 16px;
+}
+
+.fd-cardHeaderIcon {
+  color: #0f1f3a;
+  flex-shrink: 0;
+}
+
+.fd-cardTitle {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.fd-cardSubtitle {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.fd-countBadge {
+  font-size: 11px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #334155;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+/* Class Assignments Table */
+.fd-tableWrap {
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid #f1f5f9;
+}
+
+.fd-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.fd-table thead tr {
+  background: #f8fafc;
+  border-bottom: 1.5px solid #e2e8f0;
+}
+
+.fd-table th {
+  padding: 11px 14px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.fd-table td {
+  padding: 12px 14px;
+  font-size: 13px;
+  color: #1e293b;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.fd-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.fd-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.fd-codePill {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  color: #1e40af;
+  font-weight: 700;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.fd-sectionBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+/* Period row items (Right column) */
+.fd-periodRows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fd-periodRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #f1f5f9;
+  transition: all 0.2s ease;
+}
+
+.fd-periodRow:hover {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+.fd-periodRowLabel {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.fd-periodRowValue {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.fd-statusBadgeSmall {
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fd-statusBadgeSmall--released,
+.fd-statusBadgeSmall--open {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.fd-statusBadgeSmall--pending {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.fd-statusBadgeSmall--scheduled {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.fd-statusBadgeSmall--closed {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+/* Evaluation System Standards Guide */
+.fd-guideList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fd-guideItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.fd-guideDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.fd-guideItem strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 2px;
+}
+
+.fd-guideItem p {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.45;
 }
 
 /* Profile Card */
@@ -1328,30 +2019,44 @@ section.fd-content {
 
 .fd-perfGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
   padding: 0;
-  margin-bottom: 24px;
+  margin-bottom: 0;
+}
+
+@media (max-width: 1100px) {
+  .fd-perfGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (max-width: 580px) {
+  .fd-perfGrid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
 }
 
 .fd-perfMetric {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px 18px;
+  gap: 14px;
+  padding: 12px 16px;
   background: #fff;
   border-radius: 12px;
   border: 1px solid #f1f5f9;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
-  min-height: 90px;
+  min-height: 76px;
 }
 
 .fd-perfMetric:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.07);
 }
 
 /* Card accent borders */
@@ -1372,10 +2077,10 @@ section.fd-content {
 }
 
 .fd-metricIcon {
-  width: 52px;
-  height: 52px;
-  min-width: 52px;
-  border-radius: 14px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1577,52 +2282,63 @@ section.fd-content {
 }
 
 /* ========================= ACADEMIC PERIOD SELECTOR ========================= */
+/* ========================= ACADEMIC PERIOD SELECTOR ========================= */
 .fd-periodSelectorCard {
-  background: linear-gradient(135deg, #0f3b63 0%, #1a4d7d 100%);
-  border-radius: 10px;
-  padding: 20px;
-  margin-bottom: 24px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 12px 18px;
+  margin-bottom: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   animation: fadeIn 0.3s ease;
 }
 
 .fd-periodSelectorWrapper {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .fd-periodSelectorLabel {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  color: #f5c400;
+  color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
 }
 
 .fd-criteriaPillMain {
   display: inline-block;
-  padding: 6px 14px;
-  background: #dbeafe;
-  color: #1e40af;
+  padding: 4px 12px;
+  background: #f1f5f9;
+  color: #475569;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: 11.5px;
   font-weight: 700;
+  border: 1px solid #e2e8f0;
 }
 
 .fd-tableDarkHead th {
-  background-color: #0f172a !important;
-  color: #fff !important;
+  background-color: #0b1727 !important;
+  color: #ffffff !important;
   font-size: 11px !important;
+  font-weight: 800 !important;
   letter-spacing: 0.8px !important;
-  padding: 14px 24px !important;
+  text-transform: uppercase !important;
+  padding: 11px 18px !important;
+  border: none !important;
+  white-space: nowrap;
 }
 
 .fd-periodSelector {
   position: relative;
+  flex: 1;
+  max-width: 420px;
 }
 
 .fd-periodSelectorBtn {
@@ -1631,26 +2347,26 @@ section.fd-content {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: #fff;
-  border: 2px solid #e5e7eb;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
-  padding: 14px 16px;
-  font-size: 14px;
+  padding: 8px 14px;
+  font-size: 13.5px;
   font-weight: 600;
-  color: #1f2937;
+  color: #0f172a;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .fd-periodSelectorBtn:hover {
-  border-color: #f5c400;
-  box-shadow: 0 2px 8px rgba(245, 196, 0, 0.2);
+  border-color: #2563eb;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
 }
 
 .fd-periodSelectorBtn:focus {
   outline: none;
-  border-color: #f5c400;
-  box-shadow: 0 0 0 3px rgba(245, 196, 0, 0.1);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
 .fd-periodSelectorText {
@@ -1669,29 +2385,18 @@ section.fd-content {
 
 .fd-periodDropdownMenu {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 6px);
   left: 0;
   right: 0;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-  padding: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+  padding: 6px;
   z-index: 100;
-  max-height: 400px;
+  max-height: 380px;
   overflow-y: auto;
   animation: dropdownSlideIn 0.2s ease;
-}
-
-@keyframes dropdownSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .fd-periodDropdownItem {
@@ -1700,27 +2405,27 @@ section.fd-content {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
-  border-radius: 6px;
+  padding: 10px 14px;
+  border-radius: 8px;
   border: none;
   background: transparent;
   text-align: left;
   cursor: pointer;
-  transition: all 0.2s ease;
-  color: #374151;
+  transition: all 0.15s ease;
+  color: #334155;
 }
 
 .fd-periodDropdownItem:hover {
-  background: #f3f4f6;
+  background: #f1f5f9;
 }
 
 .fd-periodDropdownItem--active {
-  background: #fef3c7;
-  color: #92400e;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .fd-periodDropdownItem--active:hover {
-  background: #fde68a;
+  background: #dbeafe;
 }
 
 .fd-periodDropdownItemText {
@@ -1729,20 +2434,70 @@ section.fd-content {
 }
 
 .fd-periodDropdownItemTitle {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   color: inherit;
 }
 
 .fd-periodDropdownItemMeta {
-  font-size: 12px;
-  color: #6b7280;
+  font-size: 11.5px;
+  color: #64748b;
   font-weight: 500;
 }
 
 .fd-periodDropdownItem--active .fd-periodDropdownItemMeta {
-  color: #78350f;
+  color: #2563eb;
+}
+
+/* Header Buttons */
+.fd-printBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+}
+
+.fd-printBtn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+}
+
+.fd-aiSummaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+  transition: all 0.2s ease;
+}
+
+.fd-aiSummaryBtn:hover {
+  background: linear-gradient(135deg, #162c47 0%, #1d4ed8 100%);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35);
+  transform: translateY(-1px);
+}
+
+.fd-aiSummaryBtn:disabled {
+  opacity: 0.7;
+  cursor: wait;
 }
 
 /* ========================= DETAILS BREAKDOWN ========================= */
@@ -1951,11 +2706,27 @@ section.fd-content {
   }
 
   .fd-periodSelectorCard {
-    padding: 16px;
+    padding: 12px 14px;
+  }
+
+  .fd-periodSelectorWrapper {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .fd-periodSelector {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .fd-aiSummaryBtn {
+    width: 100%;
+    justify-content: center;
   }
 
   .fd-periodSelectorBtn {
-    padding: 12px 14px;
+    padding: 10px 14px;
     font-size: 13px;
   }
 
@@ -1965,6 +2736,16 @@ section.fd-content {
 
   .fd-periodDropdownItemMeta {
     font-size: 11px;
+  }
+
+  .fd-tableWrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .fd-table {
+    min-width: 540px;
   }
 }
 
@@ -2177,11 +2958,14 @@ section.fd-content {
 }
 
 .fd-tableDarkHead th {
-  background-color: #0f172a !important;
-  color: #fff !important;
+  background-color: #0b1727 !important;
+  color: #ffffff !important;
   font-size: 11px !important;
+  font-weight: 800 !important;
   letter-spacing: 0.8px !important;
+  text-transform: uppercase !important;
   padding: 14px 24px !important;
+  border: none !important;
 }
 
 /* ============================================================
@@ -2256,36 +3040,19 @@ section.fd-content {
   color: #1e40af;
 }
 
-.fd-statCard:has(.fd-statIcon--period)::before {
-  background: #10b981;
-}
-
-.fd-statCard:has(.fd-statIcon--period) .fd-statLabel {
-  color: #059669;
-}
-
-.fd-statCard:has(.fd-statIcon--period) .fd-statNum {
-  color: #064e3b;
-}
-
-.fd-statIcon--period {
-  background: #ecfdf5;
-  color: #10b981;
-}
-
 /* ── Active Period Action Overview Card ── */
 .fd-overviewCard {
   background: #ffffff;
-  border-radius: 16px;
+  border-radius: 12px;
   border: 1px solid #e2e8f0;
   padding: 24px;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   transition: all 0.25s ease;
   animation: fd-fadeUp 0.4s ease;
 }
 
 .fd-overviewCard:hover {
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
   border-color: #cbd5e1;
 }
 
@@ -2294,15 +3061,14 @@ section.fd-content {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #f1f5f9;
-  padding-bottom: 16px;
-  margin-bottom: 20px;
+  padding-bottom: 14px;
+  margin-bottom: 18px;
 }
 
 .fd-overviewTitle {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: -0.01em;
   color: #0f172a;
   margin: 0;
 }
@@ -2328,17 +3094,17 @@ section.fd-content {
 }
 
 .fd-overviewAvatar {
-  width: 46px;
-  height: 46px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #1e3a8a, #2563eb);
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
   color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 15px;
   font-weight: 800;
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
   flex-shrink: 0;
 }
 
@@ -2380,7 +3146,7 @@ section.fd-content {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: #0f172a;
+  background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
   color: #ffffff;
   border: none;
   border-radius: 10px;
@@ -2389,14 +3155,14 @@ section.fd-content {
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
   text-decoration: none;
 }
 
 .fd-overviewBtn:hover {
-  background: #1e293b;
+  background: linear-gradient(135deg, #1e3a5f 0%, #1d4ed8 100%);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.25);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35);
   color: #fff;
 }
 
@@ -2426,35 +3192,46 @@ section.fd-content {
 
 .fd-subItemsContainer {
   background: #f8fafc;
-  padding: 14px 20px;
-  border-top: 1px dashed #e2e8f0;
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
 }
 
 .fd-subItemRow {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 18px;
+  margin-bottom: 6px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  border-radius: 6px;
-  transition: background 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: all 0.15s ease;
+}
+
+.fd-subItemRow:last-child {
+  margin-bottom: 0;
 }
 
 .fd-subItemRow:hover {
-  background: #f1f5f9;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
 .fd-subItemText {
-  font-size: 13px;
+  font-size: 13.5px;
   color: #334155;
   font-weight: 500;
   flex: 1;
+  line-height: 1.5;
 }
 
 .fd-subItemRating {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
-  color: #0f172a;
+  color: #16a34a;
   margin-left: 16px;
+  white-space: nowrap;
 }
 
 /* ── Clickable Keyword Chips ── */
@@ -2462,9 +3239,9 @@ section.fd-content {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #f0fdf4;
-  color: #16a34a;
-  border: 1px solid #bbf7d0;
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #e2e8f0;
   padding: 6px 14px;
   border-radius: 999px;
   font-size: 12.5px;
@@ -2476,48 +3253,51 @@ section.fd-content {
 }
 
 .fd-keywordChip:hover {
-  background: #dcfce7;
-  border-color: #86efac;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
   transform: translateY(-1px);
 }
 
 .fd-keywordChip--active {
-  background: #16a34a;
+  background: #2563eb;
   color: #ffffff;
-  border-color: #15803d;
-  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
+  border-color: #2563eb;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
 }
 
 /* ── Sentiment Filter Tabs ── */
 .fd-sentimentTabs {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin: 18px 0 16px 0;
   flex-wrap: wrap;
 }
 
 .fd-sentimentTab {
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
   color: #475569;
-  padding: 6px 14px;
-  border-radius: 8px;
+  padding: 6px 16px;
+  border-radius: 999px;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: all 0.15s ease;
 }
 
 .fd-sentimentTab:hover {
-  background: #e2e8f0;
+  background: #f8fafc;
+  border-color: #94a3b8;
   color: #0f172a;
 }
 
 .fd-sentimentTab--active {
-  background: #0f172a;
-  border-color: #0f172a;
-  color: #ffffff;
+  background: #0f172a !important;
+  border-color: #0f172a !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.2);
 }
 
 /* ── Executive Profile Redesign ── */
@@ -2933,7 +3713,7 @@ section.fd-content {
   border: 1px solid #e2e8f0;
   box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
   overflow: hidden;
-  margin-bottom: 24px;
+  margin-bottom: 0;
   animation: fadeIn 0.3s ease;
 }
 
@@ -2941,7 +3721,7 @@ section.fd-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 18px 22px;
+  padding: 14px 18px;
   border-bottom: 1px solid #f1f5f9;
   background: #fafbfc;
   flex-wrap: wrap;
@@ -3188,4 +3968,4 @@ section.fd-content {
 .fd-cancelBtn:hover {
   background: #f1f5f9;
   color: #0f172a;
-}
+}

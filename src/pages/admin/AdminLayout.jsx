@@ -16,6 +16,7 @@ import {
   ChevronRight,
   ShieldCheck,
   Activity,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
@@ -50,7 +51,7 @@ const navSections = [
     label: "ACADEMIC SETUP",
     isFallback: true,
     items: [
-      { key: "department", label: "Curriculum & Sections", path: "/admin/department", icon: GraduationCap },
+      { key: "department", label: "Curriculum & Programs", path: "/admin/department", icon: GraduationCap },
       { key: "subject", label: "All Subjects", path: "/admin/subject", icon: BookOpen, scopedHide: true },
       { key: "class-assignment", label: "Class Assignment", path: "/admin/class-assignment", icon: ClipboardList },
       { key: "academic-year", label: "Evaluation Period", path: "/admin/academic-year", icon: CalendarDays },
@@ -75,7 +76,6 @@ const navSections = [
       { key: "program-assignments", label: "Program Assignments", path: "/admin/program-assignments", icon: UserCircle2, superOnly: true },
       { key: "reports", label: "Reports & Export", path: "/admin/reports", icon: FileText, superOnly: true },
       { key: "analytics", label: "Analytics", path: "/admin/analytics", icon: BarChart3, superOnly: true },
-      { key: "release-management-super", label: "Release Management", path: "/admin/release-management", icon: ClipboardCheck, superOnly: true },
     ],
   },
 ];
@@ -168,63 +168,6 @@ function AdminLayoutInner({ title, children }) {
           </div>
         </div>
 
-        {/* Super program picker: scopes fallback Admin Tools only.
-            Oversight + Dashboard + Release stay global. Default All. */}
-        {/* Super program picker */}
-        {superAdmin && sidebarOpen && (
-          <div style={{ padding: "10px 14px 6px" }}>
-            <div className="ad-menuLabel" style={{ marginBottom: "6px" }}>Viewing</div>
-            <div style={{ position: "relative" }}>
-              <select
-                style={{
-                  width: "100%",
-                  padding: "8px 30px 8px 12px",
-                  borderRadius: "8px",
-                  border: "1px solid rgba(255, 255, 255, 0.15)",
-                  background: "rgba(255, 255, 255, 0.08)",
-                  color: "#ffffff",
-                  fontSize: "13px",
-                  fontWeight: 500,
-                  outline: "none",
-                  cursor: "pointer",
-                  appearance: "none",
-                  WebkitAppearance: "none",
-                  transition: "all 0.2s ease",
-                }}
-                value={scopeDeptId}
-                onChange={(e) => setScopeDeptId(e.target.value)}
-                title="Filter views to a specific program"
-              >
-                <option value="" style={{ background: "#0f172a", color: "#ffffff" }}>All Programs</option>
-                {scopeDepts.map((d) => (
-                  <option key={d.id} value={d.id} style={{ background: "#0f172a", color: "#ffffff" }}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{
-                  position: "absolute",
-                  right: "12px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  pointerEvents: "none",
-                  color: "rgba(255, 255, 255, 0.7)",
-                }}
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </div>
-          </div>
-        )}
 
         {superAdmin ? (
           <>
@@ -325,10 +268,10 @@ function AdminLayoutInner({ title, children }) {
                   className={`ad-link ${isActive("/admin/department") ? "ad-link--active" : ""}`}
                   type="button"
                   onClick={() => handleNavClick("/admin/department")}
-                  title={!sidebarOpen ? "Curriculum & Sections" : undefined}
+                  title={!sidebarOpen ? "Curriculum & Programs" : undefined}
                 >
                   <span className="ad-linkIcon"><GraduationCap size={18} /></span>
-                  <span className="ad-linkText">Curriculum &amp; Sections</span>
+                  <span className="ad-linkText">Curriculum &amp; Programs</span>
                 </button>
                 <button
                   className={`ad-link ${isActive("/admin/academic-year") ? "ad-link--active" : ""}`}
@@ -368,10 +311,10 @@ function AdminLayoutInner({ title, children }) {
                   className={`ad-link ${isActive("/admin/monitor") ? "ad-link--active" : ""}`}
                   type="button"
                   onClick={() => handleNavClick("/admin/monitor")}
-                  title={!sidebarOpen ? "System Monitor & Audit" : undefined}
+                  title={!sidebarOpen ? "Settings" : undefined}
                 >
-                  <span className="ad-linkIcon"><Activity size={18} /></span>
-                  <span className="ad-linkText">System Monitor &amp; Audit</span>
+                  <span className="ad-linkIcon"><Settings size={18} /></span>
+                  <span className="ad-linkText">Settings</span>
                 </button>
               </nav>
             </div>

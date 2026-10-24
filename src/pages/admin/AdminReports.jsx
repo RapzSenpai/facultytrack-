@@ -4,10 +4,8 @@ import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { isPeriodActive } from "../../utils/periodStatus";
+import { Users, Calendar, Star, FileText, ChevronRight } from "lucide-react";
 
-// Phase 3 SuperAdmin revamp: department cards shell. Clicking through
-// deep-links into the existing Evaluation Report (?department=) so all
-// filters, teacher search, and CSV export reuse one implementation.
 const normDept = (v) => String(v || "").trim().toLowerCase();
 
 export default function AdminReports() {
@@ -18,22 +16,70 @@ export default function AdminReports() {
   const [departments, setDepartments] = useState([]);
   const [faculty, setFaculty] = useState([]);
   const [years, setYears] = useState([]);
+  const [evalScores, setEvalScores] = useState({});
   const [fetchError, setFetchError] = useState("");
 
   useEffect(() => {
     if (!isSuper) return;
     const load = async () => {
       try {
-        const [deptRes, facRes, yearRes] = await Promise.all([
-          supabase.from("departments").select("id, name").order("name"),
+        const [deptRes, facRes, yearRes, evalRes, superEvalRes, assignRes] = await Promise.all([
+          supabase.from("departments").select("id, name, description").order("name"),
           supabase.from("users").select("id, full_name, department, status").eq("role", "faculty"),
           supabase.from("academic_years").select("id, year, semester, status, end_date, department_id"),
+          supabase.from("admin_evaluations_anon").select("id, assignment_id, faculty_id, student_department, ratings"),
+          supabase.from("evaluations").select("id, faculty_id, assignment_id, ratings"),
+          supabase.from("class_assignments").select("id, department, faculty_id"),
         ]);
-        const firstErr = [deptRes, facRes, yearRes].find((r) => r.error);
+
+        const firstErr = [deptRes, facRes, yearRes].find((r) => r?.error);
         if (firstErr) throw new Error(firstErr.error.message);
-        setDepartments(deptRes.data || []);
-        setFaculty((facRes.data || []).filter((f) => (f.status || "active").toLowerCase() === "active"));
-        setYears(yearRes.data || []);
+
+        const loadedDepts = deptRes.data || [];
+        const loadedFaculty = (facRes.data || []).filter((f) => (f.status || "active").toLowerCase() === "active");
+        const loadedYears = yearRes.data || [];
+
+        setDepartments(loadedDepts);
+        setFaculty(loadedFaculty);
+        setYears(loadedYears);
+
+        // Compute real department scores from evaluations
+        const evals = (evalRes.data && evalRes.data.length > 0)
+          ? evalRes.data
+          : (superEvalRes.data || []);
+
+        const assignMap = new Map((assignRes.data || []).map((a) => [a.id, a.department]));
+        const facDeptMap = new Map(loadedFaculty.map((f) => [f.id, f.department]));
+
+        const deptSums = {};
+        const deptCounts = {};
+
+        evals.forEach((ev) => {
+          let dept = ev.student_department;
+          if (!dept && ev.assignment_id) dept = assignMap.get(ev.assignment_id);
+          if (!dept && ev.faculty_id) dept = facDeptMap.get(ev.faculty_id);
+          if (!dept) return;
+
+          const dKey = normDept(dept);
+          const ratings = ev.ratings;
+          if (!ratings) return;
+
+          const vals = Object.values(ratings).map(Number).filter((v) => !isNaN(v) && v > 0);
+          if (vals.length === 0) return;
+
+          const evAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
+          deptSums[dKey] = (deptSums[dKey] || 0) + evAvg;
+          deptCounts[dKey] = (deptCounts[dKey] || 0) + 1;
+        });
+
+        const scores = {};
+        loadedDepts.forEach((d) => {
+          const dKey = normDept(d.name);
+          if (deptCounts[dKey]) {
+            scores[d.id] = (deptSums[dKey] / deptCounts[dKey]).toFixed(2);
+          }
+        });
+        setEvalScores(scores);
       } catch (err) {
         console.error("Reports load error:", err);
         setFetchError(err.message || "Could not load departments.");
@@ -46,13 +92,22 @@ export default function AdminReports() {
 
   const cards = useMemo(() => {
     const activeYear = years.find((y) => isPeriodActive(y)) || years[0];
-    return departments.map((d) => ({
-      id: d.id,
-      name: d.name,
-      facultyCount: faculty.filter((f) => normDept(f.department) === normDept(d.name)).length,
-      academicYear: activeYear ? `${activeYear.year} · ${activeYear.semester}` : "—",
-    }));
-  }, [departments, faculty, years]);
+
+    return departments.map((d) => {
+      const deptFaculty = faculty.filter((f) => normDept(f.department) === normDept(d.name));
+      const score = evalScores[d.id] || null;
+
+      return {
+        id: d.id,
+        name: d.name,
+        description: d.description || "",
+        facultyCount: deptFaculty.length,
+        facultyList: deptFaculty,
+        academicYear: activeYear ? `${activeYear.year} · ${activeYear.semester}` : "—",
+        deptScore: score,
+      };
+    });
+  }, [departments, faculty, years, evalScores]);
 
   if (!isSuper) {
     return <Navigate to="/admin/dashboard" replace />;
@@ -64,30 +119,75 @@ export default function AdminReports() {
         <div className="ad-welcomeHeader">
           <div>
             <h2 className="ad-title">Reports &amp; Export</h2>
-            <p className="ad-subtitle">Pick a department to open its evaluation results — filters and export live there.</p>
+            <p className="ad-subtitle">Select a department to view evaluation results and analytics.</p>
           </div>
         </div>
 
         {loading ? (
-          <div className="ad-tableCard" style={{ padding: "40px", textAlign: "center", color: "#6b7280" }}>Loading departments...</div>
+          <div className="ad-tableCard" style={{ padding: "40px", textAlign: "center", color: "#6b7280" }}>
+            Loading departments...
+          </div>
         ) : fetchError ? (
-          <div className="ad-tableCard ad-tableCard--padded" style={{ color: "#b91c1c" }}>{fetchError}</div>
+          <div className="ad-tableCard ad-tableCard--padded" style={{ color: "#b91c1c" }}>
+            {fetchError}
+          </div>
         ) : cards.length === 0 ? (
-          <div className="ad-tableCard ad-tableCard--padded" style={{ color: "#6b7280" }}>No departments defined yet.</div>
+          <div className="ad-tableCard ad-tableCard--padded" style={{ color: "#6b7280" }}>
+            No departments defined yet.
+          </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "14px" }}>
+          <div className="ad-curr-grid">
             {cards.map((c) => (
-              <div key={c.id} className="ad-tableCard" style={{ padding: "20px 22px" }}>
-                <div style={{ fontWeight: 800, fontSize: "16px", color: "#1e3a5f" }}>{c.name}</div>
-                <div style={{ fontSize: "13px", color: "#6b7280", margin: "6px 0 14px" }}>
-                  {c.facultyCount} faculty · {c.academicYear}
+              <div className="ad-curr-program-card" key={c.id}>
+                <div>
+                  <div className="ad-curr-program-top">
+                    <h3 className="ad-curr-program-code">{c.name}</h3>
+                    {c.deptScore ? (
+                      <span
+                        className="ad-curr-stat-pill ad-curr-stat-pill--sections"
+                        title="Department Evaluation Score"
+                      >
+                        <Star size={11} fill="#166534" /> {c.deptScore}
+                      </span>
+                    ) : (
+                      <span
+                        className="ad-curr-stat-pill"
+                        style={{ background: "#f8fafc", color: "#94a3b8", border: "1px solid #e2e8f0" }}
+                      >
+                        No evals
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="ad-curr-program-desc">{c.description || "No description provided."}</p>
+
+                  {/* Metric Pills */}
+                  <div className="ad-curr-stats-row">
+                    <span className="ad-curr-stat-pill ad-curr-stat-pill--years">
+                      <Users size={12} /> {c.facultyCount} Faculty
+                    </span>
+                    <span className="ad-curr-stat-pill ad-curr-stat-pill--subjects">
+                      <Calendar size={12} /> {c.academicYear}
+                    </span>
+                    <span
+                      className={`ad-curr-stat-pill ${c.deptScore ? "ad-curr-stat-pill--sections" : ""}`}
+                      style={!c.deptScore ? { background: "#f8fafc", color: "#94a3b8", border: "1px solid #e2e8f0" } : undefined}
+                    >
+                      <Star size={12} fill={c.deptScore ? "#166534" : "none"} />
+                      {c.deptScore ? `★ ${c.deptScore} Score` : "No evals yet"}
+                    </span>
+                  </div>
                 </div>
+
+                {/* Main Action */}
                 <button
                   type="button"
-                  className="ad-btnPrimary"
+                  className="ad-curr-btn-manage"
                   onClick={() => navigate(`/admin/report?department=${encodeURIComponent(c.name)}`)}
                 >
+                  <FileText size={15} />
                   View Results
+                  <ChevronRight size={15} style={{ marginLeft: "auto" }} />
                 </button>
               </div>
             ))}

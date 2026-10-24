@@ -993,10 +993,10 @@ export default function AdminQuestionnaire() {
                 </div>
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '12px', color: '#374151' }}>
                   <span><strong style={{ color: '#111827' }}>5:</strong> Strongly Agree</span>
-                  <span><strong style={{ color: '#111827' }}>4:</strong> Very Satisfactory</span>
-                  <span><strong style={{ color: '#111827' }}>3:</strong> Satisfactory</span>
-                  <span><strong style={{ color: '#111827' }}>2:</strong> Fair</span>
-                  <span><strong style={{ color: '#111827' }}>1:</strong> Poor</span>
+                  <span><strong style={{ color: '#111827' }}>4:</strong> Agree</span>
+                  <span><strong style={{ color: '#111827' }}>3:</strong> Neutral</span>
+                  <span><strong style={{ color: '#111827' }}>2:</strong> Disagree</span>
+                  <span><strong style={{ color: '#111827' }}>1:</strong> Strongly Disagree</span>
                 </div>
               </div>
 

@@ -120,7 +120,8 @@ export default function AdminReport() {
   const [leftChartOrientation, setLeftChartOrientation] = useState("horizontal"); // 'horizontal' | 'vertical'
   const [distYearFilter, setDistYearFilter] = useState("all"); // 'all' | '1' | '2' | '3' | '4'
   const [rosterTierFilter, setRosterTierFilter] = useState("all"); // 'all' | 'high' | 'mid' | 'low'
-  const [selectedFacultyId, setSelectedFacultyId] = useState(null); // null = Dept Overview | facultyId
+  const [selectedFacultyId, setSelectedFacultyId] = useState(null); // null = no faculty selected | facultyId
+  const [activeReportTab, setActiveReportTab] = useState("analytics"); // 'analytics' | 'roster'
 
   const deptKey = myDeptIds.join("|");
 
@@ -1078,7 +1079,7 @@ export default function AdminReport() {
           <div class="meta-bar">
             <span><strong>Generated:</strong> ${escapeHtml(now)}</span>
             <span><strong>Report Scope:</strong> ${totalFacultyCount} Faculty Member${totalFacultyCount === 1 ? '' : 's'} &bull; ${totalForms} Submissions</span>
-            <span><strong>Compliance:</strong> Statistical Aggregation (Policy D13)</span>
+            <span><strong>Compliance:</strong> Statistical Aggregation</span>
           </div>
 
           <!-- Executive KPI Strip -->
@@ -1170,49 +1171,6 @@ export default function AdminReport() {
             </tfoot>
           </table>
 
-          <!-- Official Rating Scale & Qualitative Interpretation Matrix -->
-          <div style="margin-top: 18px; page-break-inside: avoid;">
-            <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #1e3a8a; margin-bottom: 6px;">
-              Rating Scale & Performance Classification Reference
-            </div>
-            <table class="matrix-table">
-              <thead>
-                <tr>
-                  <th style="width: 20%;">Rating Range</th>
-                  <th style="width: 25%;">Performance Classification</th>
-                  <th>Qualitative Interpretation</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td style="font-weight: 700; color: #15803d;">4.50 – 5.00</td>
-                  <td style="font-weight: 700; color: #15803d;">Outstanding</td>
-                  <td style="color: #475569;">Consistently demonstrates highest quality instructional delivery, mastery, and student engagement.</td>
-                </tr>
-                <tr style="background: #fcfdfe;">
-                  <td style="font-weight: 700; color: #1d4ed8;">4.00 – 4.49</td>
-                  <td style="font-weight: 700; color: #1d4ed8;">Excellent</td>
-                  <td style="color: #475569;">High degree of competence in curriculum delivery, clarity, and classroom management.</td>
-                </tr>
-                <tr>
-                  <td style="font-weight: 700; color: #0284c7;">3.50 – 3.99</td>
-                  <td style="font-weight: 700; color: #0284c7;">Very Good</td>
-                  <td style="color: #475569;">Consistently meets and frequently exceeds required academic teaching standards.</td>
-                </tr>
-                <tr style="background: #fcfdfe;">
-                  <td style="font-weight: 700; color: #b45309;">3.00 – 3.49</td>
-                  <td style="font-weight: 700; color: #b45309;">Good</td>
-                  <td style="color: #475569;">Meets basic minimum institutional criteria for teaching and student supervision.</td>
-                </tr>
-                <tr>
-                  <td style="font-weight: 700; color: #b91c1c;">Below 3.00</td>
-                  <td style="font-weight: 700; color: #b91c1c;">Needs Improvement</td>
-                  <td style="color: #475569;">Falls below minimum benchmark; requires departmental mentoring and pedagogical intervention.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
           <!-- Official Sign-off Block -->
           <div class="signature-grid">
             <div class="sig-card">
@@ -1236,7 +1194,7 @@ export default function AdminReport() {
           </div>
 
           <div class="notice-card">
-            Official Academic Record Notice: This document is generated directly from FacultyTrack evaluation records. In strict compliance with institutional student anonymity policy (D13), individual student identities and qualitative comments are excluded from exported reports. Server audit log action: report.export.
+            Official Academic Record Notice: This document is generated directly from FacultyTrack evaluation records. In strict compliance with institutional student anonymity policy, individual student identities and qualitative comments are excluded from exported reports. Server audit log action: report.export.
           </div>
 
           <div class="footer-card">
@@ -1285,7 +1243,7 @@ export default function AdminReport() {
               className="ad-btnPrimary"
               onClick={handleExportPDF}
               disabled={loading || scopeLoading || exportingPdf || !filterAY || !filterSem}
-              title={!filterAY || !filterSem ? "Pick a year and semester first" : "Generate official summary report (Audited, D13)"}
+              title={!filterAY || !filterSem ? "Pick a year and semester first" : "Generate official summary report (Audited)"}
               style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 18px", fontWeight: 700 }}
             >
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -1421,10 +1379,37 @@ export default function AdminReport() {
           </div>
         </div>
 
-        {/* MASTER-DETAIL SPLIT WORKSTATION */}
-        <div className="ad-splitWorkstation">
+        {/* TAB WORKSTATION NAVIGATION */}
+        <div className="ad-tabs" style={{ marginTop: "20px", marginBottom: "20px" }}>
+          <button
+            type="button"
+            onClick={() => setActiveReportTab("analytics")}
+            className={`ad-tab ${activeReportTab === "analytics" ? "ad-tab--active" : ""}`}
+            style={{ padding: "9px 22px", fontSize: "13.5px" }}
+          >
+            <BarChartIcon />
+            Department Analytics &amp; Trends
+            <span className="ad-tabBadge">
+              {hasChartData ? (leftChartMode === "yearLevel" ? "By Year" : leftChartMode === "ayTrend" ? "Trend" : "Program") : "Empty"}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveReportTab("roster")}
+            className={`ad-tab ${activeReportTab === "roster" ? "ad-tab--active" : ""}`}
+            style={{ padding: "9px 22px", fontSize: "13.5px" }}
+          >
+            <RosterIcon />
+            Faculty Scorecards &amp; Roster
+            <span className="ad-tabBadge">{consolidatedData.length}</span>
+          </button>
+        </div>
 
-          {/* LEFT: MASTER PANEL (Faculty Directory) */}
+        {/* TAB WORKSTATION */}
+        <div className="ad-splitWorkstation" style={activeReportTab === "analytics" ? { gridTemplateColumns: "minmax(0, 1fr)" } : undefined}>
+
+          {/* TAB 2 LEFT: Faculty Directory */}
+          {activeReportTab === "roster" && (
           <div className="ad-tableCard" style={{ padding: "16px", marginBottom: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -1437,36 +1422,6 @@ export default function AdminReport() {
                 {displayedReportData.length}
               </span>
             </div>
-
-            {/* Department Overview Toggle Button */}
-            <button
-              type="button"
-              onClick={() => setSelectedFacultyId(null)}
-              style={{
-                width: "100%",
-                padding: "9px 12px",
-                borderRadius: "8px",
-                border: selectedFacultyId === null ? "2px solid #1e3a8a" : "1px solid #e2e8f0",
-                background: selectedFacultyId === null ? "#eff6ff" : "#ffffff",
-                color: selectedFacultyId === null ? "#1e3a8a" : "#475569",
-                fontWeight: 700,
-                fontSize: "12px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                cursor: "pointer",
-                marginBottom: "12px",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <BarChartIcon />
-                Department Overview
-              </span>
-              <span style={{ fontSize: "10px", background: selectedFacultyId === null ? "#1e3a8a" : "#f1f5f9", color: selectedFacultyId === null ? "#fff" : "#64748b", padding: "2px 7px", borderRadius: "999px" }}>
-                Charts
-              </span>
-            </button>
 
             {/* Search Input */}
             <div className="ad-searchFilterWrap" style={{ width: "100%", marginBottom: "10px" }}>
@@ -1633,10 +1588,11 @@ export default function AdminReport() {
               )}
             </div>
           </div>
+          )}
 
           {/* RIGHT: DETAIL PANEL */}
           <div style={{ minWidth: 0 }}>
-            {selectedReport ? (
+            {activeReportTab === "roster" && selectedReport ? (
               /* INDIVIDUAL FACULTY DETAIL INSPECTOR */
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                 {/* Faculty Hero Card */}
@@ -1678,7 +1634,7 @@ export default function AdminReport() {
                         gap: "6px",
                       }}
                     >
-                      &larr; View Dept Overview
+                      &larr; Clear Selection
                     </button>
                   </div>
 
@@ -1820,7 +1776,7 @@ export default function AdminReport() {
                   )}
                 </div>
               </div>
-            ) : (
+            ) : activeReportTab === "analytics" ? (
               /* DEPARTMENT OVERVIEW CHARTS */
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div className="ad-tableCard" style={{ padding: "16px 20px", marginBottom: 0 }}>
@@ -1830,7 +1786,7 @@ export default function AdminReport() {
                         Department Analytics & Visual Insights
                       </h3>
                       <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#64748b" }}>
-                        Click any faculty member on the left directory to inspect their individual evaluation breakdown
+                        Open the Faculty Scorecards &amp; Roster tab to inspect each faculty member's evaluation breakdown
                       </p>
                     </div>
                     <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "4px 10px", borderRadius: "6px" }}>
@@ -2174,6 +2130,13 @@ export default function AdminReport() {
                   </div>
                 )}
               </div>
+            ) : (
+              /* ROSTER TAB: nothing selected yet */
+              <div className="ad-tableCard" style={{ padding: "60px 20px", textAlign: "center", color: "#94a3b8", marginBottom: 0 }}>
+                <RosterIcon />
+                <div style={{ fontSize: "14px", fontWeight: 700, color: "#334155", marginTop: "10px" }}>Select a faculty member</div>
+                <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>Pick a name from the directory to view their scorecard and section breakdown.</div>
+              </div>
             )}
           </div>
         </div>
@@ -2300,7 +2263,7 @@ export default function AdminReport() {
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, color: "#94a3b8" }}>
                   <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
                 </svg>
-                <span>Written comments are excluded by policy (D13: statistics only). Flagged feedback is reviewed in Moderation.</span>
+                <span>Written comments are excluded by policy (statistics only). Flagged feedback is reviewed in Moderation.</span>
               </div>
 
             </div>
