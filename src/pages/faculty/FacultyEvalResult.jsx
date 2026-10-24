@@ -334,7 +334,7 @@ export default function FacultyEvalResult() {
     }
   };
 
-  const runSummary = async () => {
+  const runSummary = async (forceRefresh = false) => {
     if (!currentUser || !selectedPeriod) return;
     const [academicYear, semester] = selectedPeriod.split("__");
     setSummaryLoading(true);
@@ -346,6 +346,7 @@ export default function FacultyEvalResult() {
           academic_year: academicYear,
           semester,
           subject_code: "",
+          force_refresh: forceRefresh,
         },
       });
       if (error) {
@@ -367,11 +368,18 @@ export default function FacultyEvalResult() {
     }
   };
 
+  // Option 3: Auto-fetch AI summary for the selected released period on page load
+  useEffect(() => {
+    if (currentUser && selectedPeriod) {
+      runSummary(false);
+    }
+  }, [currentUser?.id, selectedPeriod]);
+
   const openSummary = () => {
-    setSummaryData(null);
-    setSummaryError(null);
     setSummaryOpen(true);
-    runSummary();
+    if (!summaryData && !summaryLoading) {
+      runSummary(false);
+    }
   };
 
   // No evaluations state — Phase 5 distinguishes "nothing at all"
@@ -554,6 +562,120 @@ export default function FacultyEvalResult() {
                   </>
                 );
               })()}
+            </div>
+
+            {/* Auto-Generated AI Executive Synthesis Card (Strengths & Recommendations) */}
+            <div className="fd-tableCard" style={{ padding: "20px 24px", marginBottom: "20px", border: "1.5px solid #dbeafe", background: "#ffffff", borderRadius: "12px", boxShadow: "0 2px 8px rgba(37, 99, 235, 0.05)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px", flexWrap: "wrap", gap: "10px", borderBottom: "1px solid #f1f5f9", paddingBottom: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ 
+                    background: "#eff6ff", 
+                    color: "#2563eb", 
+                    border: "1px solid #dbeafe", 
+                    fontSize: "11px", 
+                    fontWeight: 800, 
+                    textTransform: "uppercase", 
+                    letterSpacing: "0.5px", 
+                    padding: "4px 10px", 
+                    borderRadius: "999px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px"
+                  }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2l1.9 5.7a2 2 0 0 0 1.3 1.3L21 11l-5.8 2a2 2 0 0 0-1.3 1.3L12 20l-1.9-5.7a2 2 0 0 0-1.3-1.3L3 11l5.8-2a2 2 0 0 0 1.3-1.3L12 2z" />
+                    </svg>
+                    GROQ LLAMA 3 SYNTHESIS
+                  </span>
+                  <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>
+                    {evaluationData.periodShort || evaluationData.periodLabel}
+                  </span>
+                  {summaryData?.cached && (
+                    <span style={{ fontSize: "11px", color: "#16a34a", background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "2px 8px", borderRadius: "999px", fontWeight: 700 }}>
+                      ✓ Cached
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  {summaryData && !summaryLoading && (
+                    <button
+                      type="button"
+                      onClick={handleCopySummary}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        background: "#fff",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "6px",
+                        padding: "5px 12px",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        color: copiedSummary ? "#15803d" : "#334155",
+                        cursor: "pointer"
+                      }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                      {copiedSummary ? "Copied" : "Copy"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => runSummary(true)}
+                    disabled={summaryLoading}
+                    title="Regenerate summary from student comments"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      background: "#f8fafc",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "6px",
+                      padding: "5px 10px",
+                      fontSize: "11.5px",
+                      fontWeight: 600,
+                      color: "#475569",
+                      cursor: summaryLoading ? "not-allowed" : "pointer"
+                    }}
+                  >
+                    ↻ Regenerate
+                  </button>
+                </div>
+              </div>
+
+              {summaryLoading ? (
+                <div style={{ textAlign: "center", padding: "28px 12px", color: "#64748b", fontSize: "13px" }}>
+                  <div style={{ display: "inline-block", width: "20px", height: "20px", border: "2px solid #cbd5e1", borderTopColor: "#2563eb", borderRadius: "50%", animation: "spin 1s linear infinite", marginBottom: "8px" }} />
+                  <div>Synthesizing anonymized student feedback via Groq LLaMA 3…</div>
+                </div>
+              ) : summaryError ? (
+                <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", borderRadius: "8px", padding: "12px 16px", fontSize: "13px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>{summaryError}</span>
+                  <button type="button" onClick={() => runSummary(true)} style={{ background: "#fff", border: "1px solid #fca5a5", color: "#b91c1c", borderRadius: "6px", padding: "4px 10px", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>
+                    Retry
+                  </button>
+                </div>
+              ) : summaryData ? (
+                <>
+                  {summaryData.caveat && (
+                    <div style={{ background: "#fffbeb", border: "1px solid #fde68a", color: "#92400e", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", marginBottom: "14px" }}>
+                      ⚠ {summaryData.caveat}
+                    </div>
+                  )}
+                  {renderStructuredSummary(summaryData.summary)}
+                  <div style={{ marginTop: "16px", paddingTop: "10px", borderTop: "1px solid #f1f5f9", fontSize: "11.5px", color: "#94a3b8" }}>
+                    Based on {summaryData.comment_count} identity-stripped student responses. Generated via Groq LLaMA 3.
+                  </div>
+                </>
+              ) : (
+                <div style={{ textAlign: "center", padding: "16px", color: "#94a3b8", fontSize: "13px" }}>
+                  No student comments submitted yet for this period.
+                </div>
+              )}
             </div>
 
             {/* Criteria Summary Table */}

@@ -237,6 +237,34 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
+    const forceRefresh = body?.force_refresh === true;
+
+    // Check cached summary first (Option 3 instant load)
+    if (!forceRefresh) {
+      const { data: cached } = await admin
+        .from("faculty_ai_summaries")
+        .select("summary, comment_count, small_sample, caveat")
+        .eq("faculty_id", facultyId)
+        .eq("academic_year", academicYear)
+        .eq("semester", semester)
+        .eq("subject_code", subjectCode)
+        .maybeSingle();
+
+      if (cached?.summary) {
+        return json(
+          {
+            summary: cached.summary,
+            comment_count: cached.comment_count,
+            small_sample: cached.small_sample,
+            caveat: cached.caveat,
+            ai_generated: true,
+            cached: true,
+          },
+          200,
+        );
+      }
+    }
+
     let query = admin
       .from("evaluations")
       .select("comment")
@@ -316,6 +344,23 @@ ${comments.map((c: string, i: number) => `${i + 1}. ${c.slice(0, 500)}`).join("\
         },
         503,
       );
+    }
+
+    // Save to cache table for instant future loads (Option 3)
+    try {
+      await admin.from("faculty_ai_summaries").upsert({
+        faculty_id: facultyId,
+        academic_year: academicYear,
+        semester,
+        subject_code: subjectCode,
+        summary: summaryText.trim(),
+        comment_count: comments.length,
+        small_sample: smallSample,
+        caveat,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "faculty_id,academic_year,semester,subject_code" });
+    } catch (_cacheErr) {
+      // Non-fatal if table not yet migrated or fails
     }
 
     // --------------------------------------------------------
