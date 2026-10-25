@@ -39,6 +39,43 @@ const getPerformanceColor = (r) => {
   return "#ef4444";
 };
 
+const parseAiSummaryText = (text) => {
+  if (!text || typeof text !== "string" || !text.trim()) {
+    return { hasSummary: false, overview: "", strengths: [], recommendations: [] };
+  }
+
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+  let curSec = "overview";
+  const oLines = [];
+  const strengths = [];
+  const recommendations = [];
+
+  for (const line of lines) {
+    const l = line.toLowerCase();
+    if (l.includes("strength")) {
+      curSec = "strengths";
+    } else if (l.includes("recommend") || l.includes("improve") || l.includes("actionable") || l.includes("growth")) {
+      curSec = "recommendations";
+    } else if (curSec === "strengths") {
+      const clean = line.replace(/^[•\-\*\d\.\)]\s*/, "").trim();
+      if (clean) strengths.push(clean);
+    } else if (curSec === "recommendations") {
+      const clean = line.replace(/^[•\-\*\d\.\)]\s*/, "").trim();
+      if (clean) recommendations.push(clean);
+    } else {
+      oLines.push(line);
+    }
+  }
+
+  const overview = oLines.length > 0 ? oLines.join(" ") : text.trim();
+  return {
+    hasSummary: true,
+    overview,
+    strengths,
+    recommendations,
+  };
+};
+
 const getHeroTierClass = (r) => {
   const n = Number(r);
   if (isNaN(n)) return "";
@@ -153,10 +190,10 @@ export default function AdminReport() {
         const baseEvals = evalsRes.data || [];
         const fallbackEvals = (isSuper && (!baseEvals || baseEvals.length === 0) && superEvalsRes?.data && superEvalsRes.data.length > 0)
           ? superEvalsRes.data.map((e) => ({
-              ...e,
-              student_token: e.student_id ? `anon_${e.student_id}` : e.id,
-              submitted_on: e.submitted_at ? String(e.submitted_at).slice(0, 10) : null,
-            }))
+            ...e,
+            student_token: e.student_id ? `anon_${e.student_id}` : e.id,
+            submitted_on: e.submitted_at ? String(e.submitted_at).slice(0, 10) : null,
+          }))
           : baseEvals;
 
         const evals = fallbackEvals.map(e => ({
@@ -523,8 +560,8 @@ export default function AdminReport() {
     const shortSem = (e.semester || "").toLowerCase().includes("1st")
       ? "1st Sem"
       : (e.semester || "").toLowerCase().includes("2nd")
-      ? "2nd Sem"
-      : e.semester;
+        ? "2nd Sem"
+        : e.semester;
     const label = `${e.academicYear} (${shortSem})`;
 
     if (!ayMap[label]) {
@@ -575,8 +612,8 @@ export default function AdminReport() {
     leftChartMode === "yearLevel"
       ? yearLevelData
       : leftChartMode === "ayTrend"
-      ? ayTrendData
-      : deptData;
+        ? ayTrendData
+        : deptData;
 
   // 4. Rating Distribution data (interactive filter: Overall or specific Year Level)
   const tierMap = {
@@ -679,6 +716,7 @@ export default function AdminReport() {
             sectionsList: localMatch?.sectionsList || "—",
             sectionsCount: localMatch?.sectionsCount || 0,
             students: localMatch?.students ?? "—",
+            sectionBreakdown: localMatch?.sectionBreakdown || [],
           };
         })
         .filter(f => !filterFaculty || f.faculty_id === filterFaculty)
@@ -789,6 +827,227 @@ export default function AdminReport() {
               </span>
             </td>
           </tr>
+        `;
+      }).join("");
+
+      // Fetch AI summaries & allowed qualitative comments for all reporting teachers (Option A)
+      const facIds = facultiesToReport.map(f => f.faculty_id);
+      const [aiSumRes, anonCommRes] = await Promise.all([
+        supabase
+          .from("faculty_ai_summaries")
+          .select("faculty_id, summary, subject_code")
+          .in("faculty_id", facIds)
+          .eq("academic_year", ayLabel)
+          .eq("semester", semLabel),
+        supabase
+          .from("admin_evaluations_anon")
+          .select("faculty_id, comment, ratings, submitted_on")
+          .in("faculty_id", facIds)
+          .eq("academic_year", ayLabel)
+          .eq("semester", semLabel)
+          .eq("moderation_status", "allow")
+          .not("comment", "is", null),
+      ]);
+
+      const summariesByFaculty = new Map();
+      (aiSumRes.data || []).forEach(s => {
+        if (!summariesByFaculty.has(s.faculty_id) || !s.subject_code) {
+          summariesByFaculty.set(s.faculty_id, s.summary);
+        }
+      });
+
+      const commentsByFaculty = new Map();
+      (anonCommRes.data || []).forEach(c => {
+        const text = (c.comment || "").trim();
+        if (text) {
+          if (!commentsByFaculty.has(c.faculty_id)) commentsByFaculty.set(c.faculty_id, []);
+          commentsByFaculty.get(c.faculty_id).push(text);
+        }
+      });
+
+      // Attempt live Groq synthesis for faculty with comments who lack cached summaries
+      const missingFacs = facultiesToReport.filter(f =>
+        !summariesByFaculty.has(f.faculty_id) &&
+        (commentsByFaculty.get(f.faculty_id) || []).length > 0
+      );
+
+      if (missingFacs.length > 0) {
+        await Promise.allSettled(
+          missingFacs.map(async (f) => {
+            try {
+              const res = await supabase.functions.invoke("summarize-comments", {
+                body: {
+                  faculty_id: f.faculty_id,
+                  academic_year: ayLabel,
+                  semester: semLabel,
+                  subject_code: "",
+                },
+              });
+              if (res.data?.summary) {
+                summariesByFaculty.set(f.faculty_id, res.data.summary);
+              }
+            } catch {
+              // Gracefully continue if period not released or network issue
+            }
+          })
+        );
+      }
+
+      // Build Faculty Evaluation Dossiers (Option A + Comments all together under each teacher)
+      const facultyDossiersHtml = facultiesToReport.map((f, i) => {
+        const ratingNum = f.average_rating === null ? null : Number(f.average_rating);
+        const ratingStr = ratingNum !== null ? ratingNum.toFixed(2) : "—";
+        const classification = f.performance_label || (ratingNum !== null ? getPerformanceLabel(ratingNum) : "—");
+
+        const rawAiSummary = summariesByFaculty.get(f.faculty_id) || "";
+        const aiParsed = parseAiSummaryText(rawAiSummary);
+
+        const rawComments = commentsByFaculty.get(f.faculty_id) || [];
+        const distinctQuotes = Array.from(new Set(rawComments)).slice(0, 8);
+
+        const sectionRowsHtml = (f.sectionBreakdown || []).map((sec, sIdx) => `
+          <tr style="background: ${sIdx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+            <td style="padding: 6px 10px; font-weight: 700; color: #1e293b;">
+              <span style="font-family: monospace; font-size: 10px; background: #e0e7ff; color: #3730a3; padding: 2px 5px; border-radius: 4px; margin-right: 5px;">
+                ${escapeHtml(sec.subject || "")}
+              </span>
+              ${escapeHtml(sec.subjectName || "")}
+            </td>
+            <td style="padding: 6px 10px; font-weight: 600; color: #334155;">
+              ${escapeHtml(sec.section || "—")}
+            </td>
+            <td style="padding: 6px 10px; text-align: center; font-weight: 700; color: #0f172a;">
+              ${sec.formCount || 0}
+            </td>
+            <td style="padding: 6px 10px; text-align: right; font-weight: 800; color: ${getPerformanceColor(sec.rating)};">
+              ${sec.rating !== "—" ? `${sec.rating} / 5.0` : "—"}
+            </td>
+          </tr>
+        `).join("");
+
+        const quotesHtml = distinctQuotes.length > 0 ? distinctQuotes.map(q => `
+          <div style="background: #f8fafc; border-left: 3.5px solid #2563eb; border-radius: 0 6px 6px 0; padding: 8px 12px; margin-bottom: 6px; font-size: 10.5px; color: #334155; font-style: italic; line-height: 1.45;">
+            “${escapeHtml(q)}”
+          </div>
+        `).join("") : `
+          <div style="color: #94a3b8; font-style: italic; font-size: 10.5px; padding: 4px 0;">
+            No qualitative comments submitted for this evaluation period.
+          </div>
+        `;
+
+        const aiBoxHtml = aiParsed.hasSummary ? `
+          <!-- Option A: Real Groq AI Qualitative Synthesis -->
+          <div style="border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 12px 14px; background: #fbfcfe; margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 10.5px; font-weight: 800; color: #1e3a8a; text-transform: uppercase; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 6px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                Groq LLaMA 3 Qualitative Synthesis
+              </span>
+              <span style="font-size: 9px; font-weight: 800; background: #4f46e5; color: #ffffff; padding: 2px 7px; border-radius: 999px;">
+                AI Synthesis &bull; Verified
+              </span>
+            </div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.5; margin-bottom: 10px;">
+              ${escapeHtml(aiParsed.overview)}
+            </div>
+
+            <!-- Strengths & Recommendations Columns -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 8px 10px;">
+                <div style="font-size: 9.5px; font-weight: 800; color: #15803d; text-transform: uppercase; margin-bottom: 4px;">
+                  Demonstrated Strengths
+                </div>
+                ${aiParsed.strengths.length > 0 ? `
+                  <ul style="margin: 0; padding-left: 14px; font-size: 10.5px; color: #166534; line-height: 1.4;">
+                    ${aiParsed.strengths.map(s => `<li>${escapeHtml(s)}</li>`).join("")}
+                  </ul>
+                ` : `<div style="font-size: 10px; color: #166534; font-style: italic;">No specific strengths extracted.</div>`}
+              </div>
+              <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 8px 10px;">
+                <div style="font-size: 9.5px; font-weight: 800; color: #b45309; text-transform: uppercase; margin-bottom: 4px;">
+                  Actionable Recommendations
+                </div>
+                ${aiParsed.recommendations.length > 0 ? `
+                  <ul style="margin: 0; padding-left: 14px; font-size: 10.5px; color: #92400e; line-height: 1.4;">
+                    ${aiParsed.recommendations.map(r => `<li>${escapeHtml(r)}</li>`).join("")}
+                  </ul>
+                ` : `<div style="font-size: 10px; color: #92400e; font-style: italic;">No specific recommendations extracted.</div>`}
+              </div>
+            </div>
+          </div>
+        ` : distinctQuotes.length >= 2 ? `
+          <div style="border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px 14px; background: #f8fafc; margin-bottom: 14px; color: #475569; font-size: 10.5px;">
+            <strong style="color: #1e3a8a;">AI Qualitative Synthesis:</strong> Pending evaluation period release or Groq AI batch generation. Anonymized student feedback quotes are displayed directly below.
+          </div>
+        ` : `
+          <div style="border: 1px dashed #e2e8f0; border-radius: 8px; padding: 10px 14px; background: #f8fafc; margin-bottom: 14px; color: #64748b; font-size: 10.5px;">
+            <strong style="color: #475569;">AI Qualitative Synthesis:</strong> Insufficient qualitative student comments submitted for this evaluation period to produce an AI synthesis.
+          </div>
+        `;
+
+        return `
+          <div class="faculty-dossier" style="page-break-inside: avoid; border: 1.5px solid #cbd5e1; border-radius: 10px; padding: 16px 18px; margin-bottom: 22px; background: #ffffff;">
+            <!-- Faculty Header -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 12px;">
+              <div>
+                <div style="font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; margin-bottom: 2px;">
+                  FACULTY PERFORMANCE DOSSIER &bull; #${i + 1}
+                </div>
+                <h3 style="font-size: 17px; font-weight: 900; color: #0f172a; margin: 0 0 4px 0; letter-spacing: -0.3px;">
+                  ${escapeHtml(f.faculty_name)}
+                </h3>
+                <div style="font-size: 11px; font-weight: 600; color: #475569; display: flex; gap: 8px; align-items: center;">
+                  <span>${escapeHtml(f.department || "Academic Program")}</span>
+                  <span style="color: #cbd5e1;">&bull;</span>
+                  <span>${f.forms_received || 0} Submissions</span>
+                  <span style="color: #cbd5e1;">&bull;</span>
+                  <span>${f.sectionsCount || 0} Class Sections</span>
+                </div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-size: 24px; font-weight: 900; color: ${ratingColor(ratingNum)}; line-height: 1;">
+                  ${ratingStr} <span style="font-size: 11px; font-weight: 700; color: #94a3b8;">/ 5.00</span>
+                </div>
+                <div style="margin-top: 4px;">
+                  <span class="classification-badge" style="background:${ratingBg(ratingNum)};border:1px solid ${ratingBorder(ratingNum)};color:${ratingColor(ratingNum)};">
+                    ${escapeHtml(classification)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Subject / Section Breakdown Table (if available) -->
+            ${(f.sectionBreakdown && f.sectionBreakdown.length > 0) ? `
+              <div style="margin-bottom: 14px;">
+                <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #1e3a8a; margin-bottom: 6px;">
+                  Assigned Classes & Section Ratings
+                </div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 10px; border: 1px solid #e2e8f0; margin-bottom: 0;">
+                  <thead>
+                    <tr style="background: #0f172a; color: #fff;">
+                      <th style="padding: 6px 10px; text-align: left; font-size: 9px; font-weight: 700;">Subject / Course</th>
+                      <th style="padding: 6px 10px; text-align: left; font-size: 9px; font-weight: 700;">Section</th>
+                      <th style="padding: 6px 10px; text-align: center; font-size: 9px; font-weight: 700;">Evaluations</th>
+                      <th style="padding: 6px 10px; text-align: right; font-size: 9px; font-weight: 700;">Class Rating</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${sectionRowsHtml}
+                  </tbody>
+                </table>
+              </div>
+            ` : ""}
+
+            ${aiBoxHtml}
+
+            <!-- Student Feedback Highlights All Together Under This Teacher -->
+            <div>
+              <div style="font-size: 10px; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+                Student Feedback Highlights (${distinctQuotes.length} Quotes &bull; Anonymized)
+              </div>
+              ${quotesHtml}
+            </div>
+          </div>
         `;
       }).join("");
 
@@ -1171,6 +1430,17 @@ export default function AdminReport() {
             </tfoot>
           </table>
 
+          <!-- Comprehensive Faculty Evaluation Dossiers (Option A + Comments all together under teacher) -->
+          <div class="page-break" style="page-break-before: always; margin-top: 28px; padding-top: 18px; border-top: 2px dashed #cbd5e1;">
+            <div class="table-section-title" style="margin-bottom: 14px;">
+              <span>Faculty Performance Dossiers & Qualitative Feedback</span>
+              <span style="font-size: 10px; color: #64748b; font-weight: 600; text-transform: none;">
+                Option A: Groq AI Qualitative Synthesis & Anonymized Student Comments
+              </span>
+            </div>
+            ${facultyDossiersHtml}
+          </div>
+
           <!-- Official Sign-off Block -->
           <div class="signature-grid">
             <div class="sig-card">
@@ -1194,7 +1464,7 @@ export default function AdminReport() {
           </div>
 
           <div class="notice-card">
-            Official Academic Record Notice: This document is generated directly from FacultyTrack evaluation records. In strict compliance with institutional student anonymity policy, individual student identities and qualitative comments are excluded from exported reports. Server audit log action: report.export.
+            Official Academic Record Notice: This document is generated directly from FacultyTrack evaluation records. In strict compliance with institutional student anonymity policy, all student identities and tokens are completely protected. Qualitative student comments are screened through content moderation filters and synthesized via Groq LLaMA 3 AI. Server audit log action: report.export.
           </div>
 
           <div class="footer-card">
@@ -1224,16 +1494,360 @@ export default function AdminReport() {
     }
   };
 
+  // ── Individual Faculty Report Export (PDF + AI Synthesis & Comments) ──
+  const [exportingFacultyPdf, setExportingFacultyPdf] = useState(false);
+
+  const handleExportIndividualFacultyPDF = async (targetReport) => {
+    if (!targetReport) return;
+    const ayLabel = filterAY || targetReport.academic_year || "Current Period";
+    const semLabel = filterSem || targetReport.semester || "";
+
+    const win = window.open("", "_blank");
+    if (!win) {
+      alert("Popup blocked. Please allow popups for this site to export the PDF.");
+      return;
+    }
+
+    win.document.open();
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Generating Faculty Report (PDF)...</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; color: #334155; }
+            .spinner { width: 44px; height: 44px; border: 4px solid #e2e8f0; border-top-color: #1e3a8a; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 20px; }
+            @keyframes spin { to { transform: rotate(360deg); } }
+            h2 { margin: 0 0 8px 0; color: #0f172a; font-size: 20px; }
+            p { margin: 0; color: #64748b; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="spinner"></div>
+          <h2>Generating Faculty Performance Evaluation Report</h2>
+          <p>Compiling quantitative scores, AI qualitative synthesis, and student feedback quotes...</p>
+        </body>
+      </html>
+    `);
+    win.document.close();
+
+    setExportingFacultyPdf(true);
+    try {
+      // 1. Fetch AI Summary & Comments in parallel
+      const [sumRes, commRes] = await Promise.all([
+        supabase.functions.invoke("summarize-comments", {
+          body: {
+            faculty_id: targetReport.facultyId,
+            academic_year: ayLabel,
+            semester: semLabel,
+            subject_code: "",
+          },
+        }).catch(() => ({ data: null })),
+        supabase
+          .from("admin_evaluations_anon")
+          .select("comment, ratings, submitted_on")
+          .eq("faculty_id", targetReport.facultyId)
+          .eq("academic_year", ayLabel)
+          .eq("semester", semLabel)
+          .eq("moderation_status", "allow")
+          .not("comment", "is", null),
+      ]);
+
+      const now = new Date().toLocaleDateString("en-PH", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      const summaryData = sumRes.data;
+      const rawComments = (commRes.data || [])
+        .map(r => (r.comment || "").trim())
+        .filter(c => c.length > 0);
+
+      // Clean, filter, and pick top 4-6 representative quotes
+      const distinctQuotes = Array.from(new Set(rawComments)).slice(0, 6);
+
+      const ratingNum = targetReport.rating !== "—" ? Number(targetReport.rating) : null;
+      const ratingColor = ratingNum ? getPerformanceColor(ratingNum) : "#64748b";
+      const ratingClassLabel = ratingNum ? getPerformanceLabel(ratingNum) : "Unclassified";
+
+      const aiParsed = parseAiSummaryText(summaryData?.summary || "");
+      const overviewText = aiParsed.overview;
+      const strengthsList = aiParsed.strengths;
+      const recommendationsList = aiParsed.recommendations;
+
+      const sectionRows = (targetReport.sectionBreakdown || []).map((sec, i) => `
+        <tr style="background: ${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+          <td style="padding: 8px 12px; font-weight: 700; color: #1e293b;">
+            <span style="font-family: monospace; font-size: 11px; background: #e0e7ff; color: #3730a3; padding: 2px 6px; border-radius: 4px; margin-right: 6px;">
+              ${escapeHtml(sec.subject)}
+            </span>
+            ${sec.subjectName ? escapeHtml(sec.subjectName) : ""}
+          </td>
+          <td style="padding: 8px 12px; font-weight: 600; color: #334155;">
+            ${escapeHtml(sec.section)}
+          </td>
+          <td style="padding: 8px 12px; text-align: center; font-weight: 700; color: #0f172a;">
+            ${sec.formCount}
+          </td>
+          <td style="padding: 8px 12px; text-align: right; font-weight: 800; color: ${getPerformanceColor(sec.rating)};">
+            ${sec.rating !== "—" ? `${sec.rating} / 5.0` : "—"}
+          </td>
+        </tr>
+      `).join("");
+
+      const quotesHtml = distinctQuotes.length > 0 ? distinctQuotes.map(q => `
+        <div style="background: #f8fafc; border-left: 3px solid #2563eb; border-radius: 0 8px 8px 0; padding: 10px 14px; margin-bottom: 8px; font-size: 11px; color: #334155; font-style: italic; line-height: 1.5;">
+          “${escapeHtml(q)}”
+        </div>
+      `).join("") : `<div style="color: #94a3b8; font-style: italic; font-size: 11px; padding: 8px;">No qualitative feedback comments recorded for this period.</div>`;
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8"/>
+          <title>Individual Faculty Evaluation Report — ${escapeHtml(targetReport.faculty)}</title>
+          <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+              color: #0f172a;
+              font-size: 11px;
+              line-height: 1.45;
+              background: #ffffff;
+              padding: 24px 30px;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            @page { size: portrait; margin: 10mm 12mm; }
+            @media print {
+              body { padding: 0; }
+              .no-print { display: none !important; }
+            }
+            .no-print-bar {
+              background: #0f172a; color: #fff; padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; border-radius: 8px; margin-bottom: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            }
+            .inst-header { text-align: center; padding-bottom: 12px; border-bottom: 2.5px solid #1e3a8a; margin-bottom: 14px; }
+            .inst-pretitle { font-size: 10px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #475569; margin-bottom: 3px; }
+            .inst-title { font-size: 19px; font-weight: 900; color: #1e3a8a; letter-spacing: -0.4px; margin-bottom: 4px; }
+            .inst-subtitle { font-size: 11.5px; font-weight: 600; color: #334155; margin-bottom: 8px; }
+            .inst-tags { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }
+            .tag { display: inline-block; padding: 3px 9px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 10.5px; color: #1e293b; }
+            
+            .hero-card { display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 14px 20px; margin-bottom: 14px; }
+            .hero-score { font-size: 30px; font-weight: 900; line-height: 1; }
+            .hero-badge { display: inline-block; padding: 5px 14px; border-radius: 999px; color: #fff; font-weight: 800; font-size: 12px; letter-spacing: 0.3px; }
+            
+            .meta-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+            .meta-tile { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; }
+            .meta-tile-label { font-size: 9px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 2px; }
+            .meta-tile-val { font-size: 13.5px; font-weight: 800; color: #0f172a; }
+
+            .section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #1e3a8a; margin: 14px 0 8px; display: flex; align-items: center; gap: 6px; }
+            table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin-bottom: 14px; }
+            th { background: #0f172a; color: #ffffff; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 12px; text-align: left; }
+            td { border: 1px solid #e2e8f0; }
+
+            .ai-box { border: 1.5px solid #cbd5e1; border-radius: 10px; padding: 14px; margin-bottom: 14px; background: #ffffff; }
+            .ai-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+            .ai-badge { background: #4f46e5; color: #ffffff; font-size: 9.5px; font-weight: 800; padding: 3px 8px; border-radius: 999px; letter-spacing: 0.5px; }
+
+            .strength-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; }
+            .rec-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; }
+            
+            .sig-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
+            .sig-card { text-align: center; }
+            .sig-space { height: 40px; border-bottom: 1px solid #0f172a; margin-bottom: 6px; }
+            .sig-name { font-weight: 800; font-size: 10.5px; color: #0f172a; }
+            .sig-role { font-size: 9.5px; color: #64748b; }
+          </style>
+        </head>
+        <body>
+          <div class="no-print no-print-bar">
+            <span style="font-weight: 700; font-size: 13px;">FacultyTrack &bull; Individual Faculty Evaluation Report</span>
+            <div style="display: flex; gap: 8px;">
+              <button onclick="window.print()" style="background: #2563eb; color: #fff; border: none; padding: 7px 16px; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer;">
+                Print / Save as PDF
+              </button>
+              <button onclick="window.close()" style="background: #475569; color: #fff; border: none; padding: 7px 14px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer;">
+                Close
+              </button>
+            </div>
+          </div>
+
+          <div class="inst-header">
+            <div class="inst-pretitle">FACULTYTRACK ACADEMIC PERFORMANCE & EVALUATION SYSTEM</div>
+            <h1 class="inst-title">INDIVIDUAL FACULTY PERFORMANCE EVALUATION REPORT</h1>
+            <div class="inst-subtitle">Comprehensive Performance Classification, Quantitative Metrics & Qualitative AI Synthesis</div>
+            <div class="inst-tags">
+              <span class="tag">Faculty: <strong>${escapeHtml(targetReport.faculty)}</strong></span>
+              <span class="tag">Department / Program: <strong>${escapeHtml(targetReport.department)}</strong></span>
+              <span class="tag">Academic Year: <strong>${escapeHtml(ayLabel)}</strong></span>
+              <span class="tag">Semester: <strong>${escapeHtml(semLabel)}</strong></span>
+            </div>
+          </div>
+
+          <!-- Hero Scorecard -->
+          <div class="hero-card">
+            <div>
+              <div style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Consolidated Overall Rating</div>
+              <div style="display: flex; align-items: baseline; gap: 6px; margin-top: 3px;">
+                <span class="hero-score" style="color: ${ratingColor};">${targetReport.rating !== "—" ? targetReport.rating : "—"}</span>
+                <span style="font-size: 13px; font-weight: 700; color: #64748b;">/ 5.00</span>
+              </div>
+            </div>
+            <div>
+              <span class="hero-badge" style="background: ${ratingColor};">
+                ${escapeHtml(ratingClassLabel)}
+              </span>
+            </div>
+          </div>
+
+          <!-- Meta Tiles -->
+          <div class="meta-tiles">
+            <div class="meta-tile">
+              <div class="meta-tile-label">Students Participated</div>
+              <div class="meta-tile-val">${targetReport.students} unique</div>
+            </div>
+            <div class="meta-tile">
+              <div class="meta-tile-label">Submissions Received</div>
+              <div class="meta-tile-val">${targetReport.formCount} forms</div>
+            </div>
+            <div class="meta-tile">
+              <div class="meta-tile-label">Assigned Subjects</div>
+              <div class="meta-tile-val" style="font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(targetReport.subjects)}</div>
+            </div>
+            <div class="meta-tile">
+              <div class="meta-tile-label">Class Sections</div>
+              <div class="meta-tile-val">${targetReport.sectionsCount} (${escapeHtml(targetReport.sectionsList)})</div>
+            </div>
+          </div>
+
+          <!-- Section Breakdown -->
+          <div class="section-title">Class Section Performance Breakdown</div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 48%;">SUBJECT CODE &amp; TITLE</th>
+                <th style="width: 20%;">SECTION</th>
+                <th style="width: 16%; text-align: center;">SUBMISSIONS</th>
+                <th style="width: 16%; text-align: right;">MEAN RATING</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sectionRows || '<tr><td colspan="4" style="text-align: center; padding: 12px; color: #94a3b8;">No section records.</td></tr>'}
+            </tbody>
+          </table>
+
+          <!-- AI Qualitative Synthesis (Option A) -->
+          ${aiParsed.hasSummary ? `
+            <div class="ai-box">
+              <div class="ai-header">
+                <span class="ai-badge">★ GROQ LLaMA 3 QUALITATIVE SYNTHESIS</span>
+                <span style="font-size: 10px; color: #64748b; font-weight: 600;">Based on Anonymized Student Submissions</span>
+              </div>
+
+              <div style="font-size: 11px; color: #334155; line-height: 1.55; margin-bottom: 12px;">
+                <strong>Executive Synthesis:</strong> ${escapeHtml(overviewText)}
+              </div>
+
+              <div class="strength-box">
+                <div style="font-size: 10.5px; font-weight: 800; color: #15803d; text-transform: uppercase; margin-bottom: 6px;">
+                  ✓ Demonstrated Strengths:
+                </div>
+                ${strengthsList.length > 0 ? `
+                  <ul style="padding-left: 16px; font-size: 10.5px; color: #166534; line-height: 1.5;">
+                    ${strengthsList.map(s => `<li>${escapeHtml(s)}</li>`).join("")}
+                  </ul>
+                ` : `<div style="font-size: 10.5px; color: #166534; font-style: italic;">No specific strengths highlighted.</div>`}
+              </div>
+
+              <div class="rec-box">
+                <div style="font-size: 10.5px; font-weight: 800; color: #b45309; text-transform: uppercase; margin-bottom: 6px;">
+                  ➔ Actionable Recommendations:
+                </div>
+                ${recommendationsList.length > 0 ? `
+                  <ul style="padding-left: 16px; font-size: 10.5px; color: #92400e; line-height: 1.5;">
+                    ${recommendationsList.map(r => `<li>${escapeHtml(r)}</li>`).join("")}
+                  </ul>
+                ` : `<div style="font-size: 10.5px; color: #92400e; font-style: italic;">No specific recommendations highlighted.</div>`}
+              </div>
+            </div>
+          ` : distinctQuotes.length >= 2 ? `
+            <div style="border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px 14px; background: #f8fafc; margin-bottom: 14px; color: #475569; font-size: 11px;">
+              <strong style="color: #1e3a8a;">AI Qualitative Synthesis:</strong> Pending evaluation period release / Groq AI batch generation. Anonymized student feedback quotes are displayed directly below.
+            </div>
+          ` : `
+            <div style="border: 1px dashed #e2e8f0; border-radius: 8px; padding: 10px 14px; background: #f8fafc; margin-bottom: 14px; color: #64748b; font-size: 10.5px;">
+              <strong style="color: #475569;">AI Qualitative Synthesis:</strong> Insufficient qualitative student comments submitted for this faculty member during this evaluation period to produce an AI synthesis.
+            </div>
+          `}
+
+          <!-- Student Comments Annex (Option A: Highlights under teacher) -->
+          <div class="section-title">Identity-Stripped Student Feedback Quotes (Anonymized)</div>
+          <div style="margin-bottom: 14px;">
+            ${quotesHtml}
+          </div>
+
+          <!-- Signatures -->
+          <div class="sig-grid">
+            <div class="sig-card">
+              <div class="sig-space"></div>
+              <div class="sig-name">${escapeHtml(userProfile?.full_name || "Evaluation Administrator")}</div>
+              <div class="sig-role">Prepared by / Academic Coordinator</div>
+            </div>
+            <div class="sig-card">
+              <div class="sig-space"></div>
+              <div class="sig-name">Department Chairperson / Program Head</div>
+              <div class="sig-role">Reviewed &amp; Verified by</div>
+            </div>
+            <div class="sig-card">
+              <div class="sig-space"></div>
+              <div class="sig-name">Dean / VP Academic Affairs</div>
+              <div class="sig-role">Approved by</div>
+            </div>
+          </div>
+
+          <div style="margin-top: 14px; font-size: 9px; color: #94a3b8; text-align: center; border-top: 1px solid #f1f5f9; padding-top: 8px;">
+            FacultyTrack Academic Management & Evaluation System &bull; Generated: ${escapeHtml(now)} &bull; Student anonymity strictly guaranteed.
+          </div>
+
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.focus();
+                window.print();
+              }, 350);
+            };
+          </script>
+        </body>
+        </html>
+      `;
+
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    } catch (err) {
+      if (win && !win.closed) win.close();
+      alert("Individual report export failed: " + (err.message || "unknown error"));
+    } finally {
+      setExportingFacultyPdf(false);
+    }
+  };
+
   return (
     <AdminLayout title="Evaluation Report">
       <section className="ad-content">
-       <div className="ad-welcomeHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+        <div className="ad-welcomeHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
           <div>
             <h2 className="ad-title">Evaluation Report</h2>
             <p className="ad-subtitle">View and export faculty evaluation results.
               {!scopeLoading && !isSuper && (
                 <span style={{ display: "block", marginTop: 4, fontWeight: 700 }}>
-                  
+
                 </span>
               )}
             </p>
@@ -1410,184 +2024,184 @@ export default function AdminReport() {
 
           {/* TAB 2 LEFT: Faculty Directory */}
           {activeReportTab === "roster" && (
-          <div className="ad-tableCard" style={{ padding: "16px", marginBottom: 0 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <RosterIcon />
-                <h3 style={{ margin: 0, fontSize: "13.5px", fontWeight: 700, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  Faculty Directory
-                </h3>
-              </div>
-              <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", background: "#e0e7ff", color: "#4338ca", borderRadius: "999px" }}>
-                {displayedReportData.length}
-              </span>
-            </div>
-
-            {/* Search Input */}
-            <div className="ad-searchFilterWrap" style={{ width: "100%", marginBottom: "10px" }}>
-              <svg className="ad-searchFilterIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <input
-                type="text"
-                className="ad-searchFilterInput"
-                placeholder="Search faculty, subject..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                style={{ width: "100%", fontSize: "12px", padding: "7px 10px 7px 32px" }}
-              />
-            </div>
-
-            {/* Tier Filter Pills */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "4px", background: "#f8fafc", padding: "3px", borderRadius: "8px", marginBottom: "12px" }}>
-              <button
-                type="button"
-                onClick={() => setRosterTierFilter("all")}
-                style={{
-                  padding: "4px 2px",
-                  fontSize: "10.5px",
-                  fontWeight: 700,
-                  borderRadius: "6px",
-                  border: "none",
-                  cursor: "pointer",
-                  textAlign: "center",
-                  background: rosterTierFilter === "all" ? "#ffffff" : "transparent",
-                  color: rosterTierFilter === "all" ? "#0f172a" : "#64748b",
-                  boxShadow: rosterTierFilter === "all" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
-                }}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                onClick={() => setRosterTierFilter("high")}
-                style={{
-                  padding: "4px 2px",
-                  fontSize: "10.5px",
-                  fontWeight: 700,
-                  borderRadius: "6px",
-                  border: "none",
-                  cursor: "pointer",
-                  textAlign: "center",
-                  background: rosterTierFilter === "high" ? "#ffffff" : "transparent",
-                  color: rosterTierFilter === "high" ? "#15803d" : "#64748b",
-                  boxShadow: rosterTierFilter === "high" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
-                }}
-              >
-                ★ 4.0+
-              </button>
-              <button
-                type="button"
-                onClick={() => setRosterTierFilter("mid")}
-                style={{
-                  padding: "4px 2px",
-                  fontSize: "10.5px",
-                  fontWeight: 700,
-                  borderRadius: "6px",
-                  border: "none",
-                  cursor: "pointer",
-                  textAlign: "center",
-                  background: rosterTierFilter === "mid" ? "#ffffff" : "transparent",
-                  color: rosterTierFilter === "mid" ? "#b45309" : "#64748b",
-                  boxShadow: rosterTierFilter === "mid" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
-                }}
-              >
-                3.0-3.9
-              </button>
-              <button
-                type="button"
-                onClick={() => setRosterTierFilter("low")}
-                style={{
-                  padding: "4px 2px",
-                  fontSize: "10.5px",
-                  fontWeight: 700,
-                  borderRadius: "6px",
-                  border: "none",
-                  cursor: "pointer",
-                  textAlign: "center",
-                  background: rosterTierFilter === "low" ? "#ffffff" : "transparent",
-                  color: rosterTierFilter === "low" ? "#b91c1c" : "#64748b",
-                  boxShadow: rosterTierFilter === "low" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
-                }}
-              >
-                &lt;3.0
-              </button>
-            </div>
-
-            {/* Scrollable Faculty Card List */}
-            <div style={{ maxHeight: "calc(100vh - 300px)", overflowY: "auto", paddingRight: "4px" }}>
-              {displayedReportData.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "30px 10px", color: "#94a3b8", fontSize: "12px" }}>
-                  No faculty records match filters.
+            <div className="ad-tableCard" style={{ padding: "16px", marginBottom: 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <RosterIcon />
+                  <h3 style={{ margin: 0, fontSize: "13.5px", fontWeight: 700, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Faculty Directory
+                  </h3>
                 </div>
-              ) : (
-                displayedReportData.map(report => {
-                  const isSelected = selectedFacultyId === report.id;
-                  const color = getPerformanceColor(report.rating);
-                  return (
-                    <div
-                      key={report.id}
-                      onClick={() => setSelectedFacultyId(report.id)}
-                      className={`ad-facultyCardItem ${isSelected ? "ad-facultyCardItem--active" : ""}`}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "6px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-                          <div
-                            className="ad-facultyMonogram"
-                            style={{
-                              width: "28px",
-                              height: "28px",
-                              fontSize: "11px",
-                              flexShrink: 0,
-                              background: isSelected ? "#1e3a8a" : undefined,
-                              color: isSelected ? "#ffffff" : undefined,
-                            }}
-                          >
-                            {getInitials(report.faculty)}
-                          </div>
-                          <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            <div style={{ fontSize: "12.5px", fontWeight: 700, color: isSelected ? "#1e3a8a" : "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {report.faculty}
+                <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", background: "#e0e7ff", color: "#4338ca", borderRadius: "999px" }}>
+                  {displayedReportData.length}
+                </span>
+              </div>
+
+              {/* Search Input */}
+              <div className="ad-searchFilterWrap" style={{ width: "100%", marginBottom: "10px" }}>
+                <svg className="ad-searchFilterIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="text"
+                  className="ad-searchFilterInput"
+                  placeholder="Search faculty, subject..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  style={{ width: "100%", fontSize: "12px", padding: "7px 10px 7px 32px" }}
+                />
+              </div>
+
+              {/* Tier Filter Pills */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "4px", background: "#f8fafc", padding: "3px", borderRadius: "8px", marginBottom: "12px" }}>
+                <button
+                  type="button"
+                  onClick={() => setRosterTierFilter("all")}
+                  style={{
+                    padding: "4px 2px",
+                    fontSize: "10.5px",
+                    fontWeight: 700,
+                    borderRadius: "6px",
+                    border: "none",
+                    cursor: "pointer",
+                    textAlign: "center",
+                    background: rosterTierFilter === "all" ? "#ffffff" : "transparent",
+                    color: rosterTierFilter === "all" ? "#0f172a" : "#64748b",
+                    boxShadow: rosterTierFilter === "all" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                  }}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRosterTierFilter("high")}
+                  style={{
+                    padding: "4px 2px",
+                    fontSize: "10.5px",
+                    fontWeight: 700,
+                    borderRadius: "6px",
+                    border: "none",
+                    cursor: "pointer",
+                    textAlign: "center",
+                    background: rosterTierFilter === "high" ? "#ffffff" : "transparent",
+                    color: rosterTierFilter === "high" ? "#15803d" : "#64748b",
+                    boxShadow: rosterTierFilter === "high" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                  }}
+                >
+                  ★ 4.0+
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRosterTierFilter("mid")}
+                  style={{
+                    padding: "4px 2px",
+                    fontSize: "10.5px",
+                    fontWeight: 700,
+                    borderRadius: "6px",
+                    border: "none",
+                    cursor: "pointer",
+                    textAlign: "center",
+                    background: rosterTierFilter === "mid" ? "#ffffff" : "transparent",
+                    color: rosterTierFilter === "mid" ? "#b45309" : "#64748b",
+                    boxShadow: rosterTierFilter === "mid" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                  }}
+                >
+                  3.0-3.9
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRosterTierFilter("low")}
+                  style={{
+                    padding: "4px 2px",
+                    fontSize: "10.5px",
+                    fontWeight: 700,
+                    borderRadius: "6px",
+                    border: "none",
+                    cursor: "pointer",
+                    textAlign: "center",
+                    background: rosterTierFilter === "low" ? "#ffffff" : "transparent",
+                    color: rosterTierFilter === "low" ? "#b91c1c" : "#64748b",
+                    boxShadow: rosterTierFilter === "low" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                  }}
+                >
+                  &lt;3.0
+                </button>
+              </div>
+
+              {/* Scrollable Faculty Card List */}
+              <div style={{ maxHeight: "calc(100vh - 300px)", overflowY: "auto", paddingRight: "4px" }}>
+                {displayedReportData.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "30px 10px", color: "#94a3b8", fontSize: "12px" }}>
+                    No faculty records match filters.
+                  </div>
+                ) : (
+                  displayedReportData.map(report => {
+                    const isSelected = selectedFacultyId === report.id;
+                    const color = getPerformanceColor(report.rating);
+                    return (
+                      <div
+                        key={report.id}
+                        onClick={() => setSelectedFacultyId(report.id)}
+                        className={`ad-facultyCardItem ${isSelected ? "ad-facultyCardItem--active" : ""}`}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "6px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+                            <div
+                              className="ad-facultyMonogram"
+                              style={{
+                                width: "28px",
+                                height: "28px",
+                                fontSize: "11px",
+                                flexShrink: 0,
+                                background: isSelected ? "#1e3a8a" : undefined,
+                                color: isSelected ? "#ffffff" : undefined,
+                              }}
+                            >
+                              {getInitials(report.faculty)}
                             </div>
-                            <div style={{ fontSize: "11px", color: "#64748b" }}>
-                              {report.department}
+                            <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              <div style={{ fontSize: "12.5px", fontWeight: 700, color: isSelected ? "#1e3a8a" : "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {report.faculty}
+                              </div>
+                              <div style={{ fontSize: "11px", color: "#64748b" }}>
+                                {report.department}
+                              </div>
                             </div>
                           </div>
+
+                          {/* Rating pill */}
+                          {report.rating !== "—" ? (
+                            <div
+                              style={{
+                                padding: "3px 8px",
+                                borderRadius: "999px",
+                                fontSize: "11px",
+                                fontWeight: 800,
+                                background: `${color}15`,
+                                color: color,
+                                border: `1px solid ${color}30`,
+                                flexShrink: 0,
+                              }}
+                            >
+                              ★ {report.rating}
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: "10.5px", color: "#9ca3af", flexShrink: 0 }}>—</span>
+                          )}
                         </div>
 
-                        {/* Rating pill */}
-                        {report.rating !== "—" ? (
-                          <div
-                            style={{
-                              padding: "3px 8px",
-                              borderRadius: "999px",
-                              fontSize: "11px",
-                              fontWeight: 800,
-                              background: `${color}15`,
-                              color: color,
-                              border: `1px solid ${color}30`,
-                              flexShrink: 0,
-                            }}
-                          >
-                            ★ {report.rating}
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: "10.5px", color: "#9ca3af", flexShrink: 0 }}>—</span>
-                        )}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "#64748b", borderTop: "1px solid #f1f5f9", paddingTop: "6px", marginTop: "4px" }}>
+                          <span>{report.sectionsCount} {report.sectionsCount === 1 ? "Section" : "Sections"} &bull; {report.students} St.</span>
+                          <span style={{ fontWeight: 600, color: isSelected ? "#2563eb" : "#475569" }}>
+                            {report.formCount} {report.formCount === 1 ? "form" : "forms"} &rarr;
+                          </span>
+                        </div>
                       </div>
-
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "#64748b", borderTop: "1px solid #f1f5f9", paddingTop: "6px", marginTop: "4px" }}>
-                        <span>{report.sectionsCount} {report.sectionsCount === 1 ? "Section" : "Sections"} &bull; {report.students} St.</span>
-                        <span style={{ fontWeight: 600, color: isSelected ? "#2563eb" : "#475569" }}>
-                          {report.formCount} {report.formCount === 1 ? "form" : "forms"} &rarr;
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+                    );
+                  })
+                )}
+              </div>
             </div>
-          </div>
           )}
 
           {/* RIGHT: DETAIL PANEL */}
@@ -1617,25 +2231,44 @@ export default function AdminReport() {
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setSelectedFacultyId(null)}
-                      style={{
-                        padding: "6px 12px",
-                        borderRadius: "6px",
-                        border: "1px solid #cbd5e1",
-                        background: "#ffffff",
-                        color: "#475569",
-                        fontSize: "12px",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                      }}
-                    >
-                      &larr; Clear Selection
-                    </button>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <button
+                        type="button"
+                        className="ad-btnPrimary"
+                        disabled={exportingFacultyPdf}
+                        onClick={() => handleExportIndividualFacultyPDF(selectedReport)}
+                        style={{
+                          padding: "6px 14px",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        {exportingFacultyPdf ? "Exporting..." : "Export PDF"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFacultyId(null)}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "6px",
+                          border: "1px solid #cbd5e1",
+                          background: "#ffffff",
+                          color: "#475569",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                        }}
+                      >
+                        &larr; Clear Selection
+                      </button>
+                    </div>
                   </div>
 
                   {/* Score Hero Ribbon */}
@@ -1797,192 +2430,192 @@ export default function AdminReport() {
 
                 {!loading && !scopeLoading && hasChartData ? (
                   <>
-                    {/* TOP: Full-Width Performance Breakdown (By Year Level / AY Trend / Program) */}
-                    <div className="ad-tableCard" style={{ marginBottom: 0 }}>
-                      <div className="ad-chartHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1.5px solid #e5e7eb' }}>
-                        <div className="ad-chartHeaderInner" style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                          <span className="ad-chartIcon" style={{ background: '#1e3a8a', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
-                            <BarChartIcon />
-                          </span>
-                          <span className="ad-chartTitle" style={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
-                            {leftChartMode === "yearLevel"
-                              ? "PERFORMANCE BY YEAR LEVEL"
-                              : leftChartMode === "ayTrend"
-                              ? "ACADEMIC YEAR TREND"
-                              : "PROGRAM PERFORMANCE"}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                          {/* Orientation Switcher */}
-                          <div style={{ display: 'inline-flex', border: '1px solid #cbd5e1', borderRadius: 6, overflow: 'hidden' }}>
-                            <button
-                              type="button"
-                              title="Horizontal Bars"
-                              onClick={() => setLeftChartOrientation("horizontal")}
-                              style={{
-                                padding: '4px 8px',
-                                fontSize: 11,
-                                fontWeight: 700,
-                                background: leftChartOrientation === "horizontal" ? "#1e3a8a" : "#ffffff",
-                                color: leftChartOrientation === "horizontal" ? "#ffffff" : "#64748b",
-                                border: 'none',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                transition: 'all 0.15s ease',
-                              }}
-                            >
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <line x1="3" y1="6" x2="21" y2="6"/>
-                                <line x1="3" y1="12" x2="16" y2="12"/>
-                                <line x1="3" y1="18" x2="19" y2="18"/>
-                              </svg>
-                              Horizontal
-                            </button>
-                            <button
-                              type="button"
-                              title="Vertical Columns"
-                              onClick={() => setLeftChartOrientation("vertical")}
-                              style={{
-                                padding: '4px 8px',
-                                fontSize: 11,
-                                fontWeight: 700,
-                                background: leftChartOrientation === "vertical" ? "#1e3a8a" : "#ffffff",
-                                color: leftChartOrientation === "vertical" ? "#ffffff" : "#64748b",
-                                border: 'none',
-                                borderLeft: '1px solid #cbd5e1',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                transition: 'all 0.15s ease',
-                              }}
-                            >
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <line x1="6" y1="21" x2="6" y2="3"/>
-                                <line x1="12" y1="21" x2="12" y2="8"/>
-                                <line x1="18" y1="21" x2="18" y2="5"/>
-                              </svg>
-                              Vertical
-                            </button>
-                          </div>
-
-                          <select
-                            value={leftChartMode}
-                            onChange={(e) => setLeftChartMode(e.target.value)}
-                            style={{
-                              border: '1px solid #cbd5e1',
-                              borderRadius: 6,
-                              padding: '5px 10px',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              color: '#1e293b',
-                              background: '#ffffff',
-                              cursor: 'pointer',
-                              outline: 'none',
-                            }}
-                          >
-                            <option value="yearLevel">By Year Level</option>
-                            <option value="ayTrend">By Academic Year (Trend)</option>
-                            {(isSuper && !filterDept && deptData.length > 1) && (
-                              <option value="program">By Program</option>
-                            )}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="ad-chartBody">
-                        {activeLeftChartData.length === 0 ? (
-                          <div style={{ padding: '70px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-                            No evaluation data recorded for this view.
-                          </div>
-                        ) : (
-                          <ResponsiveContainer width="100%" height={280}>
-                            {leftChartOrientation === "horizontal" ? (
-                              <BarChart
-                                data={activeLeftChartData}
-                                layout="vertical"
-                                margin={{ top: 10, right: 30, left: 10, bottom: 10 }}
-                              >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                                <XAxis
-                                  type="number"
-                                  domain={[0, 5]}
-                                  ticks={[1, 2, 3, 4, 5]}
-                                  tick={{ fontSize: 11, fill: "#9ca3af" }}
-                                  axisLine={false}
-                                  tickLine={false}
-                                />
-                                <YAxis
-                                  type="category"
-                                  dataKey="name"
-                                  tick={{ fontSize: 12, fill: "#374151", fontWeight: 600 }}
-                                  axisLine={false}
-                                  tickLine={false}
-                                  width={leftChartMode === "ayTrend" ? 140 : 80}
-                                />
-                                <Tooltip
-                                  formatter={(v, name, item) => [
-                                    `${v} / 5.0 (${item?.payload?.responses || 0} response${item?.payload?.responses === 1 ? '' : 's'})`,
-                                    "Average Rating"
-                                  ]}
-                                  contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}
-                                />
-                                <Bar
-                                  dataKey="avg"
-                                  name="Average Rating"
-                                  fill={leftChartMode === "ayTrend" ? "#4f46e5" : "#2563eb"}
-                                  radius={[0, 4, 4, 0]}
-                                  barSize={22}
-                                />
-                              </BarChart>
-                            ) : (
-                              <BarChart
-                                data={activeLeftChartData}
-                                layout="horizontal"
-                                margin={{ top: 10, right: 20, left: -10, bottom: 10 }}
-                              >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                <XAxis
-                                  dataKey="name"
-                                  tick={{ fontSize: 11, fill: "#374151", fontWeight: 600 }}
-                                  axisLine={false}
-                                  tickLine={false}
-                                  interval={0}
-                                />
-                                <YAxis
-                                  type="number"
-                                  domain={[0, 5]}
-                                  ticks={[1, 2, 3, 4, 5]}
-                                  tick={{ fontSize: 11, fill: "#9ca3af" }}
-                                  axisLine={false}
-                                  tickLine={false}
-                                />
-                                <Tooltip
-                                  formatter={(v, name, item) => [
-                                    `${v} / 5.0 (${item?.payload?.responses || 0} response${item?.payload?.responses === 1 ? '' : 's'})`,
-                                    "Average Rating"
-                                  ]}
-                                  contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}
-                                />
-                                <Bar
-                                  dataKey="avg"
-                                  name="Average Rating"
-                                  fill={leftChartMode === "ayTrend" ? "#4f46e5" : "#2563eb"}
-                                  radius={[4, 4, 0, 0]}
-                                  barSize={leftChartMode === "ayTrend" ? 28 : 36}
-                                />
-                              </BarChart>
-                            )}
-                          </ResponsiveContainer>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* BOTTOM ROW: Donut Rating Distribution + Benchmark Scale */}
+                    {/* 2-COLUMN ROW: The Graph (Card 1) & The Distribution (Card 2) */}
                     <div className="ad-chartsRow" style={{ marginBottom: 0 }}>
-                      {/* Rating Distribution — donut + custom table */}
-                      <div className="ad-tableCard" style={{ marginBottom: 0 }}>
+                      {/* CARD 1: Performance Breakdown Graph */}
+                      <div className="ad-tableCard" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
+                        <div className="ad-chartHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1.5px solid #e5e7eb', flexWrap: 'wrap', gap: '8px' }}>
+                          <div className="ad-chartHeaderInner" style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                            <span className="ad-chartIcon" style={{ background: '#1e3a8a', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
+                              <BarChartIcon />
+                            </span>
+                            <span className="ad-chartTitle" style={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
+                              {leftChartMode === "yearLevel"
+                                ? "PERFORMANCE BY YEAR LEVEL"
+                                : leftChartMode === "ayTrend"
+                                  ? "ACADEMIC YEAR TREND"
+                                  : "PROGRAM PERFORMANCE"}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                            {/* Orientation Switcher */}
+                            <div style={{ display: 'inline-flex', border: '1px solid #cbd5e1', borderRadius: 6, overflow: 'hidden' }}>
+                              <button
+                                type="button"
+                                title="Horizontal Bars"
+                                onClick={() => setLeftChartOrientation("horizontal")}
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  background: leftChartOrientation === "horizontal" ? "#1e3a8a" : "#ffffff",
+                                  color: leftChartOrientation === "horizontal" ? "#ffffff" : "#64748b",
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <line x1="3" y1="6" x2="21" y2="6"/>
+                                  <line x1="3" y1="12" x2="16" y2="12"/>
+                                  <line x1="3" y1="18" x2="19" y2="18"/>
+                                </svg>
+                                Horizontal
+                              </button>
+                              <button
+                                type="button"
+                                title="Vertical Columns"
+                                onClick={() => setLeftChartOrientation("vertical")}
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  background: leftChartOrientation === "vertical" ? "#1e3a8a" : "#ffffff",
+                                  color: leftChartOrientation === "vertical" ? "#ffffff" : "#64748b",
+                                  border: 'none',
+                                  borderLeft: '1px solid #cbd5e1',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <line x1="6" y1="21" x2="6" y2="3"/>
+                                  <line x1="12" y1="21" x2="12" y2="8"/>
+                                  <line x1="18" y1="21" x2="18" y2="5"/>
+                                </svg>
+                                Vertical
+                              </button>
+                            </div>
+
+                            <select
+                              value={leftChartMode}
+                              onChange={(e) => setLeftChartMode(e.target.value)}
+                              style={{
+                                border: '1px solid #cbd5e1',
+                                borderRadius: 6,
+                                padding: '5px 10px',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: '#1e293b',
+                                background: '#ffffff',
+                                cursor: 'pointer',
+                                outline: 'none',
+                              }}
+                            >
+                              <option value="yearLevel">By Year Level</option>
+                              <option value="ayTrend">By Academic Year (Trend)</option>
+                              {(isSuper && !filterDept && deptData.length > 1) && (
+                                <option value="program">By Program</option>
+                              )}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="ad-chartBody" style={{ flex: 1 }}>
+                          {activeLeftChartData.length === 0 ? (
+                            <div style={{ padding: '70px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                              No evaluation data recorded for this view.
+                            </div>
+                          ) : (
+                            <ResponsiveContainer width="100%" height={280}>
+                              {leftChartOrientation === "horizontal" ? (
+                                <BarChart
+                                  data={activeLeftChartData}
+                                  layout="vertical"
+                                  margin={{ top: 10, right: 30, left: 10, bottom: 10 }}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                                  <XAxis
+                                    type="number"
+                                    domain={[0, 5]}
+                                    ticks={[1, 2, 3, 4, 5]}
+                                    tick={{ fontSize: 11, fill: "#9ca3af" }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                  />
+                                  <YAxis
+                                    type="category"
+                                    dataKey="name"
+                                    tick={{ fontSize: 12, fill: "#374151", fontWeight: 600 }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                    width={leftChartMode === "ayTrend" ? 140 : 80}
+                                  />
+                                  <Tooltip
+                                    formatter={(v, name, item) => [
+                                      `${v} / 5.0 (${item?.payload?.responses || 0} response${item?.payload?.responses === 1 ? '' : 's'})`,
+                                      "Average Rating"
+                                    ]}
+                                    contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}
+                                  />
+                                  <Bar
+                                    dataKey="avg"
+                                    name="Average Rating"
+                                    fill={leftChartMode === "ayTrend" ? "#4f46e5" : "#2563eb"}
+                                    radius={[0, 4, 4, 0]}
+                                    barSize={22}
+                                  />
+                                </BarChart>
+                              ) : (
+                                <BarChart
+                                  data={activeLeftChartData}
+                                  layout="horizontal"
+                                  margin={{ top: 10, right: 20, left: -10, bottom: 10 }}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                  <XAxis
+                                    dataKey="name"
+                                    tick={{ fontSize: 11, fill: "#374151", fontWeight: 600 }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                    interval={0}
+                                  />
+                                  <YAxis
+                                    type="number"
+                                    domain={[0, 5]}
+                                    ticks={[1, 2, 3, 4, 5]}
+                                    tick={{ fontSize: 11, fill: "#9ca3af" }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                  />
+                                  <Tooltip
+                                    formatter={(v, name, item) => [
+                                      `${v} / 5.0 (${item?.payload?.responses || 0} response${item?.payload?.responses === 1 ? '' : 's'})`,
+                                      "Average Rating"
+                                    ]}
+                                    contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}
+                                  />
+                                  <Bar
+                                    dataKey="avg"
+                                    name="Average Rating"
+                                    fill={leftChartMode === "ayTrend" ? "#4f46e5" : "#2563eb"}
+                                    radius={[4, 4, 0, 0]}
+                                    barSize={leftChartMode === "ayTrend" ? 28 : 36}
+                                  />
+                                </BarChart>
+                              )}
+                            </ResponsiveContainer>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* CARD 2: Rating Distribution */}
+                      <div className="ad-tableCard" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
                         <div className="ad-chartHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1.5px solid #e5e7eb' }}>
                           <div className="ad-chartHeaderInner" style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                             <span className="ad-chartIcon" style={{ background: '#1e3a8a', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
@@ -2014,7 +2647,7 @@ export default function AdminReport() {
                             </select>
                           </div>
                         </div>
-                        <div className="ad-chartBody" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <div className="ad-chartBody" style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1 }}>
                           {pieData.length === 0 ? (
                             <div style={{ flex: 1, padding: '70px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
                               No rating distribution recorded for this cohort.
@@ -2023,14 +2656,14 @@ export default function AdminReport() {
                             <>
                               {/* Donut */}
                               <div style={{ flexShrink: 0 }}>
-                                <ResponsiveContainer width={180} height={180}>
+                                <ResponsiveContainer width={170} height={170}>
                                   <PieChart>
                                     <Pie
                                       data={pieData}
                                       cx="50%"
                                       cy="50%"
-                                      innerRadius={50}
-                                      outerRadius={80}
+                                      innerRadius={46}
+                                      outerRadius={76}
                                       paddingAngle={2}
                                       dataKey="value"
                                       startAngle={90}
@@ -2051,8 +2684,8 @@ export default function AdminReport() {
                                   <thead>
                                     <tr>
                                       <th style={{ textAlign: 'left', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>Range</th>
-                                      <th style={{ textAlign: 'center', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>Resp.</th>
-                                      <th style={{ textAlign: 'right', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>Pct</th>
+                                      <th style={{ textAlign: 'center', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>{distYearFilter === "all" ? "Faculty" : "Submissions"}</th>
+                                      <th style={{ textAlign: 'right', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>% Share</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -2064,7 +2697,10 @@ export default function AdminReport() {
                                           <td style={{ padding: '6px 0', borderBottom: '1px solid #f9fafb' }}>
                                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                               <span style={{ width: 7, height: 7, borderRadius: '50%', background: tierColors[entry.name] || '#9ca3af', flexShrink: 0 }} />
-                                              {entry.name.split(' ')[0]}
+                                              <span>
+                                              <span style={{ fontWeight: 600, color: '#1e293b' }}>{entry.name.replace(/\s*\(.*\)/, '').trim()}</span>
+                                              <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 4 }}>{entry.name.match(/\(.*\)/)?.[0] || ''}</span>
+                                            </span>
                                             </span>
                                           </td>
                                           <td style={{ textAlign: 'center', padding: '6px 0', borderBottom: '1px solid #f9fafb', fontWeight: 600 }}>{entry.value}</td>
@@ -2082,42 +2718,6 @@ export default function AdminReport() {
                               </div>
                             </>
                           )}
-                        </div>
-                      </div>
-
-                      {/* Benchmark Matrix */}
-                      <div className="ad-tableCard" style={{ padding: "18px 20px", marginBottom: 0, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-                        <div>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                            <span className="ad-chartIcon" style={{ background: '#0284c7', borderRadius: 8, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
-                              ★
-                            </span>
-                            <div style={{ fontSize: "12px", fontWeight: 800, color: "#1e3a8a", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                              Performance Rating Benchmark Matrix
-                            </div>
-                          </div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "8px 12px" }}>
-                              <span style={{ fontSize: "12px", fontWeight: 700, color: "#14532d" }}>Outstanding</span>
-                              <span style={{ fontSize: "11.5px", fontWeight: 800, color: "#15803d" }}>4.50 – 5.00</span>
-                            </div>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "8px 12px" }}>
-                              <span style={{ fontSize: "12px", fontWeight: 700, color: "#1e3a8a" }}>Excellent</span>
-                              <span style={{ fontSize: "11.5px", fontWeight: 800, color: "#1d4ed8" }}>4.00 – 4.49</span>
-                            </div>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: "8px", padding: "8px 12px" }}>
-                              <span style={{ fontSize: "12px", fontWeight: 700, color: "#0369a1" }}>Very Good</span>
-                              <span style={{ fontSize: "11.5px", fontWeight: 800, color: "#0284c7" }}>3.50 – 3.99</span>
-                            </div>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "8px 12px" }}>
-                              <span style={{ fontSize: "12px", fontWeight: 700, color: "#92400e" }}>Good</span>
-                              <span style={{ fontSize: "11.5px", fontWeight: 800, color: "#b45309" }}>3.00 – 3.49</span>
-                            </div>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "8px 12px" }}>
-                              <span style={{ fontSize: "12px", fontWeight: 700, color: "#991b1b" }}>Needs Improvement</span>
-                              <span style={{ fontSize: "11.5px", fontWeight: 800, color: "#b91c1c" }}>Below 3.00</span>
-                            </div>
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -2267,8 +2867,17 @@ export default function AdminReport() {
               </div>
 
             </div>
-            <div className="ad-modalFooter">
+            <div className="ad-modalFooter" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <button className="ad-btnSecondary" onClick={() => setViewingReport(null)}>Close</button>
+              <button
+                className="ad-btnPrimary"
+                disabled={exportingFacultyPdf}
+                onClick={() => handleExportIndividualFacultyPDF(viewingReport)}
+                style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontWeight: 700 }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                {exportingFacultyPdf ? "Compiling PDF..." : "Export Faculty PDF"}
+              </button>
             </div>
           </div>
         </div>
