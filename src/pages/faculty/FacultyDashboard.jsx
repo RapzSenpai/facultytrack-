@@ -215,6 +215,20 @@ export default function FacultyDashboard() {
   const activeClasses =
     periodClasses.length > 0 ? periodClasses : assignedClasses;
 
+  // Unique sections (Year Level - Section) matching the official evaluation report count
+  const uniqueSections = [
+    ...new Set(
+      activeClasses
+        .map((c) => {
+          const yr = c.year_level || c.yearLevel;
+          const sec = c.section;
+          if (yr && sec) return `${yr} - ${sec}`;
+          return sec || yr || null;
+        })
+        .filter(Boolean)
+    ),
+  ];
+
   // Phase 6 [D6]: neutral escalation notice — booleans only, from
   // the SECURITY DEFINER RPC. Never any comment content.
   const [escalation, setEscalation] = useState(null);
@@ -399,20 +413,24 @@ export default function FacultyDashboard() {
           {/* Card 3: Teaching Load (Orange) */}
           <div className="fd-statCard fd-statCard--load">
             <div className="fd-statCard--header">
-              <span className="fd-statLabel">Teaching Load</span>
+              <span className="fd-statLabel">Class Sections</span>
               <div className="fd-statIcon fd-statIcon--load">
                 <BookOpen size={19} />
               </div>
             </div>
             <div className="fd-statMainRow">
               <div className="fd-statNum">
-                {loading ? "—" : activeClasses.length}
+                {loading ? "—" : uniqueSections.length}
               </div>
             </div>
             <div className="fd-statTitle">
               {loading
-                ? "Loading classes..."
-                : "Class sections assigned this cycle"}
+                ? "Loading sections..."
+                : `${uniqueSections.length} ${
+                    uniqueSections.length === 1
+                      ? "assigned section"
+                      : "assigned sections"
+                  } this cycle`}
             </div>
           </div>
 
@@ -480,8 +498,8 @@ export default function FacultyDashboard() {
                       <span className="fd-miniCardValue">
                         {loading
                           ? "—"
-                          : `${activeClasses.length} Active ${
-                              activeClasses.length === 1 ? "Section" : "Sections"
+                          : `${uniqueSections.length} Active ${
+                              uniqueSections.length === 1 ? "Section" : "Sections"
                             }`}
                       </span>
                     </div>
@@ -565,92 +583,6 @@ export default function FacultyDashboard() {
                   </span>
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Bottom Full-Width Table: Assigned Teaching Sections */}
-          <div className="fd-card fd-tableSectionCard">
-            <div className="fd-cardHeader">
-              <div>
-                <h3 className="fd-cardTitle">Assigned Class Sections</h3>
-                <p className="fd-cardSubtitle">
-                  Classes under your instructional load for{" "}
-                  {activeYear
-                    ? `${activeYear.year} • ${activeYear.semester}`
-                    : "this academic period"}
-                  .
-                </p>
-              </div>
-              <span className="fd-countBadge">
-                {loading
-                  ? "Loading..."
-                  : `${activeClasses.length} ${
-                      activeClasses.length === 1 ? "Section" : "Sections"
-                    }`}
-              </span>
-            </div>
-
-            <div className="fd-tableWrap">
-              <table className="fd-table">
-                <thead>
-                  <tr>
-                    <th>Subject Code</th>
-                    <th>Subject Description</th>
-                    <th>Section</th>
-                    <th>Year Level</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td
-                        colSpan="4"
-                        style={{
-                          textAlign: "center",
-                          padding: "24px",
-                          color: "#64748b",
-                        }}
-                      >
-                        Loading class sections...
-                      </td>
-                    </tr>
-                  ) : activeClasses.length > 0 ? (
-                    activeClasses.map((cls, idx) => (
-                      <tr key={cls.id || idx}>
-                        <td>
-                          <span className="fd-codePill">
-                            {cls.subject_code || "N/A"}
-                          </span>
-                        </td>
-                        <td style={{ fontWeight: 600 }}>
-                          {cls.subject_name || "—"}
-                        </td>
-                        <td>
-                          <span className="fd-sectionBadge">
-                            {cls.section || "—"}
-                          </span>
-                        </td>
-                        <td style={{ color: "#64748b" }}>
-                          {cls.year_level || "—"}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td
-                        colSpan="4"
-                        style={{
-                          textAlign: "center",
-                          padding: "28px 16px",
-                          color: "#64748b",
-                        }}
-                      >
-                        No class assignments registered for this period.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
             </div>
           </div>
         </div>

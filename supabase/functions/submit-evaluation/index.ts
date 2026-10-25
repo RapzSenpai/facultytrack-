@@ -191,9 +191,14 @@ Decide if this student comment is acceptable to show to the teacher.
 The comment may be written in English, Tagalog/Filipino, Bisaya/Cebuano, or a mix (Taglish, Bislish). Judge the MEANING in whatever language is used, including slang, abbreviations and disguised spellings (e.g. "g@go", "tangina", "yawa", "pisti", "atay", "buang" used as an insult).
 
 Rules:
-- "allow": any professional criticism, complaint, or negative feedback about teaching, in any of those languages (e.g. "mahirap intindihin ang lesson", "dili klaro mo-explain"). This MUST be allowed.
-- "flag": borderline rudeness, sarcasm, mild insults, personal remarks that are not profanity (e.g. "bobo magturo", "walay pulos" aimed at the person).
-- "block": genuine profanity, slurs, sexual content, threats, or harassment in any language (e.g. "putangina", "gago", "yawa ka", "patayin kita").
+- "allow": professional criticism, constructive complaints, or negative feedback strictly about teaching, course delivery, grading, and classroom instruction (e.g. "mahirap intindihin ang lesson", "dili klaro mo-explain", "paspas ra kaayo mo-lecture", "strict mag-grade"). This MUST be allowed ONLY IF free of personal insults and free of extortion/harassment claims.
+- "flag": any of the following: (1) borderline rudeness, sarcasm, mild insults, derogatory personal attacks on the teacher's character or attitude (e.g. "bobo", "walay pulos", "bati ug batasan", "way batasan", "salbahis", "pangit ug batasan", "bastos", "walang modo"); OR (2) serious institutional grievances such as extortion, soliciting money for grades, bribery, or corruption (e.g. "nangikil og kwarta", "bayad para pasar", "nagpabayad", "suhol"). ANY such remarks or claims MUST BE CLASSIFIED AS "flag".
+- "block": genuine profanity, slurs, explicit sexual vulgarity, or direct threats of violence in any language (e.g. "putangina", "gago", "yawa ka", "patayin kita", "giatay ka").
+
+Severity Guidelines:
+- "high": ANY allegations of extortion, bribery, paying for grades, soliciting money for clearance/exam, sexual harassment, or threats (e.g. "nangikil og kwarta", "bayad para pasar", "nagpabayad"). This triggers immediate Auto-Priority Dean review.
+- "medium": personal insults, character attacks, rudeness (e.g. "bati ug batasan", "salbahis", "way batasan").
+- "low": ordinary constructive criticism or minor complaints.
 
 Reply ONLY with compact JSON:
 {"status":"allow|flag|block","severity":"low|medium|high","labels":["<short label in English>", ...]}

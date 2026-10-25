@@ -51,13 +51,31 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const authHeader = req.headers.get("Authorization") ?? "";
     if (!authHeader) return json({ error: "Missing Authorization header." }, 401);
 
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
     const admin = createClient(supabaseUrl, serviceKey);
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
 
-    const { data: userData, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !userData?.user) return json({ error: "Unauthorized." }, 401);
+    let userData = null;
+    let userErr = null;
+
+    if (token) {
+      const res = await admin.auth.getUser(token);
+      userData = res.data;
+      userErr = res.error;
+    }
+
+    if (userErr || !userData?.user) {
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const fallback = await userClient.auth.getUser();
+      userData = fallback.data;
+      userErr = fallback.error;
+    }
+
+    if (userErr || !userData?.user) {
+      console.error("export-report auth failed:", userErr?.message);
+      return json({ error: userErr?.message || "Unauthorized." }, 401);
+    }
     const userId = userData.user.id;
 
     // Caller must be an active admin or super_admin. Profile from

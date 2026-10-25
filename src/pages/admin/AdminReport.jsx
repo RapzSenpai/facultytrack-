@@ -404,21 +404,45 @@ export default function AdminReport() {
       const uniqueStudents = new Set(facEvals.map(e => e.studentId)).size;
       const allScores = facEvals.flatMap(e => Object.values(e.ratings || {}).map(Number));
 
-      const sectionBreakdown = facAssignments.map(assign => {
-        const assignSec = assign.yearLevel && assign.section ? `${assign.yearLevel} - ${assign.section}` : assign.section || "—";
+      // Group assignments by subject so sections with the same subject are unified
+      const subjectMap = new Map();
+      facAssignments.forEach(assign => {
+        const subKey = (assign.subjectCode || assign.subjectName || "—").trim();
+        if (!subjectMap.has(subKey)) {
+          subjectMap.set(subKey, {
+            subject: subKey,
+            subjectName: assign.subjectName || "",
+            assignments: [],
+          });
+        }
+        const entry = subjectMap.get(subKey);
+        entry.assignments.push(assign);
+        if (!entry.subjectName && assign.subjectName) {
+          entry.subjectName = assign.subjectName;
+        }
+      });
+
+      const sectionBreakdown = Array.from(subjectMap.values()).map(grp => {
+        const assignIds = new Set(grp.assignments.map(a => a.id));
+        const grpSections = [...new Set(
+          grp.assignments.map(a => a.yearLevel && a.section ? `${a.yearLevel} - ${a.section}` : a.section).filter(Boolean)
+        )];
+
         const aEvals = facEvals.filter(e => {
-          if (e.assignmentId === assign.id) return true;
+          if (assignIds.has(e.assignmentId)) return true;
           const evAssign = periodAssignments.find(a => a.id === e.assignmentId);
           if (!evAssign) return false;
-          const evSec = evAssign.yearLevel && evAssign.section ? `${evAssign.yearLevel} - ${evAssign.section}` : evAssign.section || "—";
-          return evAssign.facultyId === faculty.id && evSec === assignSec;
+          const evSubKey = (evAssign.subjectCode || evAssign.subjectName || "—").trim();
+          return evAssign.facultyId === faculty.id && evSubKey === grp.subject;
         });
         const aScores = aEvals.flatMap(e => Object.values(e.ratings || {}).map(Number));
+
         return {
-          assignmentId: assign.id,
-          subject: assign.subjectCode || assign.subjectName || "—",
-          subjectName: assign.subjectName || "",
-          section: assignSec,
+          assignmentId: grp.assignments[0]?.id,
+          subject: grp.subject,
+          subjectName: grp.subjectName,
+          section: grpSections.length > 0 ? grpSections.join(", ") : "—",
+          sectionsList: grpSections,
           students: new Set(aEvals.map(e => e.studentId)).size,
           formCount: aEvals.length,
           rating: avg(aScores),
@@ -713,8 +737,16 @@ export default function AdminReport() {
 
     setExportingPdf(true);
     try {
+      const { data: sessData } = await supabase.auth.getSession();
+      let accessToken = sessData?.session?.access_token;
+      if (sessData?.session?.expires_at && sessData.session.expires_at * 1000 < Date.now() + 60000) {
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        accessToken = refreshed?.session?.access_token || accessToken;
+      }
+
       const { data, error } = await supabase.functions.invoke("export-report", {
         body: { academic_year: filterAY, semester: filterSem },
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       });
       if (error) throw new Error(await parseFunctionError(error, "Report generation failed."));
       if (data?.error) throw new Error(data.error);
@@ -829,9 +861,9 @@ export default function AdminReport() {
             </td>
             <td style="text-align:center;">
               ${ratingNum !== null ? `
-                <div class="rating-badge" style="background:${ratingBg(ratingNum)};border:1px solid ${ratingBorder(ratingNum)};color:${ratingColor(ratingNum)};">
-                  <span style="font-weight:800;font-size:12px;">${ratingStr}</span>
-                  <span style="font-size:9.5px;font-weight:600;opacity:0.8;">/ 5.00</span>
+                <div class="rating-badge" style="background:${ratingBg(ratingNum)};border:1px solid ${ratingBorder(ratingNum)};display:inline-block;padding:2px 8px;border-radius:6px;line-height:1.2;">
+                  <span style="font-weight:800;font-size:12px;color:${ratingColor(ratingNum)};margin-right:3px;">${ratingStr}</span>
+                  <span style="font-size:9.5px;font-weight:600;opacity:0.85;color:${ratingColor(ratingNum)};">/ 5.00</span>
                 </div>
               ` : `<span style="color:#94a3b8;font-size:11px;font-style:italic;">No Data</span>`}
             </td>
@@ -844,654 +876,811 @@ export default function AdminReport() {
         `;
       }).join("");
 
-      // Fetch AI summaries & allowed qualitative comments for all reporting teachers (Option A)
-      const facIds = facultiesToReport.map(f => f.faculty_id);
-      const [aiSumRes, anonCommRes] = await Promise.all([
-        supabase
-          .from("faculty_ai_summaries")
-          .select("faculty_id, summary, subject_code")
-          .in("faculty_id", facIds)
-          .eq("academic_year", ayLabel)
-          .eq("semester", semLabel),
-        supabase
-          .from("admin_evaluations_anon")
-          .select("faculty_id, comment, ratings, submitted_on")
-          .in("faculty_id", facIds)
-          .eq("academic_year", ayLabel)
-          .eq("semester", semLabel)
-          .eq("moderation_status", "allow")
-          .not("comment", "is", null),
-      ]);
-
-      const summariesByFaculty = new Map();
-      (aiSumRes.data || []).forEach(s => {
-        if (!summariesByFaculty.has(s.faculty_id) || !s.subject_code) {
-          summariesByFaculty.set(s.faculty_id, s.summary);
-        }
-      });
-
-      const commentsByFaculty = new Map();
-      (anonCommRes.data || []).forEach(c => {
-        const text = (c.comment || "").trim();
-        if (text) {
-          if (!commentsByFaculty.has(c.faculty_id)) commentsByFaculty.set(c.faculty_id, []);
-          commentsByFaculty.get(c.faculty_id).push(text);
-        }
-      });
-
-      // Attempt live Groq synthesis for faculty with comments who lack cached summaries
-      const missingFacs = facultiesToReport.filter(f =>
-        !summariesByFaculty.has(f.faculty_id) &&
-        (commentsByFaculty.get(f.faculty_id) || []).length > 0
-      );
-
-      if (missingFacs.length > 0) {
-        await Promise.allSettled(
-          missingFacs.map(async (f) => {
-            try {
-              const res = await supabase.functions.invoke("summarize-comments", {
-                body: {
-                  faculty_id: f.faculty_id,
-                  academic_year: ayLabel,
-                  semester: semLabel,
-                  subject_code: "",
-                },
-              });
-              if (res.data?.summary) {
-                summariesByFaculty.set(f.faculty_id, res.data.summary);
-              }
-            } catch {
-              // Gracefully continue if period not released or network issue
-            }
-          })
-        );
-      }
-
-      // Build Faculty Evaluation Dossiers (Option A + Comments all together under each teacher)
-      const facultyDossiersHtml = facultiesToReport.map((f, i) => {
-        const ratingNum = f.average_rating === null ? null : Number(f.average_rating);
-        const ratingStr = ratingNum !== null ? ratingNum.toFixed(2) : "—";
-        const classification = f.performance_label || (ratingNum !== null ? getPerformanceLabel(ratingNum) : "—");
-
-        const rawAiSummary = summariesByFaculty.get(f.faculty_id) || "";
-        const aiParsed = parseAiSummaryText(rawAiSummary);
-
-        const rawComments = commentsByFaculty.get(f.faculty_id) || [];
-        const distinctQuotes = Array.from(new Set(rawComments)).slice(0, 8);
-
-        const sectionRowsHtml = (f.sectionBreakdown || []).map((sec, sIdx) => `
-          <tr style="background: ${sIdx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-            <td style="padding: 6px 10px; font-weight: 700; color: #1e293b;">
-              <span style="font-family: monospace; font-size: 10px; background: #e0e7ff; color: #3730a3; padding: 2px 5px; border-radius: 4px; margin-right: 5px;">
-                ${escapeHtml(sec.subject || "")}
-              </span>
-              ${escapeHtml(sec.subjectName || "")}
-            </td>
-            <td style="padding: 6px 10px; font-weight: 600; color: #334155;">
-              ${escapeHtml(sec.section || "—")}
-            </td>
-            <td style="padding: 6px 10px; text-align: center; font-weight: 700; color: #0f172a;">
-              ${sec.formCount || 0}
-            </td>
-            <td style="padding: 6px 10px; text-align: right; font-weight: 800; color: ${getPerformanceColor(sec.rating)};">
-              ${sec.rating !== "—" ? `${sec.rating} / 5.0` : "—"}
-            </td>
-          </tr>
-        `).join("");
-
-        const quotesHtml = distinctQuotes.length > 0 ? distinctQuotes.map(q => `
-          <div style="background: #f8fafc; border-left: 3.5px solid #2563eb; border-radius: 0 6px 6px 0; padding: 8px 12px; margin-bottom: 6px; font-size: 10.5px; color: #334155; font-style: italic; line-height: 1.45;">
-            “${escapeHtml(q)}”
-          </div>
-        `).join("") : `
-          <div style="color: #94a3b8; font-style: italic; font-size: 10.5px; padding: 4px 0;">
-            No qualitative comments submitted for this evaluation period.
-          </div>
-        `;
-
-        const aiBoxHtml = aiParsed.hasSummary ? `
-          <!-- Option A: Real Groq AI Qualitative Synthesis -->
-          <div style="border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 12px 14px; background: #fbfcfe; margin-bottom: 14px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <span style="font-size: 10.5px; font-weight: 800; color: #1e3a8a; text-transform: uppercase; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 6px;">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                Groq LLaMA 3 Qualitative Synthesis
-              </span>
-              <span style="font-size: 9px; font-weight: 800; background: #4f46e5; color: #ffffff; padding: 2px 7px; border-radius: 999px;">
-                AI Synthesis &bull; Verified
-              </span>
-            </div>
-            <div style="font-size: 11px; color: #334155; line-height: 1.5; margin-bottom: 10px;">
-              ${escapeHtml(aiParsed.overview)}
-            </div>
-
-            <!-- Strengths & Recommendations Columns -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 8px 10px;">
-                <div style="font-size: 9.5px; font-weight: 800; color: #15803d; text-transform: uppercase; margin-bottom: 4px;">
-                  Demonstrated Strengths
-                </div>
-                ${aiParsed.strengths.length > 0 ? `
-                  <ul style="margin: 0; padding-left: 14px; font-size: 10.5px; color: #166534; line-height: 1.4;">
-                    ${aiParsed.strengths.map(s => `<li>${escapeHtml(s)}</li>`).join("")}
-                  </ul>
-                ` : `<div style="font-size: 10px; color: #166534; font-style: italic;">No specific strengths extracted.</div>`}
-              </div>
-              <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 8px 10px;">
-                <div style="font-size: 9.5px; font-weight: 800; color: #b45309; text-transform: uppercase; margin-bottom: 4px;">
-                  Actionable Recommendations
-                </div>
-                ${aiParsed.recommendations.length > 0 ? `
-                  <ul style="margin: 0; padding-left: 14px; font-size: 10.5px; color: #92400e; line-height: 1.4;">
-                    ${aiParsed.recommendations.map(r => `<li>${escapeHtml(r)}</li>`).join("")}
-                  </ul>
-                ` : `<div style="font-size: 10px; color: #92400e; font-style: italic;">No specific recommendations extracted.</div>`}
-              </div>
-            </div>
-          </div>
-        ` : distinctQuotes.length >= 2 ? `
-          <div style="border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px 14px; background: #f8fafc; margin-bottom: 14px; color: #475569; font-size: 10.5px;">
-            <strong style="color: #1e3a8a;">AI Qualitative Synthesis:</strong> Pending evaluation period release or Groq AI batch generation. Anonymized student feedback quotes are displayed directly below.
-          </div>
-        ` : `
-          <div style="border: 1px dashed #e2e8f0; border-radius: 8px; padding: 10px 14px; background: #f8fafc; margin-bottom: 14px; color: #64748b; font-size: 10.5px;">
-            <strong style="color: #475569;">AI Qualitative Synthesis:</strong> Insufficient qualitative student comments submitted for this evaluation period to produce an AI synthesis.
-          </div>
-        `;
-
-        return `
-          <div class="faculty-dossier" style="page-break-inside: avoid; border: 1.5px solid #cbd5e1; border-radius: 10px; padding: 16px 18px; margin-bottom: 22px; background: #ffffff;">
-            <!-- Faculty Header -->
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 12px;">
-              <div>
-                <div style="font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; margin-bottom: 2px;">
-                  FACULTY PERFORMANCE DOSSIER &bull; #${i + 1}
-                </div>
-                <h3 style="font-size: 17px; font-weight: 900; color: #0f172a; margin: 0 0 4px 0; letter-spacing: -0.3px;">
-                  ${escapeHtml(f.faculty_name)}
-                </h3>
-                <div style="font-size: 11px; font-weight: 600; color: #475569; display: flex; gap: 8px; align-items: center;">
-                  <span>${escapeHtml(f.department || "Academic Program")}</span>
-                  <span style="color: #cbd5e1;">&bull;</span>
-                  <span>${f.forms_received || 0} Submissions</span>
-                  <span style="color: #cbd5e1;">&bull;</span>
-                  <span>${f.sectionsCount || 0} Class Sections</span>
-                </div>
-              </div>
-              <div style="text-align: right;">
-                <div style="font-size: 24px; font-weight: 900; color: ${ratingColor(ratingNum)}; line-height: 1;">
-                  ${ratingStr} <span style="font-size: 11px; font-weight: 700; color: #94a3b8;">/ 5.00</span>
-                </div>
-                <div style="margin-top: 4px;">
-                  <span class="classification-badge" style="background:${ratingBg(ratingNum)};border:1px solid ${ratingBorder(ratingNum)};color:${ratingColor(ratingNum)};">
-                    ${escapeHtml(classification)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Subject / Section Breakdown Table (if available) -->
-            ${(f.sectionBreakdown && f.sectionBreakdown.length > 0) ? `
-              <div style="margin-bottom: 14px;">
-                <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #1e3a8a; margin-bottom: 6px;">
-                  Assigned Classes & Section Ratings
-                </div>
-                <table style="width: 100%; border-collapse: collapse; font-size: 10px; border: 1px solid #e2e8f0; margin-bottom: 0;">
-                  <thead>
-                    <tr style="background: #0f172a; color: #fff;">
-                      <th style="padding: 6px 10px; text-align: left; font-size: 9px; font-weight: 700;">Subject / Course</th>
-                      <th style="padding: 6px 10px; text-align: left; font-size: 9px; font-weight: 700;">Section</th>
-                      <th style="padding: 6px 10px; text-align: center; font-size: 9px; font-weight: 700;">Evaluations</th>
-                      <th style="padding: 6px 10px; text-align: right; font-size: 9px; font-weight: 700;">Class Rating</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${sectionRowsHtml}
-                  </tbody>
-                </table>
-              </div>
-            ` : ""}
-
-            ${aiBoxHtml}
-
-            <!-- Student Feedback Highlights All Together Under This Teacher -->
-            <div>
-              <div style="font-size: 10px; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
-                Student Feedback Highlights (${distinctQuotes.length} Quotes &bull; Anonymized)
-              </div>
-              ${quotesHtml}
-            </div>
-          </div>
-        `;
-      }).join("");
+      const cleanScope = (scopeLabel || "All-Programs")
+        .replace(/[^a-zA-Z0-9]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_|_$/g, "");
+      const cleanAY = (ayLabel || "AY")
+        .replace(/[^a-zA-Z0-9]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+      const cleanSem = (semLabel || "Semester")
+        .replace(/[^a-zA-Z0-9]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+      const printDocTitle = `Faculty-Evaluation-Summary-Report_${cleanScope}_${cleanAY}_${cleanSem}`;
+      const previewTitle = `Faculty Evaluation Summary Report — ${ayLabel} ${semLabel}`;
 
       const html = `
         <!DOCTYPE html>
-        <html>
+        <html lang="en">
         <head>
           <meta charset="utf-8"/>
-          <title>Faculty Evaluation Summary Report — ${escapeHtml(ayLabel)} ${escapeHtml(semLabel)}</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+          <title>${escapeHtml(previewTitle)}</title>
           <style>
+            /* ==============================================================
+               PAGE SIZE CONFIGURATION
+               To change between Short Bond (Letter) and Long Bond (Legal/Folio):
+               - Short Bond: 8.5in 11in
+               - Long Bond:  8.5in 13in
+               ============================================================== */
+            :root {
+              --paper-width: 8.5in;
+              --paper-height: 11in;
+              --paper-padding: 0.75in;
+            }
+
             * { box-sizing: border-box; margin: 0; padding: 0; }
+
+            html {
+              background-color: #e5e7eb;
+              min-height: 100%;
+            }
+
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
               color: #0f172a;
-              font-size: 11.5px;
+              font-size: 10pt;
               line-height: 1.4;
-              background: #ffffff;
-              padding: 24px 30px;
+              background-color: #e5e7eb;
+              margin: 0;
+              padding: 0;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
-            @page {
-              size: portrait;
-              margin: 10mm 12mm;
-            }
-            @media print {
-              body { padding: 0; }
-              .no-print { display: none !important; }
-              .page-break { page-break-before: always; }
-              tr { page-break-inside: avoid; }
-            }
+
+            /* Sticky control bar outside the paper sheet */
             .no-print-bar {
               position: sticky;
               top: 0;
+              left: 0;
+              right: 0;
+              z-index: 9999;
               background: #0f172a;
               color: #ffffff;
-              padding: 10px 20px;
+              padding: 10px 24px;
               display: flex;
               justify-content: space-between;
               align-items: center;
-              border-radius: 8px;
-              margin-bottom: 20px;
-              box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-              z-index: 999;
+              box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
             }
+
+            .no-print-bar-title {
+              font-size: 13px;
+              font-weight: 700;
+              letter-spacing: -0.2px;
+              color: #f8fafc;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            }
+
+            .no-print-bar-actions {
+              display: flex;
+              align-items: center;
+              gap: 12px;
+            }
+
+            .btn-download {
+              background: #059669;
+              color: #ffffff;
+              border: none;
+              padding: 7px 16px;
+              border-radius: 6px;
+              font-weight: 700;
+              font-size: 12px;
+              cursor: pointer;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+              transition: background 0.15s ease, opacity 0.15s ease;
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+            }
+            .btn-download:hover {
+              background: #047857;
+            }
+            .btn-download:disabled {
+              opacity: 0.6;
+              cursor: not-allowed;
+            }
+            @keyframes spin { 100% { transform: rotate(360deg); } }
+
+            .btn-print {
+              background: #2563eb;
+              color: #ffffff;
+              border: none;
+              padding: 7px 18px;
+              border-radius: 6px;
+              font-weight: 700;
+              font-size: 12px;
+              cursor: pointer;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+              transition: background 0.15s ease;
+              display: inline-flex;
+              align-items: center;
+              gap: 6px;
+            }
+            .btn-print:hover {
+              background: #1d4ed8;
+            }
+
+            .btn-close {
+              background: #475569;
+              color: #ffffff;
+              border: none;
+              padding: 7px 14px;
+              border-radius: 6px;
+              font-weight: 600;
+              font-size: 12px;
+              cursor: pointer;
+              transition: background 0.15s ease;
+            }
+            .btn-close:hover {
+              background: #334155;
+            }
+
+            /* Neutral gray PDF viewer background scroll area */
+            .viewer-container {
+              width: 100%;
+              min-height: calc(100vh - 52px);
+              padding: 24px 16px 48px;
+              display: flex;
+              justify-content: center;
+              align-items: flex-start;
+              overflow-x: auto;
+            }
+
+            /* Responsive sheet wrapper to scale down on small screens without horizontal scroll */
+            .sheet-wrapper {
+              width: var(--paper-width);
+              transform-origin: top center;
+            }
+
+            @media screen and (max-width: 860px) {
+              .viewer-container {
+                padding: 12px 6px 36px;
+                overflow-x: hidden;
+              }
+              .sheet-wrapper {
+                transform: scale(calc((100vw - 16px) / 816));
+                margin-bottom: calc((1056px * ((100vw - 16px) / 816)) - 1056px);
+              }
+            }
+
+            /* Centered White Paper Sheet */
+            .paper-sheet {
+              background: #ffffff;
+              width: var(--paper-width);
+              min-height: var(--paper-height);
+              padding: var(--paper-padding);
+              margin: 0 auto;
+              box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.08);
+              border-radius: 2px;
+              position: relative;
+              box-sizing: border-box;
+            }
+
+            /* Header Section */
             .inst-header {
               text-align: center;
-              padding-bottom: 14px;
+              padding-bottom: 12px;
               border-bottom: 2.5px solid #1e3a8a;
-              margin-bottom: 14px;
+              margin-bottom: 12px;
             }
             .inst-pretitle {
-              font-size: 10px;
+              font-size: 8.5pt;
               font-weight: 800;
               letter-spacing: 1.2px;
               text-transform: uppercase;
               color: #475569;
+              margin-top: 0;
               margin-bottom: 3px;
             }
             .inst-title {
-              font-size: 20px;
+              font-size: 16pt;
               font-weight: 900;
               color: #1e3a8a;
               letter-spacing: -0.5px;
-              margin-bottom: 4px;
+              margin-bottom: 3px;
+              line-height: 1.2;
             }
             .inst-subtitle {
-              font-size: 12px;
+              font-size: 10pt;
               font-weight: 600;
               color: #334155;
-              margin-bottom: 8px;
+              margin-bottom: 6px;
             }
             .inst-tags {
               display: flex;
               justify-content: center;
               flex-wrap: wrap;
               gap: 6px;
-              margin-top: 6px;
+              margin-top: 4px;
             }
             .tag {
               display: inline-block;
-              padding: 3px 10px;
+              padding: 2px 8px;
               background: #f1f5f9;
               border: 1px solid #cbd5e1;
-              border-radius: 6px;
-              font-size: 11px;
+              border-radius: 4px;
+              font-size: 8.5pt;
               color: #1e293b;
             }
+
             .meta-bar {
               display: flex;
               justify-content: space-between;
               align-items: center;
-              font-size: 10.5px;
+              font-size: 8.5pt;
               color: #64748b;
-              padding-bottom: 8px;
+              padding-bottom: 6px;
               border-bottom: 1px solid #e2e8f0;
-              margin-bottom: 14px;
+              margin-bottom: 12px;
             }
+
             .kpi-grid {
-              display: grid;
-              grid-template-columns: repeat(3, 1fr);
-              gap: 10px;
-              margin-bottom: 14px;
+              display: flex;
+              width: 100%;
+              gap: 8px;
+              margin-bottom: 12px;
             }
             .kpi-card {
+              flex: 1 1 0;
+              min-width: 0;
               border: 1.5px solid #e2e8f0;
-              border-radius: 8px;
-              padding: 9px 12px;
+              border-radius: 6px;
+              padding: 8px 10px;
               background: #f8fafc;
+              break-inside: avoid;
+              page-break-inside: avoid;
+              box-sizing: border-box;
             }
             .kpi-label {
-              font-size: 9.5px;
+              font-size: 8pt;
               font-weight: 800;
               text-transform: uppercase;
               letter-spacing: 0.5px;
               color: #64748b;
-              margin-bottom: 3px;
+              margin-bottom: 2px;
             }
             .kpi-value {
-              font-size: 18px;
+              font-size: 15pt;
               font-weight: 900;
               color: #0f172a;
               line-height: 1.1;
             }
             .kpi-sub {
-              font-size: 10px;
+              font-size: 8pt;
               color: #64748b;
-              margin-top: 2px;
+              margin-top: 1px;
             }
+
             .scale-grid {
-              display: grid;
-              grid-template-columns: repeat(5, 1fr);
+              display: flex;
+              width: 100%;
               gap: 6px;
-              margin-bottom: 14px;
+              margin-bottom: 12px;
             }
             .scale-card {
+              flex: 1 1 0;
+              min-width: 0;
               border: 1px solid #e2e8f0;
-              border-radius: 6px;
-              padding: 6px 8px;
+              border-radius: 5px;
+              padding: 6px 4px;
               background: #f8fafc;
               text-align: center;
-              font-size: 10px;
+              font-size: 8pt;
+              break-inside: avoid;
+              page-break-inside: avoid;
+              box-sizing: border-box;
             }
+
             .table-section-title {
-              font-size: 12px;
+              font-size: 9.5pt;
               font-weight: 800;
               text-transform: uppercase;
-              letter-spacing: 0.6px;
+              letter-spacing: 0.5px;
               color: #1e3a8a;
-              margin: 16px 0 8px 0;
+              margin: 12px 0 6px 0;
               display: flex;
               justify-content: space-between;
               align-items: baseline;
             }
+
             .summary-table {
               width: 100%;
               border-collapse: collapse;
-              font-size: 11px;
-              margin-bottom: 16px;
+              table-layout: fixed;
+              font-size: 9pt;
+              margin-bottom: 14px;
             }
             .summary-table th {
               background: #0f172a;
               color: #ffffff;
-              font-size: 9.5px;
+              font-size: 8pt;
               font-weight: 700;
               text-transform: uppercase;
-              letter-spacing: 0.6px;
-              padding: 9px 12px;
+              letter-spacing: 0.5px;
+              padding: 7px 8px;
               border: 1px solid #0f172a;
               text-align: left;
             }
             .summary-table td {
-              padding: 8px 12px;
+              padding: 6px 8px;
               border: 1px solid #e2e8f0;
               vertical-align: middle;
+              word-break: break-word;
             }
             .rating-badge {
-              display: inline-flex;
-              align-items: center;
-              gap: 4px;
-              padding: 3px 8px;
+              display: inline-block;
+              padding: 2px 8px;
               border-radius: 6px;
+              white-space: nowrap;
             }
             .classification-badge {
               display: inline-block;
-              padding: 3px 10px;
+              padding: 2px 8px;
               border-radius: 9999px;
               font-weight: 700;
-              font-size: 10.5px;
+              font-size: 8.5pt;
               letter-spacing: 0.2px;
+              white-space: nowrap;
             }
-            .matrix-table {
-              width: 100%;
-              border-collapse: collapse;
-              font-size: 10.5px;
-              border: 1px solid #e2e8f0;
-              margin-top: 6px;
-            }
-            .matrix-table th {
-              background: #f8fafc;
-              padding: 6px 10px;
-              border: 1px solid #e2e8f0;
-              text-align: left;
-              font-size: 9.5px;
-              font-weight: 700;
-              color: #475569;
-              text-transform: uppercase;
-            }
-            .matrix-table td {
-              padding: 6px 10px;
-              border: 1px solid #e2e8f0;
-            }
+
             .signature-grid {
               display: grid;
               grid-template-columns: repeat(3, 1fr);
-              gap: 24px;
-              margin-top: 28px;
+              gap: 20px;
+              margin-top: 22px;
+              break-inside: avoid;
               page-break-inside: avoid;
             }
             .sig-card {
               text-align: center;
+              break-inside: avoid;
+              page-break-inside: avoid;
             }
             .sig-space {
-              height: 38px;
+              height: 34px;
               border-bottom: 1.5px solid #0f172a;
-              margin-bottom: 6px;
+              margin-bottom: 5px;
             }
             .sig-title {
-              font-size: 11px;
+              font-size: 9pt;
               font-weight: 700;
               color: #0f172a;
             }
             .sig-role {
-              font-size: 10px;
+              font-size: 8pt;
               color: #64748b;
             }
             .sig-date {
-              font-size: 9.5px;
+              font-size: 8pt;
               color: #94a3b8;
               margin-top: 2px;
             }
+
             .notice-card {
-              margin-top: 16px;
-              padding: 8px 12px;
-              border-radius: 6px;
+              margin-top: 14px;
+              padding: 6px 10px;
+              border-radius: 5px;
               background: #f8fafc;
               border: 1px solid #e2e8f0;
               text-align: center;
-              font-size: 10px;
+              font-size: 7.5pt;
               color: #64748b;
               font-style: italic;
+              break-inside: avoid;
+              page-break-inside: avoid;
             }
             .footer-card {
-              margin-top: 12px;
+              margin-top: 10px;
               border-top: 1px solid #e2e8f0;
-              padding-top: 8px;
+              padding-top: 6px;
               text-align: center;
-              font-size: 9.5px;
+              font-size: 7.5pt;
               color: #94a3b8;
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+
+            /* Print Styles */
+            @media print {
+              html, body {
+                background: #ffffff !important;
+                background-color: #ffffff !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+              }
+              .no-print, .no-print-bar {
+                display: none !important;
+                height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              .viewer-container {
+                padding: 0 !important;
+                margin: 0 !important;
+                display: block !important;
+                min-height: 0 !important;
+                height: auto !important;
+                overflow: visible !important;
+              }
+              .sheet-wrapper {
+                transform: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+              }
+              .paper-sheet {
+                box-shadow: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+                min-height: 0 !important;
+                height: auto !important;
+                border: none !important;
+              }
+              .inst-header {
+                padding-top: 0 !important;
+                margin-top: 0 !important;
+                margin-bottom: 8px !important;
+              }
+              .inst-pretitle {
+                margin-top: 0 !important;
+              }
+              .summary-table {
+                page-break-inside: auto;
+              }
+              thead {
+                display: table-header-group !important;
+              }
+              tfoot {
+                display: table-footer-group !important;
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
+              }
+              tr {
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
+              }
+              .kpi-card,
+              .scale-card,
+              .signature-grid,
+              .notice-card,
+              .footer-card {
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
+              }
+              .signature-grid {
+                display: grid !important;
+              }
             }
           </style>
+          <style id="dynamicPageStyle">
+            @page {
+              size: 8.5in 11in portrait;
+              margin: 8mm 12mm 10mm 12mm;
+              @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-size: 8pt;
+                color: #64748b;
+              }
+            }
+          </style>
+          <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
         </head>
         <body>
+          <!-- Sticky Control Bar outside the Paper Sheet -->
           <div class="no-print no-print-bar">
-            <span style="font-weight: 700; font-size: 13px;">Faculty Evaluation Summary Report</span>
-            <div style="display: flex; gap: 8px;">
-              <button onclick="window.print()" style="background: #2563eb; color: #fff; border: none; padding: 7px 16px; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer;">
-                Print / Save as PDF
+            <div class="no-print-bar-title">
+              <span>Faculty Evaluation Summary Report</span>
+            </div>
+            <div class="no-print-bar-actions">
+              <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #cbd5e1;">
+                <label for="paperSizeSelect" style="font-weight: 600;">Paper Size:</label>
+                <select id="paperSizeSelect" onchange="changePaperSize(this.value)" style="background: #1e293b; color: #ffffff; border: 1.5px solid #475569; padding: 5px 8px; border-radius: 6px; font-size: 11.5px; cursor: pointer; font-weight: 600;">
+                  <option value="short" selected>Short Bond (8.5" × 11" Letter)</option>
+                  <option value="long">Long Bond (8.5" × 13" Folio)</option>
+                  <option value="legal">Long Bond (8.5" × 14" Legal)</option>
+                  <option value="a4">A4 (8.27" × 11.69")</option>
+                  <option value="auto">Auto (Match Print Dialog)</option>
+                </select>
+              </div>
+              <button id="btnDownloadPdf" class="btn-download" onclick="downloadDirectPDF()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Download PDF
               </button>
-              <button onclick="window.close()" style="background: #475569; color: #fff; border: none; padding: 7px 14px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer;">
+              <button class="btn-print" onclick="doPrint()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Save as PDF / Print
+              </button>
+              <button class="btn-close" onclick="window.close()">
                 Close
               </button>
             </div>
           </div>
 
-          <div class="inst-header">
-            <div class="inst-pretitle">FACULTYTRACK ACADEMIC PERFORMANCE & EVALUATION SYSTEM</div>
-            <h1 class="inst-title">FACULTY EVALUATION SUMMARY REPORT</h1>
-            <div class="inst-subtitle">Official Performance Summary & Classification Overview</div>
-            <div class="inst-tags">
-              <span class="tag">Academic Year: <strong>${escapeHtml(ayLabel)}</strong></span>
-              <span class="tag">Semester: <strong>${escapeHtml(semLabel)}</strong></span>
-              <span class="tag">Program Scope: <strong>${escapeHtml(scopeLabel)}</strong></span>
-              ${selectedFacultyName ? `<span class="tag">Faculty: <strong>${escapeHtml(selectedFacultyName)}</strong></span>` : ''}
-            </div>
-          </div>
-
-          <div class="meta-bar">
-            <span><strong>Generated:</strong> ${escapeHtml(now)}</span>
-            <span><strong>Report Scope:</strong> ${totalFacultyCount} Faculty Member${totalFacultyCount === 1 ? '' : 's'} &bull; ${totalForms} Submissions</span>
-            <span><strong>Compliance:</strong> Statistical Aggregation</span>
-          </div>
-
-          <!-- Executive KPI Strip -->
-          <div class="kpi-grid">
-            <div class="kpi-card">
-              <div class="kpi-label">Faculty Evaluated</div>
-              <div class="kpi-value">${totalFacultyCount}</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Institutional Mean Rating</div>
-              <div class="kpi-value" style="color: ${ratingColor(overallAvg)};">${overallAvg} / 5.00</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Total Student Submissions</div>
-              <div class="kpi-value">${totalForms}</div>
-            </div>
-          </div>
-
-          <!-- Performance Distribution Summary -->
-          <div class="scale-grid">
-            <div class="scale-card" style="border-top: 3px solid #15803d;">
-              <div style="font-weight: 800; color: #15803d;">Outstanding (≥4.5)</div>
-              <div style="font-size: 15px; font-weight: 900; color: #0f172a; margin: 2px 0;">${tierStats.outstanding}</div>
-              <div style="color: #64748b;">${totalFacultyCount > 0 ? Math.round((tierStats.outstanding / totalFacultyCount) * 100) : 0}% of faculty</div>
-            </div>
-            <div class="scale-card" style="border-top: 3px solid #1d4ed8;">
-              <div style="font-weight: 800; color: #1d4ed8;">Excellent (4.0-4.49)</div>
-              <div style="font-size: 15px; font-weight: 900; color: #0f172a; margin: 2px 0;">${tierStats.excellent}</div>
-              <div style="color: #64748b;">${totalFacultyCount > 0 ? Math.round((tierStats.excellent / totalFacultyCount) * 100) : 0}% of faculty</div>
-            </div>
-            <div class="scale-card" style="border-top: 3px solid #0284c7;">
-              <div style="font-weight: 800; color: #0284c7;">Very Good (3.5-3.99)</div>
-              <div style="font-size: 15px; font-weight: 900; color: #0f172a; margin: 2px 0;">${tierStats.veryGood}</div>
-              <div style="color: #64748b;">${totalFacultyCount > 0 ? Math.round((tierStats.veryGood / totalFacultyCount) * 100) : 0}% of faculty</div>
-            </div>
-            <div class="scale-card" style="border-top: 3px solid #b45309;">
-              <div style="font-weight: 800; color: #b45309;">Good (3.0-3.49)</div>
-              <div style="font-size: 15px; font-weight: 900; color: #0f172a; margin: 2px 0;">${tierStats.good}</div>
-              <div style="color: #64748b;">${totalFacultyCount > 0 ? Math.round((tierStats.good / totalFacultyCount) * 100) : 0}% of faculty</div>
-            </div>
-            <div class="scale-card" style="border-top: 3px solid #b91c1c;">
-              <div style="font-weight: 800; color: #b91c1c;">Needs Imprv. (&lt;3.0)</div>
-              <div style="font-size: 15px; font-weight: 900; color: #0f172a; margin: 2px 0;">${tierStats.needsImprovement}</div>
-              <div style="color: #64748b;">${totalFacultyCount > 0 ? Math.round((tierStats.needsImprovement / totalFacultyCount) * 100) : 0}% of faculty</div>
-            </div>
-          </div>
-
-          <!-- Summary Report Table -->
-          <div class="table-section-title">
-            <span>Faculty Evaluation Summary Report Table</span>
-            <span style="font-size: 10.5px; color: #64748b; font-weight: 600; text-transform: none;">
-              ${totalFacultyCount} Faculty Member${totalFacultyCount === 1 ? '' : 's'} &bull; Ranked by Average Rating
-            </span>
-          </div>
-
-          <table class="summary-table">
-            <thead>
-              <tr>
-                <th style="width: 36px; text-align: center;">#</th>
-                <th style="width: 38%;">FACULTY NAME</th>
-                <th style="width: 28%;">PROGRAM</th>
-                <th style="width: 17%; text-align: center;">RATING</th>
-                <th style="width: 17%; text-align: center;">PERFORMANCE CLASSIFICATION</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${facultyRows}
-            </tbody>
-            <tfoot>
-              <tr style="background: #f1f5f9; font-weight: 800; border-top: 2px solid #cbd5e1;">
-                <td colspan="2" style="text-align: right; padding: 10px 14px; font-size: 11.5px; color: #0f172a;">
-                  Institutional / Program Scope Average:
-                </td>
-                <td style="padding: 10px 12px; font-size: 11px; color: #334155;">
-                  ${escapeHtml(scopeLabel)}
-                </td>
-                <td style="text-align: center; padding: 10px;">
-                  <div class="rating-badge" style="background: ${ratingBg(overallAvg)}; border: 1px solid ${ratingBorder(overallAvg)}; color: ${ratingColor(overallAvg)};">
-                    <span style="font-weight: 800; font-size: 12.5px;">${overallAvg}</span>
-                    <span style="font-size: 9.5px; font-weight: 600; opacity: 0.8;">/ 5.00</span>
+          <!-- Neutral Gray Background Scrollable PDF Viewer -->
+          <div class="viewer-container">
+            <div class="sheet-wrapper">
+              <div class="paper-sheet">
+                <div class="inst-header">
+                  <div class="inst-pretitle">FACULTYTRACK ACADEMIC PERFORMANCE & EVALUATION SYSTEM</div>
+                  <h1 class="inst-title">FACULTY EVALUATION SUMMARY REPORT</h1>
+                  <div class="inst-subtitle">Official Performance Summary & Classification Overview</div>
+                  <div class="inst-tags">
+                    <span class="tag">Academic Year: <strong>${escapeHtml(ayLabel)}</strong></span>
+                    <span class="tag">Semester: <strong>${escapeHtml(semLabel)}</strong></span>
+                    <span class="tag">Program Scope: <strong>${escapeHtml(scopeLabel)}</strong></span>
+                    ${selectedFacultyName ? `<span class="tag">Faculty: <strong>${escapeHtml(selectedFacultyName)}</strong></span>` : ''}
                   </div>
-                </td>
-                <td style="text-align: center; padding: 10px;">
-                  <span class="classification-badge" style="background: ${ratingBg(overallAvg)}; border: 1px solid ${ratingBorder(overallAvg)}; color: ${ratingColor(overallAvg)};">
-                    ${overallAvg !== "—" ? getPerformanceLabel(overallAvg) : "—"}
+                </div>
+
+                <div class="meta-bar">
+                  <span><strong>Generated:</strong> ${escapeHtml(now)}</span>
+                  <span><strong>Report Scope:</strong> ${totalFacultyCount} Faculty Member${totalFacultyCount === 1 ? '' : 's'} &bull; ${totalForms} Submissions</span>
+                  <span><strong>Compliance:</strong> Statistical Aggregation</span>
+                </div>
+
+                <!-- Executive KPI Strip -->
+                <div class="kpi-grid">
+                  <div class="kpi-card">
+                    <div class="kpi-label">Faculty Evaluated</div>
+                    <div class="kpi-value">${totalFacultyCount}</div>
+                  </div>
+                  <div class="kpi-card">
+                    <div class="kpi-label">Institutional Mean Rating</div>
+                    <div class="kpi-value" style="color: ${ratingColor(overallAvg)};">${overallAvg} / 5.00</div>
+                  </div>
+                  <div class="kpi-card">
+                    <div class="kpi-label">Total Student Submissions</div>
+                    <div class="kpi-value">${totalForms}</div>
+                  </div>
+                </div>
+
+                <!-- Performance Distribution Summary -->
+                <div class="scale-grid">
+                  <div class="scale-card" style="border-top: 3px solid #15803d;">
+                    <div style="font-weight: 800; color: #15803d;">Outstanding (≥4.5)</div>
+                    <div style="font-size: 13pt; font-weight: 900; color: #0f172a; margin: 2px 0;">${tierStats.outstanding}</div>
+                    <div style="color: #64748b;">${totalFacultyCount > 0 ? Math.round((tierStats.outstanding / totalFacultyCount) * 100) : 0}% of faculty</div>
+                  </div>
+                  <div class="scale-card" style="border-top: 3px solid #1d4ed8;">
+                    <div style="font-weight: 800; color: #1d4ed8;">Excellent (4.0-4.49)</div>
+                    <div style="font-size: 13pt; font-weight: 900; color: #0f172a; margin: 2px 0;">${tierStats.excellent}</div>
+                    <div style="color: #64748b;">${totalFacultyCount > 0 ? Math.round((tierStats.excellent / totalFacultyCount) * 100) : 0}% of faculty</div>
+                  </div>
+                  <div class="scale-card" style="border-top: 3px solid #0284c7;">
+                    <div style="font-weight: 800; color: #0284c7;">Very Good (3.5-3.99)</div>
+                    <div style="font-size: 13pt; font-weight: 900; color: #0f172a; margin: 2px 0;">${tierStats.veryGood}</div>
+                    <div style="color: #64748b;">${totalFacultyCount > 0 ? Math.round((tierStats.veryGood / totalFacultyCount) * 100) : 0}% of faculty</div>
+                  </div>
+                  <div class="scale-card" style="border-top: 3px solid #b45309;">
+                    <div style="font-weight: 800; color: #b45309;">Good (3.0-3.49)</div>
+                    <div style="font-size: 13pt; font-weight: 900; color: #0f172a; margin: 2px 0;">${tierStats.good}</div>
+                    <div style="color: #64748b;">${totalFacultyCount > 0 ? Math.round((tierStats.good / totalFacultyCount) * 100) : 0}% of faculty</div>
+                  </div>
+                  <div class="scale-card" style="border-top: 3px solid #b91c1c;">
+                    <div style="font-weight: 800; color: #b91c1c;">Needs Imprv. (&lt;3.0)</div>
+                    <div style="font-size: 13pt; font-weight: 900; color: #0f172a; margin: 2px 0;">${tierStats.needsImprovement}</div>
+                    <div style="color: #64748b;">${totalFacultyCount > 0 ? Math.round((tierStats.needsImprovement / totalFacultyCount) * 100) : 0}% of faculty</div>
+                  </div>
+                </div>
+
+                <!-- Summary Report Table -->
+                <div class="table-section-title">
+                  <span>Faculty Evaluation Summary Report Table</span>
+                  <span style="font-size: 8.5pt; color: #64748b; font-weight: 600; text-transform: none;">
+                    ${totalFacultyCount} Faculty Member${totalFacultyCount === 1 ? '' : 's'} &bull; Ranked by Average Rating
                   </span>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+                </div>
 
-          <!-- Comprehensive Faculty Evaluation Dossiers (Option A + Comments all together under teacher) -->
-          <div class="page-break" style="page-break-before: always; margin-top: 28px; padding-top: 18px; border-top: 2px dashed #cbd5e1;">
-            <div class="table-section-title" style="margin-bottom: 14px;">
-              <span>Faculty Performance Dossiers & Qualitative Feedback</span>
-              <span style="font-size: 10px; color: #64748b; font-weight: 600; text-transform: none;">
-                Option A: Groq AI Qualitative Synthesis & Anonymized Student Comments
-              </span>
-            </div>
-            ${facultyDossiersHtml}
-          </div>
+                <table class="summary-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 32px; text-align: center;">#</th>
+                      <th style="width: 35%;">FACULTY NAME</th>
+                      <th style="width: 25%;">PROGRAM</th>
+                      <th style="width: 18%; text-align: center;">RATING</th>
+                      <th style="width: 22%; text-align: center;">PERFORMANCE CLASSIFICATION</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${facultyRows}
+                  </tbody>
+                  <tfoot>
+                    <tr style="background: #f1f5f9; font-weight: 800; border-top: 2px solid #cbd5e1;">
+                      <td colspan="2" style="text-align: right; padding: 8px 10px; font-size: 9.5pt; color: #0f172a;">
+                        Institutional / Program Scope Average:
+                      </td>
+                      <td style="padding: 8px 10px; font-size: 9pt; color: #334155;">
+                        ${escapeHtml(scopeLabel)}
+                      </td>
+                      <td style="text-align: center; padding: 8px;">
+                        <div class="rating-badge" style="background: ${ratingBg(overallAvg)}; border: 1px solid ${ratingBorder(overallAvg)}; display: inline-block; padding: 2px 8px; border-radius: 6px; line-height: 1.2;">
+                          <span style="font-weight: 800; font-size: 9.5pt; color: ${ratingColor(overallAvg)}; margin-right: 3px;">${overallAvg}</span>
+                          <span style="font-size: 8pt; font-weight: 600; opacity: 0.85; color: ${ratingColor(overallAvg)};">/ 5.00</span>
+                        </div>
+                      </td>
+                      <td style="text-align: center; padding: 8px;">
+                        <span class="classification-badge" style="background: ${ratingBg(overallAvg)}; border: 1px solid ${ratingBorder(overallAvg)}; color: ${ratingColor(overallAvg)};">
+                          ${overallAvg !== "—" ? getPerformanceLabel(overallAvg) : "—"}
+                        </span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
 
-          <!-- Official Sign-off Block -->
-          <div class="signature-grid">
-            <div class="sig-card">
-              <div class="sig-space"></div>
-              <div class="sig-title">${escapeHtml(userProfile?.full_name || "Evaluation Administrator")}</div>
-              <div class="sig-role">Prepared by / Academic Coordinator</div>
-              <div class="sig-date">Date: ${escapeHtml(now)}</div>
-            </div>
-            <div class="sig-card">
-              <div class="sig-space"></div>
-              <div class="sig-title">Department Chairperson / Program Head</div>
-              <div class="sig-role">Reviewed & Verified by</div>
-              <div class="sig-date">Date: ________________________</div>
-            </div>
-            <div class="sig-card">
-              <div class="sig-space"></div>
-              <div class="sig-title">Dean / VP Academic Affairs</div>
-              <div class="sig-role">Approved by</div>
-              <div class="sig-date">Date: ________________________</div>
-            </div>
-          </div>
+                <!-- Official Sign-off Block -->
+                <div class="signature-grid">
+                  <div class="sig-card">
+                    <div class="sig-space"></div>
+                    <div class="sig-title">${escapeHtml(userProfile?.full_name || "Evaluation Administrator")}</div>
+                    <div class="sig-role">Prepared by / Academic Coordinator</div>
+                    <div class="sig-date">Date: ${escapeHtml(now)}</div>
+                  </div>
+                  <div class="sig-card">
+                    <div class="sig-space"></div>
+                    <div class="sig-title">Department Chairperson / Program Head</div>
+                    <div class="sig-role">Reviewed & Verified by</div>
+                    <div class="sig-date">Date: ________________________</div>
+                  </div>
+                  <div class="sig-card">
+                    <div class="sig-space"></div>
+                    <div class="sig-title">Dean / VP Academic Affairs</div>
+                    <div class="sig-role">Approved by</div>
+                    <div class="sig-date">Date: ________________________</div>
+                  </div>
+                </div>
 
-          <div class="notice-card">
-            Official Academic Record Notice: This document is generated directly from FacultyTrack evaluation records. In strict compliance with institutional student anonymity policy, all student identities and tokens are completely protected. Qualitative student comments are screened through content moderation filters and synthesized via Groq LLaMA 3 AI. Server audit log action: report.export.
-          </div>
+                <div class="notice-card">
+                  Official Academic Record Notice: This document is an executive statistical summary generated directly from FacultyTrack evaluation records. Quantitative performance metrics and classifications are certified for academic administration. Server audit log action: report.export.
+                </div>
 
-          <div class="footer-card">
-            FacultyTrack Academic Management & Evaluation System &bull; Confidential Administrative Summary Report
+                <div class="footer-card">
+                  FacultyTrack Academic Management & Evaluation System &bull; Confidential Administrative Summary Report
+                </div>
+              </div>
+            </div>
           </div>
 
           <script>
-            window.onload = function() {
-              setTimeout(function() {
-                window.focus();
-                window.print();
-              }, 300);
-            };
+            const originalTitle = document.title;
+            const printTitle = ${JSON.stringify(printDocTitle)};
+
+            function changePaperSize(size) {
+              const root = document.documentElement;
+              const pageStyle = document.getElementById('dynamicPageStyle');
+              if (size === 'long') {
+                root.style.setProperty('--paper-width', '8.5in');
+                root.style.setProperty('--paper-height', '13in');
+                if (pageStyle) {
+                  pageStyle.innerHTML = '@page { size: 8.5in 13in portrait; margin: 8mm 12mm 10mm 12mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #64748b; } }';
+                }
+              } else if (size === 'legal') {
+                root.style.setProperty('--paper-width', '8.5in');
+                root.style.setProperty('--paper-height', '14in');
+                if (pageStyle) {
+                  pageStyle.innerHTML = '@page { size: 8.5in 14in portrait; margin: 8mm 12mm 10mm 12mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #64748b; } }';
+                }
+              } else if (size === 'a4') {
+                root.style.setProperty('--paper-width', '8.27in');
+                root.style.setProperty('--paper-height', '11.69in');
+                if (pageStyle) {
+                  pageStyle.innerHTML = '@page { size: a4 portrait; margin: 8mm 12mm 10mm 12mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #64748b; } }';
+                }
+              } else if (size === 'auto') {
+                root.style.setProperty('--paper-width', '8.5in');
+                root.style.setProperty('--paper-height', '11in');
+                if (pageStyle) {
+                  pageStyle.innerHTML = '@page { size: portrait; margin: 8mm 12mm 10mm 12mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #64748b; } }';
+                }
+              } else {
+                root.style.setProperty('--paper-width', '8.5in');
+                root.style.setProperty('--paper-height', '11in');
+                if (pageStyle) {
+                  pageStyle.innerHTML = '@page { size: 8.5in 11in portrait; margin: 8mm 12mm 10mm 12mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #64748b; } }';
+                }
+              }
+            }
+
+            async function downloadDirectPDF() {
+              var btn = document.getElementById('btnDownloadPdf');
+              var sheet = document.querySelector('.paper-sheet');
+              if (!sheet) return;
+
+              var sizeSelect = document.getElementById('paperSizeSelect');
+              var currentSize = sizeSelect ? sizeSelect.value : 'short';
+              var jsPdfFormat = 'letter';
+              if (currentSize === 'long') jsPdfFormat = [8.5, 13];
+              else if (currentSize === 'legal') jsPdfFormat = 'legal';
+              else if (currentSize === 'a4') jsPdfFormat = 'a4';
+
+              var origBtnHtml = btn ? btn.innerHTML : '';
+              if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 1s linear infinite;"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> Downloading...';
+              }
+
+              // Build isolated clone pinned at (0,0) — no flex centering, no sticky bar offset, no transform
+              var pxWidth = currentSize === 'a4' ? 794 : 816;
+              var host = document.createElement('div');
+              host.style.cssText = 'position:absolute;left:0;top:0;width:' + pxWidth + 'px;background:#ffffff;z-index:-1;margin:0;padding:0;';
+              var clone = sheet.cloneNode(true);
+              clone.style.cssText = 'width:' + pxWidth + 'px;min-height:0;height:auto;margin:0;box-shadow:none;border-radius:0;transform:none;box-sizing:border-box;background:#ffffff;';
+              host.appendChild(clone);
+              document.body.appendChild(host);
+
+              var prevScroll = window.scrollY;
+              window.scrollTo(0, 0);
+
+              var opt = {
+                margin: 0,
+                filename: (printTitle || 'Faculty_Evaluation_Summary_Report') + '.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: {
+                  scale: 2,
+                  useCORS: true,
+                  logging: false,
+                  backgroundColor: '#ffffff',
+                  scrollX: 0,
+                  scrollY: 0,
+                  x: 0,
+                  y: 0,
+                  width: pxWidth,
+                  windowWidth: pxWidth
+                },
+                jsPDF: {
+                  unit: 'in',
+                  format: jsPdfFormat,
+                  orientation: 'portrait'
+                },
+                pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.kpi-card', '.scale-card', '.signature-grid'] }
+              };
+
+              try {
+                if (typeof html2pdf !== 'function') {
+                  throw new Error('PDF generator library not loaded. Use "Save as PDF / Print".');
+                }
+                await html2pdf().set(opt).from(clone).save();
+              } catch (err) {
+                alert('Direct download issue: ' + (err.message || err) + '\\n\\nTip: You can use "Save as PDF / Print" to save directly via your browser.');
+              } finally {
+                if (host.parentNode) host.parentNode.removeChild(host);
+                window.scrollTo(0, prevScroll);
+                if (btn) {
+                  btn.disabled = false;
+                  btn.innerHTML = origBtnHtml;
+                }
+              }
+            }
+
+            function doPrint() {
+              document.title = printTitle;
+              window.print();
+            }
+
+            window.addEventListener('beforeprint', function() {
+              document.title = printTitle;
+            });
+
+            window.addEventListener('afterprint', function() {
+              document.title = originalTitle;
+            });
           </script>
         </body>
         </html>
@@ -1626,23 +1815,42 @@ export default function AdminReport() {
           <title>Individual Faculty Evaluation Report — ${escapeHtml(targetReport.faculty)}</title>
           <style>
             * { box-sizing: border-box; margin: 0; padding: 0; }
+            :root { --paper-width: 8.5in; --paper-height: 11in; --paper-padding: 0.6in 0.65in; }
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
               color: #0f172a;
               font-size: 11px;
               line-height: 1.45;
-              background: #ffffff;
-              padding: 24px 30px;
+              background: #e5e7eb;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
-            @page { size: portrait; margin: 10mm 12mm; }
-            @media print {
-              body { padding: 0; }
-              .no-print { display: none !important; }
-            }
             .no-print-bar {
-              background: #0f172a; color: #fff; padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; border-radius: 8px; margin-bottom: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+              position: sticky; top: 0; z-index: 100;
+              background: #0f172a; color: #fff; padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+            }
+            .bar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+            .bar-btn { border: none; padding: 7px 16px; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; color: #fff; display: inline-flex; align-items: center; gap: 6px; }
+            .bar-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+            .btn-download { background: #059669; } .btn-download:hover { background: #047857; }
+            .btn-print { background: #2563eb; } .btn-print:hover { background: #1d4ed8; }
+            .btn-close { background: #475569; } .btn-close:hover { background: #334155; }
+            @keyframes spin { 100% { transform: rotate(360deg); } }
+            .viewer-container { width: 100%; padding: 24px 16px 48px; display: flex; justify-content: center; align-items: flex-start; overflow-x: auto; }
+            .sheet-wrapper { width: var(--paper-width); transform-origin: top center; }
+            .paper-sheet { background: #ffffff; width: var(--paper-width); min-height: var(--paper-height); padding: var(--paper-padding); margin: 0 auto; box-shadow: 0 4px 20px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.08); border-radius: 2px; }
+            @media screen and (max-width: 860px) {
+              .viewer-container { padding: 12px 6px 36px; overflow-x: hidden; }
+              .sheet-wrapper { transform: scale(calc((100vw - 16px) / 816)); }
+            }
+            @media print {
+              html, body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; }
+              .no-print, .no-print-bar { display: none !important; }
+              .viewer-container { padding: 0 !important; display: block !important; overflow: visible !important; }
+              .sheet-wrapper { transform: none !important; width: 100% !important; }
+              .paper-sheet { box-shadow: none !important; margin: 0 !important; padding: 0 !important; width: 100% !important; min-height: 0 !important; }
+              tr, .hero-card, .meta-tile, .ai-box, .strength-box, .rec-box, .sig-grid { break-inside: avoid; page-break-inside: avoid; }
+              thead { display: table-header-group; }
             }
             .inst-header { text-align: center; padding-bottom: 12px; border-bottom: 2.5px solid #1e3a8a; margin-bottom: 14px; }
             .inst-pretitle { font-size: 10px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #475569; margin-bottom: 3px; }
@@ -1655,8 +1863,8 @@ export default function AdminReport() {
             .hero-score { font-size: 30px; font-weight: 900; line-height: 1; }
             .hero-badge { display: inline-block; padding: 5px 14px; border-radius: 999px; color: #fff; font-weight: 800; font-size: 12px; letter-spacing: 0.3px; }
             
-            .meta-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
-            .meta-tile { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; }
+            .meta-tiles { display: flex; width: 100%; gap: 8px; margin-bottom: 14px; }
+            .meta-tile { flex: 1 1 0; min-width: 0; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; }
             .meta-tile-label { font-size: 9px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 2px; }
             .meta-tile-val { font-size: 13.5px; font-weight: 800; color: #0f172a; }
 
@@ -1672,26 +1880,40 @@ export default function AdminReport() {
             .strength-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; }
             .rec-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; }
             
-            .sig-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
-            .sig-card { text-align: center; }
+            .sig-grid { display: flex; width: 100%; gap: 14px; margin-top: 18px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
+            .sig-card { flex: 1 1 0; min-width: 0; text-align: center; }
             .sig-space { height: 40px; border-bottom: 1px solid #0f172a; margin-bottom: 6px; }
             .sig-name { font-weight: 800; font-size: 10.5px; color: #0f172a; }
             .sig-role { font-size: 9.5px; color: #64748b; }
           </style>
+          <style id="dynamicPageStyle">@page { size: 8.5in 11in portrait; margin: 8mm 12mm 10mm 12mm; }</style>
+          <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
         </head>
         <body>
           <div class="no-print no-print-bar">
             <span style="font-weight: 700; font-size: 13px;">FacultyTrack &bull; Individual Faculty Evaluation Report</span>
-            <div style="display: flex; gap: 8px;">
-              <button onclick="window.print()" style="background: #2563eb; color: #fff; border: none; padding: 7px 16px; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer;">
-                Print / Save as PDF
+            <div class="bar-actions">
+              <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #cbd5e1;">
+                <label for="paperSizeSelect" style="font-weight: 600;">Paper Size:</label>
+                <select id="paperSizeSelect" onchange="changePaperSize(this.value)" style="background: #1e293b; color: #ffffff; border: 1.5px solid #475569; padding: 5px 8px; border-radius: 6px; font-size: 11.5px; cursor: pointer; font-weight: 600;">
+                  <option value="short" selected>Short Bond (8.5" × 11" Letter)</option>
+                  <option value="long">Long Bond (8.5" × 13" Folio)</option>
+                  <option value="legal">Long Bond (8.5" × 14" Legal)</option>
+                  <option value="a4">A4 (8.27" × 11.69")</option>
+                </select>
+              </div>
+              <button id="btnDownloadPdf" class="bar-btn btn-download" onclick="downloadDirectPDF()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download PDF
               </button>
-              <button onclick="window.close()" style="background: #475569; color: #fff; border: none; padding: 7px 14px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer;">
-                Close
-              </button>
+              <button class="bar-btn btn-print" onclick="window.print()">Save as PDF / Print</button>
+              <button class="bar-btn btn-close" onclick="window.close()">Close</button>
             </div>
           </div>
 
+          <div class="viewer-container">
+          <div class="sheet-wrapper">
+          <div class="paper-sheet">
           <div class="inst-header">
             <div class="inst-pretitle">FACULTYTRACK ACADEMIC PERFORMANCE & EVALUATION SYSTEM</div>
             <h1 class="inst-title">INDIVIDUAL FACULTY PERFORMANCE EVALUATION REPORT</h1>
@@ -1745,8 +1967,8 @@ export default function AdminReport() {
           <table>
             <thead>
               <tr>
-                <th style="width: 48%;">SUBJECT CODE &amp; TITLE</th>
-                <th style="width: 20%;">SECTION</th>
+                <th style="width: 44%;">SUBJECT CODE &amp; TITLE</th>
+                <th style="width: 24%;">ASSIGNED SECTION(S)</th>
                 <th style="width: 16%; text-align: center;">SUBMISSIONS</th>
                 <th style="width: 16%; text-align: right;">MEAN RATING</th>
               </tr>
@@ -1828,14 +2050,70 @@ export default function AdminReport() {
           <div style="margin-top: 14px; font-size: 9px; color: #94a3b8; text-align: center; border-top: 1px solid #f1f5f9; padding-top: 8px;">
             FacultyTrack Academic Management & Evaluation System &bull; Generated: ${escapeHtml(now)} &bull; Student anonymity strictly guaranteed.
           </div>
+          </div>
+          </div>
+          </div>
 
           <script>
-            window.onload = function() {
-              setTimeout(function() {
-                window.focus();
-                window.print();
-              }, 350);
-            };
+            var pdfFileName = ${JSON.stringify("Individual-Faculty-Report_" + String(targetReport.faculty || "Faculty").replace(/[^a-zA-Z0-9]+/g, "-") + "_" + String(ayLabel).replace(/[^a-zA-Z0-9]+/g, "-") + "_" + String(semLabel).replace(/[^a-zA-Z0-9]+/g, "-"))};
+
+            function changePaperSize(size) {
+              var root = document.documentElement;
+              var pageStyle = document.getElementById('dynamicPageStyle');
+              var w = '8.5in', h = '11in', pg = '8.5in 11in';
+              if (size === 'long') { h = '13in'; pg = '8.5in 13in'; }
+              else if (size === 'legal') { h = '14in'; pg = '8.5in 14in'; }
+              else if (size === 'a4') { w = '8.27in'; h = '11.69in'; pg = 'a4'; }
+              root.style.setProperty('--paper-width', w);
+              root.style.setProperty('--paper-height', h);
+              if (pageStyle) pageStyle.innerHTML = '@page { size: ' + pg + ' portrait; margin: 8mm 12mm 10mm 12mm; }';
+            }
+
+            async function downloadDirectPDF() {
+              var btn = document.getElementById('btnDownloadPdf');
+              var sheet = document.querySelector('.paper-sheet');
+              if (!sheet) return;
+              var sizeSelect = document.getElementById('paperSizeSelect');
+              var currentSize = sizeSelect ? sizeSelect.value : 'short';
+              var jsPdfFormat = 'letter';
+              if (currentSize === 'long') jsPdfFormat = [8.5, 13];
+              else if (currentSize === 'legal') jsPdfFormat = 'legal';
+              else if (currentSize === 'a4') jsPdfFormat = 'a4';
+
+              var origBtnHtml = btn ? btn.innerHTML : '';
+              if (btn) { btn.disabled = true; btn.innerHTML = 'Downloading...'; }
+
+              // Isolated clone pinned at (0,0): no centering, no sticky bar offset, no transform
+              var pxWidth = currentSize === 'a4' ? 794 : 816;
+              var host = document.createElement('div');
+              host.style.cssText = 'position:absolute;left:0;top:0;width:' + pxWidth + 'px;background:#ffffff;z-index:-1;margin:0;padding:0;';
+              var clone = sheet.cloneNode(true);
+              clone.style.cssText = 'width:' + pxWidth + 'px;min-height:0;height:auto;margin:0;box-shadow:none;border-radius:0;transform:none;box-sizing:border-box;background:#ffffff;';
+              host.appendChild(clone);
+              document.body.appendChild(host);
+              var prevScroll = window.scrollY;
+              window.scrollTo(0, 0);
+
+              var opt = {
+                margin: 0,
+                filename: pdfFileName + '.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0, x: 0, y: 0, width: pxWidth, windowWidth: pxWidth },
+                jsPDF: { unit: 'in', format: jsPdfFormat, orientation: 'portrait' },
+                pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.hero-card', '.meta-tile', '.strength-box', '.rec-box', '.sig-grid'] }
+              };
+
+              try {
+                if (typeof html2pdf !== 'function') throw new Error('PDF generator library not loaded. Use "Save as PDF / Print".');
+                await html2pdf().set(opt).from(clone).save();
+              } catch (err) {
+                alert('Direct download issue: ' + (err.message || err));
+              } finally {
+                if (host.parentNode) host.parentNode.removeChild(host);
+                window.scrollTo(0, prevScroll);
+                if (btn) { btn.disabled = false; btn.innerHTML = origBtnHtml; }
+              }
+            }
           </script>
         </body>
         </html>
@@ -2379,7 +2657,7 @@ export default function AdminReport() {
                         <thead>
                           <tr>
                             <th>SUBJECT CODE & NAME</th>
-                            <th>SECTION</th>
+                            <th>ASSIGNED SECTION(S)</th>
                             <th style={{ textAlign: "center" }}>SUBMISSIONS</th>
                             <th style={{ textAlign: "right" }}>MEAN RATING</th>
                           </tr>
@@ -2388,6 +2666,7 @@ export default function AdminReport() {
                           {selectedReport.sectionBreakdown.map((sec, idx) => {
                             const secRating = sec.rating;
                             const secColor = getPerformanceColor(secRating);
+                            const secBadges = sec.sectionsList || (sec.section && sec.section !== "—" ? sec.section.split(', ') : []);
                             return (
                               <tr key={idx}>
                                 <td>
@@ -2395,7 +2674,15 @@ export default function AdminReport() {
                                   {sec.subjectName && <div style={{ fontSize: "11px", color: "#64748b" }}>{sec.subjectName}</div>}
                                 </td>
                                 <td>
-                                  <span className="ad-sectionBadge">{sec.section}</span>
+                                  {secBadges.length > 0 ? (
+                                    secBadges.map((s, sIdx) => (
+                                      <span key={sIdx} className="ad-sectionBadge" style={{ marginRight: 4, marginBottom: 2, display: "inline-block" }}>
+                                        {s}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span style={{ color: "#94a3b8" }}>—</span>
+                                  )}
                                 </td>
                                 <td style={{ textAlign: "center", fontWeight: 600 }}>
                                   {sec.formCount}
