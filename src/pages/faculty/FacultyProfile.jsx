@@ -208,22 +208,6 @@ export default function FacultyProfile() {
               </div>
 
               <div className="sp-detailRow">
-                <div className="sp-iconBox"><Award size={18} /></div>
-                <div className="sp-detailBody">
-                  <span className="sp-detailLabel">Area of Specialization</span>
-                  <span className="sp-detailValue">{profile.specialization || "General Instruction"}</span>
-                </div>
-              </div>
-
-              <div className="sp-detailRow">
-                <div className="sp-iconBox"><Building2 size={18} /></div>
-                <div className="sp-detailBody">
-                  <span className="sp-detailLabel">Office Location</span>
-                  <span className="sp-detailValue">{profile.officeLocation || "Faculty Room / Main Building"}</span>
-                </div>
-              </div>
-
-              <div className="sp-detailRow">
                 <div className="sp-iconBox sp-iconBox--green"><CheckCircle2 size={18} /></div>
                 <div className="sp-detailBody">
                   <span className="sp-detailLabel">Employment Status</span>
@@ -335,14 +319,6 @@ export default function FacultyProfile() {
                   <div>
                     <span style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#64748b" }}>Academic Position</span>
                     <span style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>{profile.position || "Faculty Member"}</span>
-                  </div>
-                  <div>
-                    <span style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#64748b" }}>Specialization</span>
-                    <span style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>{profile.specialization || "General Instruction"}</span>
-                  </div>
-                  <div>
-                    <span style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#64748b" }}>Office Location</span>
-                    <span style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>{profile.officeLocation || "Faculty Room / Main Building"}</span>
                   </div>
                   <div>
                     <span style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#64748b" }}>Status</span>

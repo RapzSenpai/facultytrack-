@@ -144,21 +144,46 @@ function buildEvaluationPeriods(evaluations, questions, criteria) {
     // Basic Insights extraction
     const rawComments = evals.map(ev => ev.comment).filter(c => c && c.trim().length > 0);
     
-    // 1. Analyze sentiments
+    // 1. Analyze sentiments with multilingual (Bisaya, Tagalog, English) & negation awareness
     const analyzedComments = rawComments.map(c => {
       const lower = c.toLowerCase();
-      const posWords = ['excellent','great','good','outstanding','best','helpful','clear','nice','amazing','love','perfect','awesome','approachable','kind','patient','effective'];
-      const negWords = ['bad','poor','unclear','boring','late','rude','hard','difficult','improve','needs','strict','fast','confusing','absent','unfair'];
+      const posWords = [
+        'excellent','great','good','outstanding','best','helpful','clear','nice','amazing',
+        'love','perfect','awesome','approachable','kind','patient','effective','maayo','nindot',
+        'buotan','magaling','mahusay','mabait','malinaw'
+      ];
+      const negWords = [
+        'bad','poor','unclear','boring','late','rude','hard','difficult','improve','needs',
+        'strict','fast','confusing','absent','unfair','bati','tapulan','tamad','suko','kasaba',
+        'samok','lisod','lisud','pangit','magulo','kulang','diko ganahan','di ganahan','walay ayo',
+        'way ayo','hirap'
+      ];
       
       let posCount = 0;
       let negCount = 0;
+
+      // Check negated positive phrases (e.g., "dili approachable", "not helpful", "di maayo")
+      const negatedPositivePattern = /\b(dili|di|not|never|hindi|walay|walang)\s+(kaayo\s+|pajud\s+|masyadong\s+)?(approachable|helpful|clear|nice|kind|patient|effective|good|maayo|buotan|nindot|magaling|mabait)\b/gi;
+      const negatedMatches = lower.match(negatedPositivePattern) || [];
+      negCount += negatedMatches.length * 2; // Negated compliments are strong negatives
       
-      posWords.forEach(w => { if (lower.includes(w)) posCount++; });
-      negWords.forEach(w => { if (lower.includes(w)) negCount++; });
+      posWords.forEach(w => {
+        // Only count positive if not part of a negation
+        if (lower.includes(w)) {
+          const negCheck = new RegExp(`\\b(dili|di|not|never|hindi|walay|walang)\\s+(kaayo\\s+|pajud\\s+)?${w}\\b`, 'i');
+          if (!negCheck.test(lower)) {
+            posCount++;
+          }
+        }
+      });
+      
+      negWords.forEach(w => {
+        if (lower.includes(w)) negCount++;
+      });
       
       let sentiment = "neutral";
-      if (posCount > negCount) sentiment = "positive";
-      else if (negCount > posCount) sentiment = "negative";
+      if (negCount > posCount) sentiment = "negative";
+      else if (posCount > negCount) sentiment = "positive";
       
       return { text: c, sentiment };
     });
@@ -475,21 +500,6 @@ export default function FacultyEvalResult() {
                       </div>
                     )}
                   </div>
-                </div>
-
-                <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }} className="no-print">
-                  <button
-                    type="button"
-                    onClick={openSummary}
-                    disabled={summaryLoading}
-                    className="fd-aiSummaryBtn"
-                    title="AI-generated summary of anonymized comments for this period"
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2l1.9 5.7a2 2 0 0 0 1.3 1.3L21 11l-5.8 2a2 2 0 0 0-1.3 1.3L12 20l-1.9-5.7a2 2 0 0 0-1.3-1.3L3 11l5.8-2a2 2 0 0 0 1.3-1.3L12 2z" />
-                    </svg>
-                    Generate AI Executive Insights
-                  </button>
                 </div>
               </div>
             </div>

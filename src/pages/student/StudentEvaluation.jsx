@@ -369,6 +369,11 @@ export default function StudentEvaluation() {
     }
     setSubmitting(true);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session) {
+        throw new Error("Your login session expired. Please log out and log back in.");
+      }
+
       const { data, error } = await supabase.functions.invoke("submit-evaluation", {
         body: {
           assignment_id: selectedFaculty.assignmentId,

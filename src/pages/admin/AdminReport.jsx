@@ -379,6 +379,9 @@ export default function AdminReport() {
     ));
   };
 
+  // Lookup map for assignments
+  const assignMap = new Map(assignments.map(a => [a.id, a]));
+
   // Consolidated Overall Data: Aggregated across all assigned sections per faculty
   const inScopeFaculty = facultyUsers
     .filter(f => !filterFaculty || f.id === filterFaculty)
@@ -435,6 +438,19 @@ export default function AdminReport() {
         formCount: facEvals.length,
         rating: avg(allScores),
         sectionBreakdown,
+        comments: facEvals
+          .filter(e => e.comment && e.comment.trim().length > 0)
+          .filter(e => e.moderation_status === "allow")
+          .map(e => {
+            const assign = assignMap.get(e.assignmentId);
+            return {
+              id: e.id,
+              comment: e.comment.trim(),
+              subject: e.assignment_subject_code || assign?.subjectCode || assign?.subjectName || "",
+              date: e.submitted_on || "",
+              moderationStatus: e.moderation_status || "allow",
+            };
+          }),
         isConsolidated: true,
       };
     })
@@ -503,8 +519,6 @@ export default function AdminReport() {
   });
 
 
-  // Lookup map for assignments
-  const assignMap = new Map(assignments.map(a => [a.id, a]));
 
   // 1. Year Level Performance Data (1st, 2nd, 3rd, 4th Year)
   const yearLevelOrder = [
@@ -2014,7 +2028,7 @@ export default function AdminReport() {
             style={{ padding: "9px 22px", fontSize: "13.5px" }}
           >
             <RosterIcon />
-            Faculty Scorecards &amp; Roster
+            Faculty Reports
             <span className="ad-tabBadge">{consolidatedData.length}</span>
           </button>
         </div>
@@ -2408,6 +2422,52 @@ export default function AdminReport() {
                     </div>
                   )}
                 </div>
+
+                {/* Qualitative Student Comments Card */}
+                <div className="ad-tableCard" style={{ padding: "20px 24px", marginBottom: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", flexWrap: "wrap", gap: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 800, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        Student Feedback & Qualitative Comments
+                      </h3>
+                      <span style={{ fontSize: "11px", fontWeight: 800, padding: "2px 8px", background: "#e0e7ff", color: "#3730a3", borderRadius: "999px" }}>
+                        {selectedReport.comments?.length || 0}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: "11.5px", color: "#64748b" }}>
+                      Identity-stripped student feedback
+                    </span>
+                  </div>
+
+                  {(!selectedReport.comments || selectedReport.comments.length === 0) ? (
+                    <div style={{ padding: "30px 20px", textAlign: "center", color: "#94a3b8", fontSize: "12.5px", background: "#f8fafc", borderRadius: "8px", border: "1px dashed #cbd5e1" }}>
+                      No qualitative comments submitted for this faculty member in this period.
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "420px", overflowY: "auto", paddingRight: "4px" }}>
+                      {selectedReport.comments.map((c, cIdx) => (
+                        <div
+                          key={c.id || cIdx}
+                          style={{
+                            background: "#f8fafc",
+                            border: "1px solid #e2e8f0",
+                            borderLeft: "3.5px solid #2563eb",
+                            borderRadius: "0 8px 8px 0",
+                            padding: "12px 14px",
+                          }}
+                        >
+                          <div style={{ fontSize: "13px", color: "#1e293b", lineHeight: "1.5", fontStyle: "italic", marginBottom: "8px" }}>
+                            &ldquo;{c.comment}&rdquo;
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "6px", fontSize: "11px", color: "#64748b" }}>
+                            <span style={{ fontStyle: "italic", color: "#94a3b8" }}>Anonymous Student Feedback</span>
+                            {c.date && <span>{c.date}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : activeReportTab === "analytics" ? (
               /* DEPARTMENT OVERVIEW CHARTS */
@@ -2419,7 +2479,7 @@ export default function AdminReport() {
                         Department Analytics & Visual Insights
                       </h3>
                       <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#64748b" }}>
-                        Open the Faculty Scorecards &amp; Roster tab to inspect each faculty member's evaluation breakdown
+                        Open the Faculty Reports tab to inspect each faculty member's evaluation breakdown
                       </p>
                     </div>
                     <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "4px 10px", borderRadius: "6px" }}>
@@ -2859,11 +2919,45 @@ export default function AdminReport() {
                 </div>
               )}
 
-              <div style={{ marginTop: "20px", padding: "12px 16px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0", color: "#64748b", fontSize: "12.5px", fontStyle: "italic", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, color: "#94a3b8" }}>
-                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
-                </svg>
-                <span>Written comments are excluded by policy (statistics only). Flagged feedback is reviewed in Moderation.</span>
+              {/* Student Feedback & Qualitative Comments in Modal */}
+              <div style={{ marginTop: "20px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                  <h4 style={{ fontSize: "11.5px", fontWeight: "700", color: "#475569", margin: 0, textTransform: "uppercase", letterSpacing: "0.6px" }}>
+                    Student Feedback & Qualitative Comments
+                  </h4>
+                  <span style={{ fontSize: "11px", fontWeight: 700, padding: "2px 8px", background: "#e0e7ff", color: "#3730a3", borderRadius: "999px" }}>
+                    {viewingReport.comments?.length || 0}
+                  </span>
+                </div>
+
+                {(!viewingReport.comments || viewingReport.comments.length === 0) ? (
+                  <div style={{ padding: "24px 14px", textAlign: "center", color: "#94a3b8", fontSize: "12.5px", background: "#f8fafc", borderRadius: "8px", border: "1px dashed #cbd5e1" }}>
+                    No qualitative comments recorded for this evaluation period.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "280px", overflowY: "auto", paddingRight: "4px" }}>
+                    {viewingReport.comments.map((c, cIdx) => (
+                      <div
+                        key={c.id || cIdx}
+                        style={{
+                          background: "#f8fafc",
+                          border: "1px solid #e2e8f0",
+                          borderLeft: "3px solid #2563eb",
+                          borderRadius: "0 6px 6px 0",
+                          padding: "10px 12px",
+                        }}
+                      >
+                        <div style={{ fontSize: "12.5px", color: "#1e293b", lineHeight: "1.45", fontStyle: "italic", marginBottom: "6px" }}>
+                          &ldquo;{c.comment}&rdquo;
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "10.5px", color: "#64748b" }}>
+                          <span style={{ fontStyle: "italic", color: "#94a3b8" }}>Anonymous Student Feedback</span>
+                          {c.date && <span>{c.date}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
             </div>

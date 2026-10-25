@@ -274,9 +274,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
       isSuper
         ? facultyRows.map((f: { id: string }) => f.id)
         : facultyRows
-          .filter((f: { department_id: string | null; department: string }) =>
-            (f.department_id && assignedDeptIds.includes(f.department_id)) ||
-            assignedDeptNames.includes(f.department),
+          .filter((f) =>
+            Boolean(
+              (f.department_id && assignedDeptIds.includes(f.department_id)) ||
+              (f.department && assignedDeptNames.includes(f.department)),
+            ),
           )
           .map((f: { id: string }) => f.id),
     );

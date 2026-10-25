@@ -187,14 +187,16 @@ export default function AdminDepartment() {
     setSaving(true);
     try {
       if (editingProgram) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from("departments")
           .update({
             name: programForm.name.trim().toUpperCase(),
             description: programForm.description.trim(),
           })
-          .eq("id", editingProgram.id);
+          .eq("id", editingProgram.id)
+          .select("id");
         if (error) throw error;
+        if (!data?.length) throw new Error("No changes saved (permission denied by database policy).");
       } else {
         const { error } = await supabase.from("departments").insert({
           name: programForm.name.trim().toUpperCase(),
@@ -228,8 +230,9 @@ export default function AdminDepartment() {
       return;
 
     try {
-      const { error } = await supabase.from("departments").delete().eq("id", dept.id);
+      const { data, error } = await supabase.from("departments").delete().eq("id", dept.id).select("id");
       if (error) throw error;
+      if (!data?.length) throw new Error("Nothing deleted (permission denied by database policy).");
       if (selectedProgram?.id === dept.id) setSelectedProgram(null);
       await loadData();
     } catch (err) {
@@ -283,8 +286,9 @@ export default function AdminDepartment() {
       };
 
       if (editingSubject) {
-        const { error } = await supabase.from("subjects").update(payload).eq("id", editingSubject.id);
+        const { data, error } = await supabase.from("subjects").update(payload).eq("id", editingSubject.id).select("id");
         if (error) throw error;
+        if (!data?.length) throw new Error("No changes saved (permission denied by database policy).");
       } else {
         const { error } = await supabase.from("subjects").insert(payload);
         if (error) throw error;
@@ -316,8 +320,9 @@ export default function AdminDepartment() {
   const handleDeleteSubject = async (sub) => {
     if (!window.confirm(`Delete subject ${sub.code} - ${sub.description}?`)) return;
     try {
-      const { error } = await supabase.from("subjects").delete().eq("id", sub.id);
+      const { data, error } = await supabase.from("subjects").delete().eq("id", sub.id).select("id");
       if (error) throw error;
+      if (!data?.length) throw new Error("Nothing deleted (permission denied by database policy).");
       await loadData();
     } catch (err) {
       console.error("Failed to delete subject:", err);
@@ -358,8 +363,9 @@ export default function AdminDepartment() {
       };
 
       if (editingSection) {
-        const { error } = await supabase.from("sections").update(payload).eq("id", editingSection.id);
+        const { data, error } = await supabase.from("sections").update(payload).eq("id", editingSection.id).select("id");
         if (error) throw error;
+        if (!data?.length) throw new Error("No changes saved (permission denied by database policy).");
       } else {
         const { error } = await supabase.from("sections").insert(payload);
         if (error) throw error;
@@ -392,8 +398,9 @@ export default function AdminDepartment() {
     if (!window.confirm(`Delete Section ${sec.name} from ${selectedProgram.name} ${sec.year_level} Year?`))
       return;
     try {
-      const { error } = await supabase.from("sections").delete().eq("id", sec.id);
+      const { data, error } = await supabase.from("sections").delete().eq("id", sec.id).select("id");
       if (error) throw error;
+      if (!data?.length) throw new Error("Nothing deleted (permission denied by database policy).");
       await loadData();
     } catch (err) {
       console.error("Failed to delete section:", err);

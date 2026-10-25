@@ -39,14 +39,8 @@ CREATE POLICY "Faculty and Admins can view class assignments"
       SELECT 1 FROM public.users
       WHERE id = auth.uid() AND role = 'super_admin'
     )
-    OR (
-      public.is_admin()
-      AND (
-        (department_id IS NOT NULL AND public.is_program_admin_for(department_id))
-        OR public.is_program_admin_for_name(department)
-        OR department_id IS NULL
-      )
-    )
+    OR public.is_program_admin_for(department_id)
+    OR public.is_program_admin_for_name(department)
   );
 
 -- 4. INSERT: Super admin (global), Program admin (scoped to program)

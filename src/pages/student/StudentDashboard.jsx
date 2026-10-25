@@ -240,9 +240,9 @@ export default function StudentDashboard() {
               )}
               {!loading && !activeYear && (
                 <div style={{ margin: "10px 0 0", padding: "10px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", fontSize: "11.5px", color: "#991b1b", lineHeight: "1.4" }}>
-                  <strong>⚠️ No academic period loaded for your program ({dept || "Not set"}).</strong>
+                  <strong>⚠️ No active evaluation period for your program ({dept || "Not set"}).</strong>
                   <div style={{ marginTop: "4px" }}>
-                    The on-going academic period was created under <strong>BSIT</strong>. If your account program is not BSIT, or if your program is stored as full text, please ask your admin to update your program in <em>Student Management</em> or run Migration 031 in the Supabase SQL editor.
+                    There is no on-going evaluation period yet. Please wait for your Program Head to open one, or contact your admin.
                   </div>
                 </div>
               )}
