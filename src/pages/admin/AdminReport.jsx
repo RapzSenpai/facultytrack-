@@ -456,6 +456,7 @@ export default function AdminReport() {
         department: faculty.department || (facAssignments[0]?.department) || "—",
         subjects: subjects.length > 0 ? subjects.join(", ") : "—",
         subjectList: subjects,
+        subjectsCount: subjects.length,
         sectionsList: sections.length > 0 ? sections.join(", ") : "—",
         sectionsCount: sections.length,
         students: uniqueStudents,
@@ -761,6 +762,7 @@ export default function AdminReport() {
             index: i + 1,
             sectionsList: localMatch?.sectionsList || "—",
             sectionsCount: localMatch?.sectionsCount || 0,
+            subjectsCount: localMatch?.subjectsCount || 0,
             students: localMatch?.students ?? "—",
             sectionBreakdown: localMatch?.sectionBreakdown || [],
           };
@@ -1807,6 +1809,21 @@ export default function AdminReport() {
         </div>
       `).join("") : `<div style="color: #94a3b8; font-style: italic; font-size: 11px; padding: 8px;">No qualitative feedback comments recorded for this period.</div>`;
 
+      const subjectsCount = targetReport.subjectsCount ?? (
+        Array.isArray(targetReport.subjectList)
+          ? targetReport.subjectList.length
+          : (targetReport.subjects && targetReport.subjects !== "—"
+              ? targetReport.subjects.split(",").filter(Boolean).length
+              : 0)
+      );
+      const sectionsCount = targetReport.sectionsCount ?? (
+        Array.isArray(targetReport.sectionBreakdown)
+          ? targetReport.sectionBreakdown.length
+          : (targetReport.sectionsList && targetReport.sectionsList !== "—"
+              ? targetReport.sectionsList.split(",").filter(Boolean).length
+              : 0)
+      );
+
       const html = `
         <!DOCTYPE html>
         <html>
@@ -1954,11 +1971,11 @@ export default function AdminReport() {
             </div>
             <div class="meta-tile">
               <div class="meta-tile-label">Assigned Subjects</div>
-              <div class="meta-tile-val" style="font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(targetReport.subjects)}</div>
+              <div class="meta-tile-val">${subjectsCount} ${subjectsCount === 1 ? "subject" : "subjects"}</div>
             </div>
             <div class="meta-tile">
               <div class="meta-tile-label">Class Sections</div>
-              <div class="meta-tile-val">${targetReport.sectionsCount} (${escapeHtml(targetReport.sectionsList)})</div>
+              <div class="meta-tile-val">${sectionsCount} ${sectionsCount === 1 ? "section" : "sections"}</div>
             </div>
           </div>
 
@@ -2623,14 +2640,14 @@ export default function AdminReport() {
                     </div>
                     <div style={{ padding: "10px 12px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
                       <div style={{ fontSize: "10.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Subjects</div>
-                      <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a", marginTop: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={selectedReport.subjects}>
-                        {selectedReport.subjects}
+                      <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a", marginTop: "2px" }} title={selectedReport.subjects}>
+                        {(selectedReport.subjectsCount ?? selectedReport.subjectList?.length ?? (selectedReport.subjects && selectedReport.subjects !== "—" ? selectedReport.subjects.split(",").filter(Boolean).length : 0))} {(selectedReport.subjectsCount ?? selectedReport.subjectList?.length ?? 1) === 1 ? "subject" : "subjects"}
                       </div>
                     </div>
                     <div style={{ padding: "10px 12px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
                       <div style={{ fontSize: "10.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Sections</div>
-                      <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a", marginTop: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={selectedReport.sectionsList}>
-                        {selectedReport.sectionsCount} ({selectedReport.sectionsList})
+                      <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a", marginTop: "2px" }} title={selectedReport.sectionsList}>
+                        {selectedReport.sectionsCount} {selectedReport.sectionsCount === 1 ? "section" : "sections"}
                       </div>
                     </div>
                   </div>
