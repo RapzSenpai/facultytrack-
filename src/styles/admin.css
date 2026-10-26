@@ -1160,9 +1160,7 @@
 .ad-tableWrap--bordered {
   border: 1.5px solid #e5e7eb;
   border-radius: 8px;
-  /* overflow: hidden clips the horizontal scrollbar on mobile;
-     use overflow-x: auto at 768px (see responsive block) instead */
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 /* Padded card variant for pages with filter toolbar */

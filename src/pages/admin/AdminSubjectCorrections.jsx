@@ -1013,7 +1013,7 @@ export default function AdminSubjectCorrections() {
       {adjusting && (
         <div className="ad-modal">
           <div className="ad-modalOverlay" onClick={() => setAdjusting(null)} />
-          <div className="ad-modalContent ad-modalContent--large">
+          <div className="ad-modalContent ad-modalContent--large" style={{ maxWidth: "860px", width: "95%" }}>
             <div className="ad-modalHeader">
               <h3 className="ad-modalTitle">Subjects for {adjusting.full_name || adjusting.school_id}</h3>
               <button className="ad-modalClose" onClick={() => setAdjusting(null)}>
@@ -1095,8 +1095,8 @@ export default function AdminSubjectCorrections() {
                   )}
                 </div>
               ) : (
-                <div className="ad-tableWrap ad-tableWrap--bordered" style={{ maxHeight: "320px", overflowY: "auto" }}>
-                  <table className="ad-table ad-table--plain">
+                <div className="ad-tableWrap ad-tableWrap--bordered" style={{ maxHeight: "360px", overflowX: "auto", overflowY: "auto" }}>
+                  <table className="ad-table ad-table--plain" style={{ minWidth: "660px" }}>
                     <thead>
                       <tr>
                         <th style={{ width: "90px" }}>Include</th>
