@@ -379,15 +379,33 @@ export default function AdminSubjectCorrections() {
     if (kind === "exclude") {
       setExcludedIds((prev) => {
         const next = new Set(prev);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+          // Auto-uncheck include
+          setSelectedIds((sel) => {
+            const nextSel = new Set(sel);
+            nextSel.delete(id);
+            return nextSel;
+          });
+        }
         return next;
       });
     } else {
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+          // Auto-uncheck exclude
+          setExcludedIds((ex) => {
+            const nextEx = new Set(ex);
+            nextEx.delete(id);
+            return nextEx;
+          });
+        }
         return next;
       });
     }
@@ -1110,8 +1128,9 @@ export default function AdminSubjectCorrections() {
                     <tbody>
                       {displayedAssignments.map((a) => {
                         const isSecMatch = isSectionMatch(a, adjusting);
+                        const isExcluded = excludedIds.has(a.id);
                         return (
-                          <tr key={a.id}>
+                          <tr key={a.id} style={isExcluded ? { background: "#fef2f2", opacity: 0.6 } : undefined}>
                             <td>
                               <input
                                 type="checkbox"
@@ -1122,18 +1141,22 @@ export default function AdminSubjectCorrections() {
                             <td>
                               <input
                                 type="checkbox"
-                                checked={excludedIds.has(a.id)}
+                                checked={isExcluded}
                                 onChange={() => toggleSubject(a.id, "exclude")}
                               />
                             </td>
                             <td>
-                              <span className="ad-cellPrimary">{a.subject_code}</span>
-                              <span className="ad-cellSecondary"> {a.subject_name}</span>
+                              <span className="ad-cellPrimary" style={isExcluded ? { textDecoration: "line-through", color: "#991b1b" } : undefined}>{a.subject_code}</span>
+                              <span className="ad-cellSecondary" style={isExcluded ? { textDecoration: "line-through" } : undefined}> {a.subject_name}</span>
                             </td>
                             <td>{a.faculty_name || "—"}</td>
                             <td className="ad-code">{a.department} {a.year_level}-{a.section}</td>
                             <td style={{ textAlign: "center" }}>
-                              {isSecMatch ? (
+                              {isExcluded ? (
+                                <span style={{ fontSize: "11px", color: "#b91c1c", background: "#fee2e2", padding: "2px 6px", borderRadius: "4px", fontWeight: 700 }}>
+                                  Excluded
+                                </span>
+                              ) : isSecMatch ? (
                                 <span style={{ fontSize: "11px", color: "#059669", background: "#ecfdf5", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>
                                   Section
                                 </span>
