@@ -130,6 +130,11 @@ const tierColors = {
   "Very Good (3.5-3.9)": "#3b82f6",
   "Good (3.0-3.4)": "#f59e0b",
   "Needs Improvement (<3.0)": "#ef4444",
+  "Strongly Agree (5)": "#059669", // Bright Emerald / Teal
+  "Agree (4)": "#0284c7",          // Vibrant Sky Blue
+  "Neutral (3)": "#3b82f6",        // Royal Blue
+  "Disagree (2)": "#f59e0b",       // Orange Amber
+  "Strongly Disagree (1)": "#ef4444", // Red
 };
 
 export default function AdminReport() {
@@ -155,6 +160,7 @@ export default function AdminReport() {
   const [academicYearsList, setAcademicYearsList] = useState([]);
   const [leftChartMode, setLeftChartMode] = useState("yearLevel"); // 'yearLevel' | 'ayTrend' | 'program'
   const [leftChartOrientation, setLeftChartOrientation] = useState("horizontal"); // 'horizontal' | 'vertical'
+  const [distMode, setDistMode] = useState("responses"); // 'responses' (1-5 Likert) | 'faculty' (Performance Tiers)
   const [distYearFilter, setDistYearFilter] = useState("all"); // 'all' | '1' | '2' | '3' | '4'
   const [rosterTierFilter, setRosterTierFilter] = useState("all"); // 'all' | 'high' | 'mid' | 'low'
   const [selectedFacultyId, setSelectedFacultyId] = useState(null); // null = no faculty selected | facultyId
@@ -490,20 +496,33 @@ export default function AdminReport() {
   const totalFacultyCount = inScopeFaculty.length;
   const evalCoveragePct = totalFacultyCount > 0 ? Math.round((evaluatedCount / totalFacultyCount) * 100) : 0;
 
+  const inScopeFacultyIds = new Set(inScopeFaculty.map(f => f.id));
+  const inScopeEvals = periodEvals.filter(e => inScopeFacultyIds.has(e.facultyId));
+  const allInScopeScores = inScopeEvals.flatMap(e =>
+    Object.values(e.ratings || {}).map(Number).filter(n => !isNaN(n) && n > 0)
+  );
+
   const validRatings = consolidatedData
     .map(f => parseFloat(f.rating))
     .filter(r => !isNaN(r));
-  const instAvgRating = validRatings.length > 0
-    ? (validRatings.reduce((a, b) => a + b, 0) / validRatings.length).toFixed(2)
-    : "—";
 
-  const totalFormsCount = periodEvals.filter(e => {
-    const fac = facultyUsers.find(f => f.id === e.facultyId);
-    if (!fac) return false;
-    if (filterFaculty && fac.id !== filterFaculty) return false;
-    if (filterDept && !sameDept(fac.department, filterDept)) return false;
-    return isSuper || inScopeName(fac.department);
-  }).length;
+  // Micro-average pooled across all evaluations (matches SuperAdmin calculation)
+  // Gracefully falls back to macro-average if raw ratings are unavailable
+  const instAvgRating = allInScopeScores.length > 0
+    ? (allInScopeScores.reduce((a, b) => a + b, 0) / allInScopeScores.length).toFixed(2)
+    : (validRatings.length > 0
+      ? (validRatings.reduce((a, b) => a + b, 0) / validRatings.length).toFixed(2)
+      : "—");
+
+  const totalFormsCount = inScopeEvals.length > 0
+    ? inScopeEvals.length
+    : periodEvals.filter(e => {
+        const fac = facultyUsers.find(f => f.id === e.facultyId);
+        if (!fac) return false;
+        if (filterFaculty && fac.id !== filterFaculty) return false;
+        if (filterDept && !sameDept(fac.department, filterDept)) return false;
+        return isSuper || inScopeName(fac.department);
+      }).length;
 
   const handleResetFilters = () => {
     setSearchTerm("");
@@ -654,45 +673,107 @@ export default function AdminReport() {
         ? ayTrendData
         : deptData;
 
-  // 4. Rating Distribution data (interactive filter: Overall or specific Year Level)
-  const tierMap = {
-    "Excellent (4.0-5.0)": 0,
-    "Very Good (3.5-3.9)": 0,
-    "Good (3.0-3.4)": 0,
-    "Needs Improvement (<3.0)": 0,
-  };
+  // 4. Rating Distribution data (interactive toggle: Student Responses vs Faculty Tiers, with Year Level filter)
+  let pieData = [];
+  let likertRows = []; // Complete 5-row list with percentages for the clean view
+  let tierRows = [];   // Complete 4-row list with all tiers (even 0) for the By Faculty table
 
-  if (distYearFilter === "all") {
-    reportData.forEach(r => {
-      const n = parseFloat(r.rating);
-      if (isNaN(n)) return;
-      if (n >= 4.0) tierMap["Excellent (4.0-5.0)"]++;
-      else if (n >= 3.5) tierMap["Very Good (3.5-3.9)"]++;
-      else if (n >= 3.0) tierMap["Good (3.0-3.4)"]++;
-      else tierMap["Needs Improvement (<3.0)"]++;
-    });
-  } else {
+  if (distMode === "responses") {
+    const likertOrder = [
+      "Strongly Agree (5)",
+      "Agree (4)",
+      "Neutral (3)",
+      "Disagree (2)",
+      "Strongly Disagree (1)",
+    ];
+    const likertMap = {
+      "Strongly Agree (5)": 0,
+      "Agree (4)": 0,
+      "Neutral (3)": 0,
+      "Disagree (2)": 0,
+      "Strongly Disagree (1)": 0,
+    };
+
     periodEvals.forEach(e => {
       const a = assignMap.get(e.assignmentId);
       if (!a) return;
       if (filterDept && !sameDept(a.department, filterDept)) return;
       if (!isSuper && !inScopeName(a.department)) return;
-      if (normalizeYear(a.yearLevel) !== distYearFilter) return;
+      if (distYearFilter !== "all" && normalizeYear(a.yearLevel) !== distYearFilter) return;
 
-      const scores = Object.values(e.ratings || {}).map(Number).filter(n => !isNaN(n));
-      if (scores.length > 0) {
-        const n = scores.reduce((s, c) => s + c, 0) / scores.length;
+      Object.values(e.ratings || {}).forEach(val => {
+        const n = Math.round(Number(val));
+        if (n === 5) likertMap["Strongly Agree (5)"]++;
+        else if (n === 4) likertMap["Agree (4)"]++;
+        else if (n === 3) likertMap["Neutral (3)"]++;
+        else if (n === 2) likertMap["Disagree (2)"]++;
+        else if (n === 1) likertMap["Strongly Disagree (1)"]++;
+      });
+    });
+
+    const totalLikert = Object.values(likertMap).reduce((a, b) => a + b, 0);
+
+    likertRows = likertOrder.map(name => ({
+      name,
+      value: likertMap[name],
+      pct: totalLikert > 0 ? Math.round((likertMap[name] / totalLikert) * 100) : 0,
+    }));
+
+    pieData = likertRows.filter(r => r.value > 0);
+  } else {
+    const tierOrder = [
+      "Excellent (4.0-5.0)",
+      "Very Good (3.5-3.9)",
+      "Good (3.0-3.4)",
+      "Needs Improvement (<3.0)",
+    ];
+    const tierMap = {
+      "Excellent (4.0-5.0)": 0,
+      "Very Good (3.5-3.9)": 0,
+      "Good (3.0-3.4)": 0,
+      "Needs Improvement (<3.0)": 0,
+    };
+
+    if (distYearFilter === "all") {
+      reportData.forEach(r => {
+        const n = parseFloat(r.rating);
+        if (isNaN(n)) return;
         if (n >= 4.0) tierMap["Excellent (4.0-5.0)"]++;
         else if (n >= 3.5) tierMap["Very Good (3.5-3.9)"]++;
         else if (n >= 3.0) tierMap["Good (3.0-3.4)"]++;
         else tierMap["Needs Improvement (<3.0)"]++;
-      }
-    });
-  }
+      });
+    } else {
+      periodEvals.forEach(e => {
+        const a = assignMap.get(e.assignmentId);
+        if (!a) return;
+        if (filterDept && !sameDept(a.department, filterDept)) return;
+        if (!isSuper && !inScopeName(a.department)) return;
+        if (normalizeYear(a.yearLevel) !== distYearFilter) return;
 
-  const pieData = Object.entries(tierMap)
-    .filter(([, v]) => v > 0)
-    .map(([name, value]) => ({ name, value }));
+        const scores = Object.values(e.ratings || {}).map(Number).filter(n => !isNaN(n));
+        if (scores.length > 0) {
+          const n = scores.reduce((s, c) => s + c, 0) / scores.length;
+          if (n >= 4.0) tierMap["Excellent (4.0-5.0)"]++;
+          else if (n >= 3.5) tierMap["Very Good (3.5-3.9)"]++;
+          else if (n >= 3.0) tierMap["Good (3.0-3.4)"]++;
+          else tierMap["Needs Improvement (<3.0)"]++;
+        }
+      });
+    }
+
+    const totalTiers = Object.values(tierMap).reduce((a, b) => a + b, 0);
+
+    // Keep all 4 ranges in order even if count is 0
+    tierRows = tierOrder.map(name => ({
+      name,
+      value: tierMap[name],
+      pct: totalTiers > 0 ? Math.round((tierMap[name] / totalTiers) * 100) : 0,
+    }));
+
+    // Donut only renders slices > 0
+    pieData = tierRows.filter(r => r.value > 0);
+  }
 
   const hasChartData = activeLeftChartData.length > 0 || pieData.length > 0 || reportData.length > 0;
 
@@ -2980,14 +3061,53 @@ export default function AdminReport() {
 
                       {/* CARD 2: Rating Distribution */}
                       <div className="ad-tableCard" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
-                        <div className="ad-chartHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1.5px solid #e5e7eb' }}>
+                        <div className="ad-chartHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1.5px solid #e5e7eb', flexWrap: 'wrap', gap: '8px' }}>
                           <div className="ad-chartHeaderInner" style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                             <span className="ad-chartIcon" style={{ background: '#1e3a8a', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
                               <PieChartIcon />
                             </span>
                             <span className="ad-chartTitle" style={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.5px' }}>RATING DISTRIBUTION</span>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                            {/* Mode Switcher: By Responses (Likert) vs By Faculty Tier */}
+                            <div style={{ display: 'inline-flex', border: '1px solid #cbd5e1', borderRadius: 6, overflow: 'hidden' }}>
+                              <button
+                                type="button"
+                                title="Student Responses (1-5)"
+                                onClick={() => setDistMode("responses")}
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  background: distMode === "responses" ? "#1e3a8a" : "#ffffff",
+                                  color: distMode === "responses" ? "#ffffff" : "#64748b",
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                By Responses (1–5)
+                              </button>
+                              <button
+                                type="button"
+                                title="Faculty Performance Tier"
+                                onClick={() => setDistMode("faculty")}
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  background: distMode === "faculty" ? "#1e3a8a" : "#ffffff",
+                                  color: distMode === "faculty" ? "#ffffff" : "#64748b",
+                                  border: 'none',
+                                  borderLeft: '1px solid #cbd5e1',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                By Faculty
+                              </button>
+                            </div>
+
                             <select
                               value={distYearFilter}
                               onChange={(e) => setDistYearFilter(e.target.value)}
@@ -3042,43 +3162,59 @@ export default function AdminReport() {
                                 </ResponsiveContainer>
                               </div>
 
-                              {/* Custom legend table */}
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                                  <thead>
-                                    <tr>
-                                      <th style={{ textAlign: 'left', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>Range</th>
-                                      <th style={{ textAlign: 'center', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>{distYearFilter === "all" ? "Faculty" : "Submissions"}</th>
-                                      <th style={{ textAlign: 'right', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>% Share</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {pieData.map((entry, i) => {
-                                      const total = pieData.reduce((s, e) => s + e.value, 0);
-                                      const pct = total > 0 ? Math.round((entry.value / total) * 100) : 0;
-                                      return (
-                                        <tr key={i}>
-                                          <td style={{ padding: '6px 0', borderBottom: '1px solid #f9fafb' }}>
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: tierColors[entry.name] || '#9ca3af', flexShrink: 0 }} />
-                                              <span>
-                                              <span style={{ fontWeight: 600, color: '#1e293b' }}>{entry.name.replace(/\s*\(.*\)/, '').trim()}</span>
-                                              <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 4 }}>{entry.name.match(/\(.*\)/)?.[0] || ''}</span>
-                                            </span>
-                                            </span>
-                                          </td>
-                                          <td style={{ textAlign: 'center', padding: '6px 0', borderBottom: '1px solid #f9fafb', fontWeight: 600 }}>{entry.value}</td>
-                                          <td style={{ textAlign: 'right', padding: '6px 0', borderBottom: '1px solid #f9fafb', fontWeight: 700, color: tierColors[entry.name] || '#374151' }}>{pct}%</td>
-                                        </tr>
-                                      );
-                                    })}
-                                    <tr>
-                                      <td style={{ padding: '8px 0 0', fontWeight: 700, color: '#111827' }}>Total</td>
-                                      <td style={{ textAlign: 'center', padding: '8px 0 0', fontWeight: 700, color: '#111827' }}>{pieData.reduce((s, e) => s + e.value, 0)}</td>
-                                      <td style={{ textAlign: 'right', padding: '8px 0 0', fontWeight: 700, color: '#111827' }}>100%</td>
-                                    </tr>
-                                  </tbody>
-                                </table>
+                              {/* Legend List */}
+                              <div style={{ flex: 1, minWidth: 0, paddingLeft: 8 }}>
+                                {distMode === "responses" ? (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '11px', width: '100%' }}>
+                                    {likertRows.map((entry, i) => (
+                                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '9px', minWidth: 0 }}>
+                                          <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: tierColors[entry.name] || '#9ca3af', flexShrink: 0 }} />
+                                          <span style={{ color: '#1e293b', fontWeight: 600 }}>{entry.name}</span>
+                                        </div>
+                                        <span style={{ color: '#0f172a', fontWeight: 800, fontSize: '13px', marginLeft: 12 }}>
+                                          {entry.pct}%
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                    <thead>
+                                      <tr>
+                                        <th style={{ textAlign: 'left', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>Range</th>
+                                        <th style={{ textAlign: 'center', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>{distYearFilter === "all" ? "Faculty" : "Submissions"}</th>
+                                        <th style={{ textAlign: 'right', color: '#6b7280', fontWeight: 700, fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #f3f4f6' }}>% Share</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {tierRows.map((entry, i) => {
+                                        const total = tierRows.reduce((s, e) => s + e.value, 0);
+                                        const pct = total > 0 ? Math.round((entry.value / total) * 100) : 0;
+                                        return (
+                                          <tr key={i}>
+                                            <td style={{ padding: '6px 0', borderBottom: '1px solid #f9fafb' }}>
+                                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                <span style={{ width: 7, height: 7, borderRadius: '50%', background: tierColors[entry.name] || '#9ca3af', flexShrink: 0 }} />
+                                                <span>
+                                                  <span style={{ fontWeight: 600, color: '#1e293b' }}>{entry.name.replace(/\s*\(.*\)/, '').trim()}</span>
+                                                  <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 4 }}>{entry.name.match(/\(.*\)/)?.[0] || ''}</span>
+                                                </span>
+                                              </span>
+                                            </td>
+                                            <td style={{ textAlign: 'center', padding: '6px 0', borderBottom: '1px solid #f9fafb', fontWeight: 600 }}>{entry.value}</td>
+                                            <td style={{ textAlign: 'right', padding: '6px 0', borderBottom: '1px solid #f9fafb', fontWeight: 700, color: tierColors[entry.name] || '#374151' }}>{pct}%</td>
+                                          </tr>
+                                        );
+                                      })}
+                                      <tr>
+                                        <td style={{ padding: '8px 0 0', fontWeight: 700, color: '#111827' }}>Total</td>
+                                        <td style={{ textAlign: 'center', padding: '8px 0 0', fontWeight: 700, color: '#111827' }}>{tierRows.reduce((s, e) => s + e.value, 0)}</td>
+                                        <td style={{ textAlign: 'right', padding: '8px 0 0', fontWeight: 700, color: '#111827' }}>100%</td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                )}
                               </div>
                             </>
                           )}
