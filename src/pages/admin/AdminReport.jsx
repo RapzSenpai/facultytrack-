@@ -498,21 +498,19 @@ export default function AdminReport() {
 
   const inScopeFacultyIds = new Set(inScopeFaculty.map(f => f.id));
   const inScopeEvals = periodEvals.filter(e => inScopeFacultyIds.has(e.facultyId));
-  const allInScopeScores = inScopeEvals.flatMap(e =>
-    Object.values(e.ratings || {}).map(Number).filter(n => !isNaN(n) && n > 0)
-  );
 
   const validRatings = consolidatedData
     .map(f => parseFloat(f.rating))
     .filter(r => !isNaN(r));
 
-  // Micro-average pooled across all evaluations (matches SuperAdmin calculation)
-  // Gracefully falls back to macro-average if raw ratings are unavailable
-  const instAvgRating = allInScopeScores.length > 0
-    ? (allInScopeScores.reduce((a, b) => a + b, 0) / allInScopeScores.length).toFixed(2)
-    : (validRatings.length > 0
-      ? (validRatings.reduce((a, b) => a + b, 0) / validRatings.length).toFixed(2)
-      : "—");
+  // Faculty macro-average across evaluated faculty in scope.
+  // 1 decimal place with automatic round-off (e.g. 4.19 -> 4.2).
+  const rawInstAvg = validRatings.length > 0
+    ? validRatings.reduce((a, b) => a + b, 0) / validRatings.length
+    : null;
+  const instAvgRating = rawInstAvg !== null
+    ? (Math.round(rawInstAvg * 10) / 10).toFixed(1)
+    : "—";
 
   const totalFormsCount = inScopeEvals.length > 0
     ? inScopeEvals.length

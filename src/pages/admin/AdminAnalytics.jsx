@@ -184,7 +184,23 @@ export default function AdminAnalytics() {
       const respondents = new Set(rows.map((e) => e.student_token)).size;
       const eligible = activeStudents.filter((u) => matchDepartment(u.department, d)).length;
       const facultyCount = activeFaculty.filter((u) => matchDepartment(u.department, d)).length;
-      const scores = rows.flatMap((e) => Object.values(e.ratings || {}).map(Number).filter((n) => !Number.isNaN(n)));
+
+      // Group evaluations by faculty to calculate faculty mean (macro-average), matching Admin Report exactly
+      const evaluatedFacultyIds = [...new Set(rows.map((e) => e.faculty_id).filter(Boolean))];
+      const facRatings = evaluatedFacultyIds.map((fId) => {
+        const facRows = rows.filter((e) => String(e.faculty_id) === String(fId));
+        const fScores = facRows.flatMap((e) => Object.values(e.ratings || {}).map(Number).filter((n) => !Number.isNaN(n) && n > 0));
+        return fScores.length > 0 ? fScores.reduce((a, b) => a + b, 0) / fScores.length : null;
+      }).filter((r) => r !== null);
+
+      const rawScores = rows.flatMap((e) => Object.values(e.ratings || {}).map(Number).filter((n) => !Number.isNaN(n) && n > 0));
+      const progMean = facRatings.length > 0
+        ? facRatings.reduce((a, b) => a + b, 0) / facRatings.length
+        : (rawScores.length > 0 ? rawScores.reduce((a, b) => a + b, 0) / rawScores.length : null);
+
+      // 1 decimal place with automatic round-off (e.g. 4.19 -> 4.2)
+      const roundedAvg = progMean === null ? 0 : Number((Math.round(progMean * 10) / 10).toFixed(1));
+
       return {
         program: d,
         facultyCount,
@@ -192,7 +208,8 @@ export default function AdminAnalytics() {
         respondents,
         eligible,
         rate: eligible ? Math.round((respondents / eligible) * 100) : 0,
-        avg: avg(scores) === null ? 0 : Number(avg(scores).toFixed(1)),
+        rawAvg: progMean,
+        avg: roundedAvg,
         priority: rows.filter((e) => e.is_priority).length,
       };
     });
@@ -204,9 +221,29 @@ export default function AdminAnalytics() {
   }, [filteredEvaluations]);
 
   const overallAvgRating = useMemo(() => {
-    const scores = filteredEvaluations.flatMap((e) => Object.values(e.ratings || {}).map(Number).filter((n) => !Number.isNaN(n)));
-    return avg(scores) === null ? "—" : avg(scores).toFixed(1);
-  }, [filteredEvaluations]);
+    if (selectedDept !== "all") {
+      const targetProg = programStats.find((p) => matchDepartment(p.program, selectedDept));
+      if (targetProg && targetProg.rawAvg !== null && targetProg.rawAvg !== undefined) {
+        return (Math.round(targetProg.rawAvg * 10) / 10).toFixed(1);
+      }
+    }
+
+    // Overall across all evaluated faculty in this period (Faculty Macro-Average)
+    const inPeriodFacultyIds = [...new Set(filteredEvaluations.map((e) => e.faculty_id).filter(Boolean))];
+    const facRatings = inPeriodFacultyIds.map((fId) => {
+      const facRows = filteredEvaluations.filter((e) => String(e.faculty_id) === String(fId));
+      const fScores = facRows.flatMap((e) => Object.values(e.ratings || {}).map(Number).filter((n) => !Number.isNaN(n) && n > 0));
+      return fScores.length > 0 ? fScores.reduce((a, b) => a + b, 0) / fScores.length : null;
+    }).filter((r) => r !== null);
+
+    if (facRatings.length > 0) {
+      const mean = facRatings.reduce((a, b) => a + b, 0) / facRatings.length;
+      return (Math.round(mean * 10) / 10).toFixed(1);
+    }
+
+    const scores = filteredEvaluations.flatMap((e) => Object.values(e.ratings || {}).map(Number).filter((n) => !Number.isNaN(n) && n > 0));
+    return avg(scores) === null ? "—" : (Math.round(avg(scores) * 10) / 10).toFixed(1);
+  }, [filteredEvaluations, selectedDept, programStats]);
 
   const overallResponseRate = useMemo(() => {
     const respondents = new Set(filteredEvaluations.map((e) => e.student_token)).size;
@@ -233,7 +270,9 @@ export default function AdminAnalytics() {
         const matchD = selectedDept === "all" || matchDepartment(evalDept, selectedDept);
         return matchP && matchD;
       });
-      const scores = rows.flatMap((e) => Object.values(e.ratings || {}).map(Number).filter((n) => !Number.isNaN(n)));
+      const rawScores = rows.flatMap((e) => Object.values(e.ratings || {}).map(Number).filter((n) => !Number.isNaN(n) && n > 0));
+      const rawMean = avg(rawScores);
+      const roundedAvg = rawMean === null ? 0 : Number((Math.round(rawMean * 10) / 10).toFixed(1));
       const semShort = (s || "").toLowerCase().includes("2nd") ? "2nd" : (s || "").toLowerCase().includes("summer") ? "Sum" : "1st";
       const yearShort = (y || "").replace(/20(\d\d)-20(\d\d)/, "$1-$2").replace(/20(\d\d)/, "$1");
       const label = `${semShort} ${yearShort}`.trim();
@@ -241,7 +280,7 @@ export default function AdminAnalytics() {
       return {
         period: label,
         fullPeriod: `${y} ${s}`,
-        avg: avg(scores) === null ? 0 : Number(avg(scores).toFixed(1)),
+        avg: roundedAvg,
         responses: rows.length,
       };
     });
@@ -489,7 +528,7 @@ export default function AdminAnalytics() {
                         tickLine={false}
                       />
                       <Tooltip
-                        formatter={(v) => [`${v} / 5.0`, "Average Rating"]}
+                        formatter={(v) => [`${Number(v).toFixed(1)} / 5.0`, "Average Rating"]}
                         contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }}
                       />
                       <Bar dataKey="avg" radius={[4, 4, 0, 0]} maxBarSize={48}>
@@ -506,7 +545,7 @@ export default function AdminAnalytics() {
                           fontSize={11}
                           fontWeight={700}
                           offset={6}
-                          formatter={(v) => (Number(v) > 0 ? v : "")}
+                          formatter={(v) => (Number(v) > 0 ? Number(v).toFixed(1) : "")}
                         />
                       </Bar>
                     </BarChart>
@@ -652,7 +691,7 @@ export default function AdminAnalytics() {
                         tickLine={false}
                       />
                       <Tooltip
-                        formatter={(v) => [`${v} / 5.0`, "Average Rating"]}
+                        formatter={(v) => [`${Number(v).toFixed(1)} / 5.0`, "Average Rating"]}
                         labelFormatter={(_, arr) => arr?.[0]?.payload?.fullPeriod || ""}
                         contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }}
                       />
@@ -671,7 +710,7 @@ export default function AdminAnalytics() {
                           fontSize={10}
                           fontWeight={700}
                           offset={8}
-                          formatter={(v) => (Number(v) > 0 ? v : "")}
+                          formatter={(v) => (Number(v) > 0 ? Number(v).toFixed(1) : "")}
                         />
                       </Line>
                     </LineChart>
@@ -732,7 +771,7 @@ export default function AdminAnalytics() {
                           <td style={{ padding: "14px 16px", fontWeight: "700", color: "#0f172a" }}>{r.program}</td>
                           <td style={{ padding: "14px 16px", color: "#334155" }}>{r.facultyCount}</td>
                           <td style={{ padding: "14px 16px", color: "#334155" }}>{r.responses}</td>
-                          <td style={{ padding: "14px 16px", color: "#334155" }}>{r.avg || "—"}</td>
+                          <td style={{ padding: "14px 16px", color: "#334155" }}>{r.avg !== null && r.avg !== undefined && Number(r.avg) > 0 ? Number(r.avg).toFixed(1) : "—"}</td>
                           <td style={{ padding: "14px 16px", color: "#334155" }}>{r.rate}%</td>
                         </tr>
                       ))
