@@ -305,6 +305,50 @@ export default function AdminModeration() {
     .sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9));
   const visibleFlagged = flaggedEvals.filter(matchesSearch);
 
+  // Group flagged evaluations by faculty member
+  // Inside each faculty, sort higher severity first (priority/ai auto-priority first)
+  const groupedFlagged = useMemo(() => {
+    const map = new Map();
+    for (const e of visibleFlagged) {
+      const facId = e.faculty_id || "unassigned";
+      if (!map.has(facId)) {
+        map.set(facId, {
+          facultyId: facId,
+          facultyName: facultyName(facId),
+          department: facultyDept(facId),
+          items: [],
+        });
+      }
+      map.get(facId).items.push(e);
+    }
+
+    const groups = Array.from(map.values());
+    for (const g of groups) {
+      g.items.sort((a, b) => {
+        // High severity / AI auto-priority or unreviewed first
+        const aHigh = a.priority_source || a.moderation_labels?.unreviewed;
+        const bHigh = b.priority_source || b.moderation_labels?.unreviewed;
+        if (aHigh && !bHigh) return -1;
+        if (!aHigh && bHigh) return 1;
+        // Then newest first
+        const aDate = new Date(a.submitted_on || a.created_at || 0).getTime();
+        const bDate = new Date(b.submitted_on || b.created_at || 0).getTime();
+        return bDate - aDate;
+      });
+    }
+
+    // Sort faculty cards: faculty with most high-severity items first, then alphabetical
+    groups.sort((a, b) => {
+      const aHasHigh = a.items.some((i) => i.priority_source || i.moderation_labels?.unreviewed);
+      const bHasHigh = b.items.some((i) => i.priority_source || i.moderation_labels?.unreviewed);
+      if (aHasHigh && !bHasHigh) return -1;
+      if (!aHasHigh && bHasHigh) return 1;
+      return a.facultyName.localeCompare(b.facultyName);
+    });
+
+    return groups;
+  }, [visibleFlagged, faculty]);
+
   const confirmDismiss = async (r) => {
     const ok = await showConfirm("Dismiss this priority case? It will be closed without a resolution.", {
       title: "Dismiss Case",
@@ -514,37 +558,158 @@ export default function AdminModeration() {
             {tab === "flagged" && (
               <div>
                 <div className="mod-toolbar">
-                  <div className="mod-hint">Comments the filter marked for review. Allow to release them, or withhold to keep them hidden.</div>
+                  <div className="mod-hint">Comments the filter marked for review. Grouped by teacher, with higher severity prioritized. Allow to release them, or withhold to keep them hidden.</div>
                   {searchBox}
                 </div>
                 {visibleFlagged.length === 0 ? (
                   emptyState("Nothing to review", flaggedEvals.length === 0 ? "No flagged comments right now." : "No comments match your search.")
                 ) : (
                   <div className="mod-caseList">
-                    {visibleFlagged.map((e) => {
-                      const unreviewed = e.moderation_labels?.unreviewed === true;
-                      const color = MOD_COLORS[e.moderation_status] || "#d97706";
+                    {groupedFlagged.map((grp) => {
+                      const hasHighSeverity = grp.items.some((i) => i.priority_source || i.moderation_labels?.unreviewed);
+                      const cardBorderColor = hasHighSeverity ? "#dc2626" : "#d97706";
                       return (
-                        <div key={e.id} className="mod-case" style={{ borderLeftColor: color }}>
-                          {renderCaseHeader(e, MOD_LABEL[e.moderation_status] || e.moderation_status, color, e.submitted_on || e.created_at)}
-                          {e.original_comment && <blockquote className="mod-quote">“{e.original_comment}”</blockquote>}
-                          {unreviewed && (
-                            <div className="mod-warn">⚠ Wordlist-only verdict (AI was unavailable) — please re-review.</div>
-                          )}
-                          <div className="mod-caseBottom">
-                            <div className="mod-caseTags">
-                              {sourceLabel(e.priority_source) && (
-                                <span className="mod-chip mod-chip--source">{sourceLabel(e.priority_source)}</span>
+                        <div
+                          key={grp.facultyId}
+                          className="mod-case"
+                          style={{
+                            borderLeftColor: cardBorderColor,
+                            padding: "0",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {/* Teacher Group Header */}
+                          <div
+                            style={{
+                              padding: "16px 20px",
+                              background: "#f8fafc",
+                              borderBottom: "1px solid #e2e8f0",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              flexWrap: "wrap",
+                              gap: "10px",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                              <div className="mod-avatar">{initials(grp.facultyName)}</div>
+                              <div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                  <strong style={{ fontSize: "14.5px", color: "#0f172a" }}>{grp.facultyName}</strong>
+                                  <span className="mod-chip mod-chip--program">{grp.department}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              {hasHighSeverity && (
+                                <span
+                                  style={{
+                                    fontSize: "11px",
+                                    fontWeight: 800,
+                                    padding: "3px 9px",
+                                    background: "#fee2e2",
+                                    color: "#991b1b",
+                                    borderRadius: "999px",
+                                    border: "1px solid #fecaca",
+                                  }}
+                                >
+                                  Priority Review
+                                </span>
                               )}
+                              <span
+                                style={{
+                                  fontSize: "12px",
+                                  fontWeight: 700,
+                                  color: "#475569",
+                                  background: "#ffffff",
+                                  padding: "3px 10px",
+                                  borderRadius: "999px",
+                                  border: "1px solid #cbd5e1",
+                                }}
+                              >
+                                {grp.items.length} {grp.items.length === 1 ? "Comment" : "Comments"}
+                              </span>
                             </div>
-                            <div className="mod-actions">
-                              <button type="button" className="mod-btn mod-btn--green" disabled={busyId === e.id} onClick={() => setModeration(e, "allow")}>
-                                Allow
-                              </button>
-                              <button type="button" className="mod-btn mod-btn--danger" disabled={busyId === e.id} onClick={() => confirmWithhold(e)}>
-                                Withhold
-                              </button>
-                            </div>
+                          </div>
+
+                          {/* List of Flagged Comments for this Teacher */}
+                          <div style={{ display: "flex", flexDirection: "column" }}>
+                            {grp.items.map((e, idx) => {
+                              const isHigh = !!(e.priority_source || e.moderation_labels?.unreviewed);
+                              const unreviewed = e.moderation_labels?.unreviewed === true;
+                              const src = sourceLabel(e.priority_source);
+                              return (
+                                <div
+                                  key={e.id}
+                                  style={{
+                                    padding: "16px 20px",
+                                    borderBottom: idx < grp.items.length - 1 ? "1px solid #f1f5f9" : "none",
+                                    background: isHigh ? "rgba(254, 242, 242, 0.35)" : "transparent",
+                                  }}
+                                >
+                                  {/* Sub-header for individual comment: Severity, Period & Date */}
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "6px" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                      {isHigh ? (
+                                        <span style={{ fontSize: "11px", fontWeight: 800, color: "#dc2626", background: "#fef2f2", border: "1px solid #fecaca", padding: "2px 8px", borderRadius: "6px" }}>
+                                          ▲ High Severity
+                                        </span>
+                                      ) : (
+                                        <span style={{ fontSize: "11px", fontWeight: 700, color: "#d97706", background: "#fef3c7", border: "1px solid #fde68a", padding: "2px 8px", borderRadius: "6px" }}>
+                                          Flagged
+                                        </span>
+                                      )}
+                                      <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 500 }}>
+                                        {e.academic_year ? `${e.academic_year} · ${e.semester}` : ""}
+                                      </span>
+                                    </div>
+                                    {(e.submitted_on || e.created_at) && (
+                                      <span style={{ fontSize: "11.5px", color: "#94a3b8" }}>
+                                        {fmtDate(e.submitted_on || e.created_at)}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Comment Text */}
+                                  {e.original_comment && (
+                                    <blockquote className="mod-quote" style={{ margin: "6px 0 10px 0" }}>
+                                      “{e.original_comment}”
+                                    </blockquote>
+                                  )}
+
+                                  {unreviewed && (
+                                    <div className="mod-warn" style={{ marginBottom: "8px" }}>
+                                      ⚠ Wordlist-only verdict (AI was unavailable) — please re-review.
+                                    </div>
+                                  )}
+
+                                  {/* Bottom Tags + Action Buttons (Allow & Withhold preserved) */}
+                                  <div className="mod-caseBottom" style={{ marginTop: "8px" }}>
+                                    <div className="mod-caseTags">
+                                      {src && <span className="mod-chip mod-chip--source">{src}</span>}
+                                    </div>
+                                    <div className="mod-actions">
+                                      <button
+                                        type="button"
+                                        className="mod-btn mod-btn--green"
+                                        disabled={busyId === e.id}
+                                        onClick={() => setModeration(e, "allow")}
+                                      >
+                                        Allow
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="mod-btn mod-btn--danger"
+                                        disabled={busyId === e.id}
+                                        onClick={() => confirmWithhold(e)}
+                                      >
+                                        Withhold
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       );

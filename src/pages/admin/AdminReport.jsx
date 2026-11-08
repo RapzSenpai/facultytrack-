@@ -410,49 +410,101 @@ export default function AdminReport() {
       const uniqueStudents = new Set(facEvals.map(e => e.studentId)).size;
       const allScores = facEvals.flatMap(e => Object.values(e.ratings || {}).map(Number));
 
-      // Group assignments by subject so sections with the same subject are unified
-      const subjectMap = new Map();
+      // Group assignments by common assigned section(s)
+      // When a teacher teaches multiple subjects to the exact same sections, group them together
+      const sectionGroupMap = new Map();
       facAssignments.forEach(assign => {
+        const secLabel = (assign.yearLevel && assign.section ? `${assign.yearLevel} - ${assign.section}` : assign.section) || "—";
         const subKey = (assign.subjectCode || assign.subjectName || "—").trim();
-        if (!subjectMap.has(subKey)) {
-          subjectMap.set(subKey, {
-            subject: subKey,
-            subjectName: assign.subjectName || "",
+        const subName = assign.subjectName || "";
+
+        if (!sectionGroupMap.has(subKey)) {
+          sectionGroupMap.set(subKey, {
+            subjectKey: subKey,
+            subjectNames: new Set(subName ? [subName] : []),
+            assignments: [],
+            sections: new Set(),
+          });
+        }
+        const entry = sectionGroupMap.get(subKey);
+        entry.assignments.push(assign);
+        if (secLabel && secLabel !== "—") entry.sections.add(secLabel);
+        if (subName) entry.subjectNames.add(subName);
+      });
+
+      // Cluster subjects that share the exact same set of sections
+      const clusterMap = new Map();
+      sectionGroupMap.forEach((entry, subKey) => {
+        const sortedSecs = Array.from(entry.sections).sort();
+        const clusterKey = sortedSecs.length > 0 ? sortedSecs.join(" | ") : `no_sec_${subKey}`;
+
+        if (!clusterMap.has(clusterKey)) {
+          clusterMap.set(clusterKey, {
+            clusterKey,
+            sectionsList: sortedSecs,
+            section: sortedSecs.length > 0 ? sortedSecs.join(", ") : "—",
+            subjects: [],
+            subjectNames: [],
             assignments: [],
           });
         }
-        const entry = subjectMap.get(subKey);
-        entry.assignments.push(assign);
-        if (!entry.subjectName && assign.subjectName) {
-          entry.subjectName = assign.subjectName;
-        }
+        const cEntry = clusterMap.get(clusterKey);
+        cEntry.subjects.push(subKey);
+        entry.subjectNames.forEach(name => {
+          if (!cEntry.subjectNames.includes(name)) cEntry.subjectNames.push(name);
+        });
+        cEntry.assignments.push(...entry.assignments);
       });
 
-      const sectionBreakdown = Array.from(subjectMap.values()).map(grp => {
+      const sectionBreakdown = Array.from(clusterMap.values()).map(grp => {
         const assignIds = new Set(grp.assignments.map(a => a.id));
-        const grpSections = [...new Set(
-          grp.assignments.map(a => a.yearLevel && a.section ? `${a.yearLevel} - ${a.section}` : a.section).filter(Boolean)
-        )];
 
         const aEvals = facEvals.filter(e => {
           if (assignIds.has(e.assignmentId)) return true;
-          const evAssign = periodAssignments.find(a => a.id === e.assignmentId);
+          const evAssign = periodAssignments.find(a => a.id === e.assignmentId) || assignMap.get(e.assignmentId);
           if (!evAssign) return false;
           const evSubKey = (evAssign.subjectCode || evAssign.subjectName || "—").trim();
-          return evAssign.facultyId === faculty.id && evSubKey === grp.subject;
+          if (evAssign.facultyId === faculty.id && grp.subjects.includes(evSubKey)) return true;
+
+          // Cross-subject attribution for same section:
+          if (evAssign.facultyId === faculty.id) {
+            const evYr = normalizeYear(evAssign.yearLevel);
+            const evSec = String(evAssign.section || "").trim().toLowerCase().replace(/section/gi, "").replace(/[^a-z0-9]/g, "");
+            return grp.assignments.some(ga => {
+              const gaYr = normalizeYear(ga.yearLevel);
+              const gaSec = String(ga.section || "").trim().toLowerCase().replace(/section/gi, "").replace(/[^a-z0-9]/g, "");
+              return gaYr === evYr && gaSec === evSec;
+            });
+          }
+          return false;
         });
-        const aScores = aEvals.flatMap(e => Object.values(e.ratings || {}).map(Number));
+
+        // Deduplicate per student token/ID for this cluster
+        const studentEvalMap = new Map();
+        aEvals.forEach(ev => {
+          const sKey = ev.studentId || ev.id;
+          if (!studentEvalMap.has(sKey) || assignIds.has(ev.assignmentId)) {
+            studentEvalMap.set(sKey, ev);
+          }
+        });
+        const distinctEvals = Array.from(studentEvalMap.values());
+        const aScores = distinctEvals.flatMap(e => Object.values(e.ratings || {}).map(Number).filter(n => !isNaN(n) && n > 0));
 
         return {
           assignmentId: grp.assignments[0]?.id,
-          subject: grp.subject,
-          subjectName: grp.subjectName,
-          section: grpSections.length > 0 ? grpSections.join(", ") : "—",
-          sectionsList: grpSections,
-          students: new Set(aEvals.map(e => e.studentId)).size,
-          formCount: aEvals.length,
+          subject: grp.subjects.join(", "),
+          subjectsList: grp.subjects,
+          subjectName: grp.subjectNames.join(", "),
+          section: grp.section,
+          sectionsList: grp.sectionsList,
+          students: new Set(distinctEvals.map(e => e.studentId)).size,
+          formCount: distinctEvals.length,
           rating: avg(aScores),
         };
+      }).sort((a, b) => {
+        // Sort items with evaluations first, then by form count descending
+        if ((b.formCount > 0) !== (a.formCount > 0)) return b.formCount > 0 ? 1 : -1;
+        return b.formCount - a.formCount;
       });
 
       return {
@@ -1809,7 +1861,7 @@ export default function AdminReport() {
         <body>
           <div class="spinner"></div>
           <h2>Generating Faculty Performance Evaluation Report</h2>
-          <p>Compiling quantitative scores, AI qualitative synthesis, and student feedback quotes...</p>
+          <p>Compiling quantitative scores, feedback summary, and student comments...</p>
         </body>
       </html>
     `);
@@ -1865,10 +1917,11 @@ export default function AdminReport() {
       const sectionRows = (targetReport.sectionBreakdown || []).map((sec, i) => `
         <tr style="background: ${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
           <td style="padding: 8px 12px; font-weight: 700; color: #1e293b;">
-            <span style="font-family: monospace; font-size: 11px; background: #e0e7ff; color: #3730a3; padding: 2px 6px; border-radius: 4px; margin-right: 6px;">
-              ${escapeHtml(sec.subject)}
-            </span>
-            ${sec.subjectName ? escapeHtml(sec.subjectName) : ""}
+            ${(sec.subjectsList || (sec.subject ? [sec.subject] : [])).map(sb => `
+              <span style="font-family: monospace; font-size: 11px; background: #e0e7ff; color: #3730a3; padding: 2px 6px; border-radius: 4px; margin-right: 4px; display: inline-block;">
+                ${escapeHtml(sb)}
+              </span>
+            `).join("")}
           </td>
           <td style="padding: 8px 12px; font-weight: 600; color: #334155;">
             ${escapeHtml(sec.section)}
@@ -2013,7 +2066,7 @@ export default function AdminReport() {
           <div class="inst-header">
             <div class="inst-pretitle">FACULTYTRACK ACADEMIC PERFORMANCE & EVALUATION SYSTEM</div>
             <h1 class="inst-title">INDIVIDUAL FACULTY PERFORMANCE EVALUATION REPORT</h1>
-            <div class="inst-subtitle">Comprehensive Performance Classification, Quantitative Metrics & Qualitative AI Synthesis</div>
+            <div class="inst-subtitle">Comprehensive Performance Classification, Quantitative Metrics & Feedback Summary</div>
             <div class="inst-tags">
               <span class="tag">Faculty: <strong>${escapeHtml(targetReport.faculty)}</strong></span>
               <span class="tag">Department / Program: <strong>${escapeHtml(targetReport.department)}</strong></span>
@@ -2063,8 +2116,8 @@ export default function AdminReport() {
           <table>
             <thead>
               <tr>
-                <th style="width: 44%;">SUBJECT CODE &amp; TITLE</th>
-                <th style="width: 24%;">ASSIGNED SECTION(S)</th>
+                <th style="width: 35%;">SUBJECT CODE</th>
+                <th style="width: 33%;">ASSIGNED SECTION(S)</th>
                 <th style="width: 16%; text-align: center;">SUBMISSIONS</th>
                 <th style="width: 16%; text-align: right;">MEAN RATING</th>
               </tr>
@@ -2074,11 +2127,11 @@ export default function AdminReport() {
             </tbody>
           </table>
 
-          <!-- AI Qualitative Synthesis (Option A) -->
+          <!-- Feedback Summary -->
           ${aiParsed.hasSummary ? `
             <div class="ai-box">
               <div class="ai-header">
-                <span class="ai-badge">★ GROQ LLaMA 3 QUALITATIVE SYNTHESIS</span>
+                <span class="ai-badge">★ FEEDBACK SUMMARY</span>
                 <span style="font-size: 10px; color: #64748b; font-weight: 600;">Based on Anonymized Student Submissions</span>
               </div>
 
@@ -2110,11 +2163,11 @@ export default function AdminReport() {
             </div>
           ` : distinctQuotes.length >= 2 ? `
             <div style="border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px 14px; background: #f8fafc; margin-bottom: 14px; color: #475569; font-size: 11px;">
-              <strong style="color: #1e3a8a;">AI Qualitative Synthesis:</strong> Pending evaluation period release / Groq AI batch generation. Anonymized student feedback quotes are displayed directly below.
+              <strong style="color: #1e3a8a;">Feedback Summary:</strong> Pending evaluation period release. Anonymized student feedback quotes are displayed directly below.
             </div>
           ` : `
             <div style="border: 1px dashed #e2e8f0; border-radius: 8px; padding: 10px 14px; background: #f8fafc; margin-bottom: 14px; color: #64748b; font-size: 10.5px;">
-              <strong style="color: #475569;">AI Qualitative Synthesis:</strong> Insufficient qualitative student comments submitted for this faculty member during this evaluation period to produce an AI synthesis.
+              <strong style="color: #475569;">Feedback Summary:</strong> Insufficient qualitative student comments submitted for this faculty member during this evaluation period to produce a feedback summary.
             </div>
           `}
 
@@ -2752,7 +2805,7 @@ export default function AdminReport() {
                       <table className="ad-table" style={{ margin: 0 }}>
                         <thead>
                           <tr>
-                            <th>SUBJECT CODE & NAME</th>
+                            <th>SUBJECT CODE</th>
                             <th>ASSIGNED SECTION(S)</th>
                             <th style={{ textAlign: "center" }}>SUBMISSIONS</th>
                             <th style={{ textAlign: "right" }}>MEAN RATING</th>
@@ -2766,8 +2819,13 @@ export default function AdminReport() {
                             return (
                               <tr key={idx}>
                                 <td>
-                                  <div style={{ fontWeight: 700, color: "#1e293b" }}>{sec.subject}</div>
-                                  {sec.subjectName && <div style={{ fontSize: "11px", color: "#64748b" }}>{sec.subjectName}</div>}
+                                  <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", alignItems: "center" }}>
+                                    {(sec.subjectsList || (sec.subject ? [sec.subject] : [])).map((sb, sbIdx) => (
+                                      <span key={sbIdx} style={{ fontWeight: 800, color: "#1e293b", fontSize: "13px" }}>
+                                        {sb}{sbIdx < (sec.subjectsList?.length || 1) - 1 ? "," : ""}
+                                      </span>
+                                    ))}
+                                  </div>
                                 </td>
                                 <td>
                                   {secBadges.length > 0 ? (

@@ -595,7 +595,7 @@ export default function FacultyEvalResult() {
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M12 2l1.9 5.7a2 2 0 0 0 1.3 1.3L21 11l-5.8 2a2 2 0 0 0-1.3 1.3L12 20l-1.9-5.7a2 2 0 0 0-1.3-1.3L3 11l5.8-2a2 2 0 0 0 1.3-1.3L12 2z" />
                     </svg>
-                    GROQ LLAMA 3 SYNTHESIS
+                    FEEDBACK SUMMARY
                   </span>
                   <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>
                     {evaluationData.periodShort || evaluationData.periodLabel}
@@ -660,7 +660,7 @@ export default function FacultyEvalResult() {
               {summaryLoading ? (
                 <div style={{ textAlign: "center", padding: "28px 12px", color: "#64748b", fontSize: "13px" }}>
                   <div style={{ display: "inline-block", width: "20px", height: "20px", border: "2px solid #cbd5e1", borderTopColor: "#2563eb", borderRadius: "50%", animation: "spin 1s linear infinite", marginBottom: "8px" }} />
-                  <div>Synthesizing anonymized student feedback via Groq LLaMA 3…</div>
+                  <div>Synthesizing anonymized student feedback…</div>
                 </div>
               ) : summaryError ? (
                 <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", borderRadius: "8px", padding: "12px 16px", fontSize: "13px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -678,7 +678,7 @@ export default function FacultyEvalResult() {
                   )}
                   {renderStructuredSummary(summaryData.summary)}
                   <div style={{ marginTop: "16px", paddingTop: "10px", borderTop: "1px solid #f1f5f9", fontSize: "11.5px", color: "#94a3b8" }}>
-                    Based on {summaryData.comment_count} identity-stripped student responses. Generated via Groq LLaMA 3.
+                    Based on {summaryData.comment_count} identity-stripped student response{summaryData.comment_count === 1 ? "" : "s"}. Automated qualitative feedback synthesis.
                   </div>
                 </>
               ) : (
