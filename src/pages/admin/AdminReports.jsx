@@ -27,9 +27,9 @@ export default function AdminReports() {
           supabase.from("departments").select("id, name, description").order("name"),
           supabase.from("users").select("id, full_name, department, status").eq("role", "faculty"),
           supabase.from("academic_years").select("id, year, semester, status, end_date, department_id"),
-          supabase.from("admin_evaluations_anon").select("id, assignment_id, faculty_id, student_department, ratings"),
-          supabase.from("evaluations").select("id, faculty_id, assignment_id, ratings"),
-          supabase.from("class_assignments").select("id, department, faculty_id"),
+          supabase.from("admin_evaluations_anon").select("id, assignment_id, faculty_id, student_department, academic_year, semester, ratings"),
+          supabase.from("evaluations").select("id, faculty_id, assignment_id, academic_year, semester, ratings"),
+          supabase.from("class_assignments").select("id, department, faculty_id, academic_year, semester"),
         ]);
 
         const firstErr = [deptRes, facRes, yearRes].find((r) => r?.error);
@@ -43,40 +43,54 @@ export default function AdminReports() {
         setFaculty(loadedFaculty);
         setYears(loadedYears);
 
-        // Compute real department scores from evaluations
-        const evals = (evalRes.data && evalRes.data.length > 0)
+        // Find active academic year and semester to strictly scope the scores
+        const activeYear = loadedYears.find((y) => isPeriodActive(y)) || loadedYears[0];
+        const activeAY = activeYear?.year;
+        const activeSem = activeYear?.semester;
+
+        const allEvals = (evalRes.data && evalRes.data.length > 0)
           ? evalRes.data
           : (superEvalRes.data || []);
 
-        const assignMap = new Map((assignRes.data || []).map((a) => [a.id, a.department]));
-        const facDeptMap = new Map(loadedFaculty.map((f) => [f.id, f.department]));
-
-        const deptSums = {};
-        const deptCounts = {};
-
-        evals.forEach((ev) => {
-          let dept = ev.student_department;
-          if (!dept && ev.assignment_id) dept = assignMap.get(ev.assignment_id);
-          if (!dept && ev.faculty_id) dept = facDeptMap.get(ev.faculty_id);
-          if (!dept) return;
-
-          const dKey = normDept(dept);
-          const ratings = ev.ratings;
-          if (!ratings) return;
-
-          const vals = Object.values(ratings).map(Number).filter((v) => !isNaN(v) && v > 0);
-          if (vals.length === 0) return;
-
-          const evAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
-          deptSums[dKey] = (deptSums[dKey] || 0) + evAvg;
-          deptCounts[dKey] = (deptCounts[dKey] || 0) + 1;
+        // Filter evaluations strictly by the active period, matching AdminReport exactly
+        const evals = allEvals.filter((ev) => {
+          if (!activeAY) return true;
+          const matchY = String(ev.academic_year || "").trim().toLowerCase() === String(activeAY).trim().toLowerCase();
+          if (!activeSem) return matchY;
+          const evSem = String(ev.semester || "").trim().toLowerCase();
+          const pSem = String(activeSem).trim().toLowerCase();
+          return matchY && (evSem === pSem || evSem.includes(pSem) || pSem.includes(evSem));
         });
 
+        const periodAssignments = (assignRes.data || []).filter((a) => {
+          if (!activeAY) return true;
+          const matchY = String(a.academic_year || "").trim().toLowerCase() === String(activeAY).trim().toLowerCase();
+          if (!activeSem) return matchY;
+          const aSem = String(a.semester || "").trim().toLowerCase();
+          const pSem = String(activeSem).trim().toLowerCase();
+          return matchY && (aSem === pSem || aSem.includes(pSem) || pSem.includes(aSem));
+        });
+
+        // Compute scores per department matching AdminReport faculty macro-average
         const scores = {};
         loadedDepts.forEach((d) => {
-          const dKey = normDept(d.name);
-          if (deptCounts[dKey]) {
-            scores[d.id] = (deptSums[dKey] / deptCounts[dKey]).toFixed(2);
+          const deptName = d.name;
+          // In-scope faculty for this department (same matching logic as AdminReport)
+          const deptFaculty = loadedFaculty.filter((f) => {
+            if (normDept(f.department) === normDept(deptName)) return true;
+            return periodAssignments.some((a) => a.faculty_id === f.id && normDept(a.department) === normDept(deptName));
+          });
+
+          // Faculty ratings inside this department for this period
+          const facRatings = deptFaculty.map((f) => {
+            const facEvals = evals.filter((e) => e.faculty_id === f.id);
+            const fScores = facEvals.flatMap((e) => Object.values(e.ratings || {}).map(Number).filter((v) => !isNaN(v) && v > 0));
+            return fScores.length > 0 ? fScores.reduce((a, b) => a + b, 0) / fScores.length : null;
+          }).filter((r) => r !== null);
+
+          if (facRatings.length > 0) {
+            const mean = facRatings.reduce((a, b) => a + b, 0) / facRatings.length;
+            scores[d.id] = mean.toFixed(2);
           }
         });
         setEvalScores(scores);
