@@ -329,14 +329,14 @@ export default function AdminAnalytics() {
   }
 
   return (
-    <AdminLayout title="System Analytics">
+    <AdminLayout title="Analytics">
       <section className="ad-content">
         {/* Header with Title and Dropdown Filters */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "24px" }}>
           <div>
-            <h2 style={{ fontSize: "24px", fontWeight: "800", color: "#0f172a", margin: "0 0 6px 0" }}>System Analytics</h2>
+            <h2 style={{ fontSize: "24px", fontWeight: "800", color: "#0f172a", margin: "0 0 6px 0" }}>Analytics</h2>
             <p style={{ fontSize: "13px", color: "#64748b", margin: 0 }}>
-              Aggregates only: no comments, no student identity. Open priority cases: <strong style={{ color: "#0f172a" }}>{openPriority}</strong>
+              Overview of faculty evaluation metrics, trends, and response rates across all programs.
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
