@@ -170,8 +170,19 @@ export function NotificationProvider({ children }) {
   const isNotifPermitted = useCallback(
     (notif) => {
       if (!notif) return false;
-      // Super admins see all notifications across all departments
-      if (userProfile?.role === "super_admin") return true;
+
+      // Super admins only receive executive institutional notifications:
+      // 1. Evaluation Results Releases
+      // 2. Evaluation Period Open / Activation events
+      // All other operational department notifications are handled by program admins.
+      if (userProfile?.role === "super_admin") {
+        const title = String(notif.title || "").toLowerCase();
+        const msg = String(notif.message || "").toLowerCase();
+        const text = `${title} ${msg}`;
+        const isRelease = text.includes("result") || text.includes("release") || text.includes("published");
+        const isPeriod = text.includes("period") || text.includes("academic year") || text.includes("semester") || text.includes("evaluation opened");
+        return isRelease || isPeriod;
+      }
 
       const role = userProfile?.role;
       const link = String(notif.link || "");

@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { is_period_released } from "../../utils/periodRelease";
 import { isPeriodActive } from "../../utils/periodStatus";
 import { logAdminAction } from "../../utils/audit";
+import { notifySuperAdmins } from "../../utils/notifications";
 import {
   ClipboardCheck,
   Calendar,
@@ -108,7 +109,8 @@ export default function AdminReleaseManagement() {
         }
 
         const inScopeY = (r) => isSuper || !r.department_id || userDeptIds.includes(r.department_id);
-        const active = y.find((row) => inScopeY(row) && isPeriodActive(row));
+        const inScopeList = y.filter(inScopeY);
+        const active = inScopeList.find((row) => isPeriodActive(row)) || inScopeList[inScopeList.length - 1];
         if (active) {
           setFilterYear(active.year);
           setFilterSem(active.semester);
@@ -139,6 +141,20 @@ export default function AdminReleaseManagement() {
     }
     return out;
   }, [years, isSuper, myDeptIds]);
+
+  // Ensure period selection is always valid and within admin department scope,
+  // even if evaluation period is closed.
+  useEffect(() => {
+    if (periodOptions.length === 0) return;
+    const exists = periodOptions.some((p) => p.year === filterYear && p.semester === filterSem);
+    if (!exists) {
+      const active = periodOptions.find((p) => isPeriodActive(p)) || periodOptions[periodOptions.length - 1];
+      if (active) {
+        setFilterYear(active.year);
+        setFilterSem(active.semester);
+      }
+    }
+  }, [filterYear, filterSem, periodOptions]);
 
   // Scope [D9/D10]: super admin manages the global row
   // (department NULL); a scoped admin manages rows for their own
@@ -254,6 +270,20 @@ export default function AdminReleaseManagement() {
       });
 
       showToast("Release settings saved successfully.", "success");
+
+      // Notify Super Admins when an admin publishes or schedules a release
+      if (currentDraft.approved && currentDraft.release_date) {
+        const deptLabel = targetDept || "All Programs";
+        const linkUrl = targetDept
+          ? `/admin/report?department=${encodeURIComponent(targetDept)}&ay=${encodeURIComponent(filterYear)}&sem=${encodeURIComponent(filterSem)}`
+          : `/admin/report?ay=${encodeURIComponent(filterYear)}&sem=${encodeURIComponent(filterSem)}`;
+        notifySuperAdmins({
+          title: "Evaluation Results Released",
+          message: `${deptLabel} evaluation results for ${filterYear} ${filterSem} have been approved and published.`,
+          type: "success",
+          link: linkUrl,
+        }).catch((e) => console.warn("Failed to notify super admin:", e));
+      }
 
       // The database trigger sends the faculty alert when a release becomes active.
     } catch (err) {

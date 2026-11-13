@@ -1,8 +1,10 @@
 import React, { useState, useEffect, Fragment } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
 import FacultyLayout from "./FacultyLayout";
 import { fetchFacultyReleaseStatus } from "../../utils/releaseStatus";
+import { pickActivePeriod } from "../../utils/periodStatus";
 const getPerformanceLabel = (rating) => {
   if (rating >= 4.5) return "Outstanding";
   if (rating >= 4.0) return "Excellent";
@@ -33,9 +35,12 @@ const renderStructuredSummary = (rawText) => {
   let synthesisLines = [];
   let strengthLines = [];
   let recommendationLines = [];
+  let toneText = "";
 
   for (const line of lines) {
     const lower = line.toLowerCase();
+    const lowerClean = lower.replace(/^[•\-\*\d\.\)]\s*/, "");
+
     if (lower.startsWith("strengths:") || lower.startsWith("demonstrated strengths:") || lower.startsWith("**strengths:**") || lower.startsWith("**demonstrated strengths:**")) {
       currentSection = "strengths";
       const rest = line.replace(/^(demonstrated\s+)?strengths:\s*/i, "").replace(/^\*\*(demonstrated\s+)?strengths:\*\*\s*/i, "");
@@ -48,14 +53,45 @@ const renderStructuredSummary = (rawText) => {
       currentSection = "synthesis";
       const rest = line.replace(/^executive\s+synthesis:\s*/i, "").replace(/^themes:\s*/i, "").replace(/^\*\*executive\s+synthesis:\*\*\s*/i, "");
       if (rest.trim()) synthesisLines.push(rest.trim());
+    } else if (lowerClean.startsWith("tone:") || lowerClean.startsWith("**tone:**")) {
+      currentSection = "tone";
+      const rest = line.replace(/^[•\-\*\d\.\)]\s*/, "").replace(/^\*\*?tone:\*\*?\s*/i, "");
+      if (rest.trim()) toneText = rest.trim();
     } else {
-      if (currentSection === "strengths") strengthLines.push(line);
-      else if (currentSection === "recommendations") recommendationLines.push(line);
-      else synthesisLines.push(line);
+      if (lowerClean.startsWith("tone:") || lowerClean.startsWith("**tone:**")) {
+        currentSection = "tone";
+        const rest = line.replace(/^[•\-\*\d\.\)]\s*/, "").replace(/^\*\*?tone:\*\*?\s*/i, "");
+        if (rest.trim()) toneText = rest.trim();
+      } else if (currentSection === "strengths") {
+        strengthLines.push(line);
+      } else if (currentSection === "recommendations") {
+        recommendationLines.push(line);
+      } else if (currentSection === "tone") {
+        if (!toneText) toneText = line;
+        else toneText += " " + line;
+      } else {
+        synthesisLines.push(line);
+      }
     }
   }
 
+  // Safety filter in case tone was embedded in bullet points
+  strengthLines = strengthLines.filter(l => !l.replace(/^[•\-\*\d\.\)]\s*/, "").toLowerCase().startsWith("tone:"));
+  recommendationLines = recommendationLines.filter(l => !l.replace(/^[•\-\*\d\.\)]\s*/, "").toLowerCase().startsWith("tone:"));
+
   const cleanBullet = (str) => str.replace(/^[•\-\*\d\.\)]\s*/, "");
+  const cleanTone = (str) => {
+    if (!str) return "";
+    return str
+      .replace(/^[•\-\*\d\.\)]\s*/, "")
+      .replace(/^\*\*?tone:\*\*?\s*/i, "")
+      .replace(/^overall\s+tone:\s*/i, "")
+      .replace(/^[•\-\*\d\.\)]\s*/, "")
+      .replace(/^\*\*?tone:\*\*?\s*/i, "")
+      .trim();
+  };
+
+  const formattedTone = cleanTone(toneText);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -93,6 +129,25 @@ const renderStructuredSummary = (rawText) => {
               <li key={idx}>{cleanBullet(r)}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {formattedTone && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          padding: "9px 14px",
+          background: "#f8fafc",
+          border: "1px solid #e2e8f0",
+          borderRadius: "8px",
+          fontSize: "12.5px",
+          color: "#334155"
+        }}>
+          <span>💬</span>
+          <span style={{ fontWeight: 600 }}>
+            {formattedTone}
+          </span>
         </div>
       )}
     </div>
@@ -235,6 +290,7 @@ function buildEvaluationPeriods(evaluations, questions, criteria) {
 }
 
 export default function FacultyEvalResult() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [periodDropdownOpen, setPeriodDropdownOpen] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState(null);
   const [evaluationPeriods, setEvaluationPeriods] = useState({});
@@ -290,7 +346,7 @@ export default function FacultyEvalResult() {
     // invisible here by design; pendingStatuses powers the notice.
     Promise.all([
       supabase.from('faculty_evaluations_anon').select('*'),
-      supabase.from('academic_years').select('id, year, semester'),
+      supabase.from('academic_years').select('*, departments(name)').order('start_date'),
       supabase.from('questions').select('*'),
       supabase.from('criteria').select('*'),
       fetchFacultyReleaseStatus().catch(() => []),
@@ -340,12 +396,49 @@ export default function FacultyEvalResult() {
         const periods = buildEvaluationPeriods(visibleEvals, questions, criteria);
         setEvaluationPeriods(periods);
         const keys = Object.keys(periods);
-        if (keys.length > 0) setSelectedPeriod(keys[0]);
-        else setSelectedPeriod(null);
+
+        // Sort keys newest first (year descending, semester descending)
+        const sortedKeys = [...keys].sort((a, b) => {
+          const [yA, sA] = a.split("__");
+          const [yB, sB] = b.split("__");
+          const cmp = String(yB).localeCompare(String(yA));
+          if (cmp !== 0) return cmp;
+          return String(sB).localeCompare(String(sA));
+        });
+
+        // 1. Check if URL specifies a target academic year & semester
+        const urlAy = searchParams.get("ay");
+        const urlSem = searchParams.get("sem");
+        const urlKey = urlAy && urlSem ? `${urlAy}__${urlSem}` : null;
+
+        // 2. Check if active period for faculty department exists
+        const activeObj = pickActivePeriod(rawYears, userProfile?.department);
+        const activeKey = activeObj ? `${activeObj.year}__${activeObj.semester}` : null;
+
+        if (urlKey && periods[urlKey]) {
+          setSelectedPeriod(urlKey);
+        } else if (activeKey && periods[activeKey]) {
+          setSelectedPeriod(activeKey);
+        } else if (sortedKeys.length > 0) {
+          setSelectedPeriod(sortedKeys[0]);
+        } else {
+          setSelectedPeriod(null);
+        }
       })
       .catch(err => console.error(err))
       .finally(() => setLoading(false));
   }, [currentUser]);
+
+  // Synchronize when URL searchParams change
+  useEffect(() => {
+    const urlAy = searchParams.get("ay");
+    const urlSem = searchParams.get("sem");
+    if (!urlAy || !urlSem) return;
+    const urlKey = `${urlAy}__${urlSem}`;
+    if (evaluationPeriods[urlKey] && selectedPeriod !== urlKey) {
+      setSelectedPeriod(urlKey);
+    }
+  }, [searchParams, evaluationPeriods, selectedPeriod]);
 
   const displayName = userProfile?.fullName || "Faculty";
   const evaluationData = selectedPeriod ? evaluationPeriods[selectedPeriod] : null;
@@ -482,10 +575,23 @@ export default function FacultyEvalResult() {
                     </button>
                     {periodDropdownOpen && (
                       <div className="fd-periodDropdownMenu">
-                        {Object.entries(evaluationPeriods).map(([key, period]) => (
+                        {Object.entries(evaluationPeriods)
+                          .sort(([a], [b]) => {
+                            const [yA, sA] = a.split("__");
+                            const [yB, sB] = b.split("__");
+                            const cmp = String(yB).localeCompare(String(yA));
+                            if (cmp !== 0) return cmp;
+                            return String(sB).localeCompare(String(sA));
+                          })
+                          .map(([key, period]) => (
                           <button key={key} type="button"
                             className={`fd-periodDropdownItem ${selectedPeriod === key ? "fd-periodDropdownItem--active" : ""}`}
-                            onClick={() => { setSelectedPeriod(key); setPeriodDropdownOpen(false); }}>
+                            onClick={() => {
+                              setSelectedPeriod(key);
+                              setPeriodDropdownOpen(false);
+                              const [y, s] = key.split("__");
+                              setSearchParams({ ay: y, sem: s });
+                            }}>
                             <div className="fd-periodDropdownItemText">
                               <div className="fd-periodDropdownItemTitle">{period.periodLabel}</div>
                               <div className="fd-periodDropdownItemMeta">Rating: {period.overallRating.toFixed(2)} • {period.totalResponses} responses</div>

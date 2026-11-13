@@ -4,6 +4,7 @@ import { supabase } from "../../config/supabase";
 import { isPeriodActive, periodStatusLabel, periodEndPassed, periodNotStarted } from "../../utils/periodStatus";
 import { useScopedAdmin } from "../../hooks/useScopedAdmin";
 import { useSuperScope } from "../../context/SuperScopeContext";
+import { notifySuperAdmins } from "../../utils/notifications";
 
 export default function AdminAcademicYear() {
   const { isSuper, myDeptIds, loading: scopeLoading } = useScopedAdmin();
@@ -158,6 +159,17 @@ export default function AdminAcademicYear() {
 
       setShowModal(false);
       await fetchAY(); // Refresh table
+
+      // Notify Super Admins when an evaluation period is opened/activated
+      if (autoStatus === "on-going") {
+        const periodLabel = `${formData.year} · ${formData.semester}`;
+        notifySuperAdmins({
+          title: "Evaluation Period Opened",
+          message: `Evaluation period ${periodLabel} is now active and open for student submissions.`,
+          type: "info",
+          link: "/admin/academic-year",
+        }).catch((e) => console.warn("Failed to notify super admin:", e));
+      }
     } catch (err) {
       console.error("Save error:", err);
       alert("Network error: Could not connect to the server.");

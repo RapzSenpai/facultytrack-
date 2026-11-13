@@ -520,7 +520,13 @@ export default function FacultyDashboard() {
                 <button
                   type="button"
                   className="fd-overviewBtn fd-overviewBtn--full"
-                  onClick={() => navigate("/faculty/evaluations")}
+                  onClick={() => {
+                    if (activeYear?.year && activeYear?.semester) {
+                      navigate(`/faculty/evaluations?ay=${encodeURIComponent(activeYear.year)}&sem=${encodeURIComponent(activeYear.semester)}`);
+                    } else {
+                      navigate("/faculty/evaluations");
+                    }
+                  }}
                 >
                   <span>View Full Evaluation Breakdown</span>
                   <ChevronRight size={16} />

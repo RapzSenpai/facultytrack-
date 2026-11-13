@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import AdminLayout from "./AdminLayout";
 import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
@@ -41,7 +42,7 @@ const getPerformanceColor = (r) => {
 
 const parseAiSummaryText = (text) => {
   if (!text || typeof text !== "string" || !text.trim()) {
-    return { hasSummary: false, overview: "", strengths: [], recommendations: [] };
+    return { hasSummary: false, overview: "", strengths: [], recommendations: [], tone: "" };
   }
 
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
@@ -49,21 +50,42 @@ const parseAiSummaryText = (text) => {
   const oLines = [];
   const strengths = [];
   const recommendations = [];
+  let tone = "";
 
   for (const line of lines) {
     const l = line.toLowerCase();
+    const lClean = l.replace(/^[•\-\*\d\.\)]\s*/, "");
     if (l.includes("strength")) {
       curSec = "strengths";
     } else if (l.includes("recommend") || l.includes("improve") || l.includes("actionable") || l.includes("growth")) {
       curSec = "recommendations";
+    } else if (lClean.startsWith("tone:") || lClean.startsWith("**tone:**")) {
+      curSec = "tone";
+      const clean = line.replace(/^[•\-\*\d\.\)]\s*/, "").replace(/^\*\*?tone:\*\*?\s*/i, "").trim();
+      if (clean) tone = clean;
+    } else if (curSec === "tone") {
+      const clean = line.replace(/^[•\-\*\d\.\)]\s*/, "").trim();
+      if (clean) tone = tone ? `${tone} ${clean}` : clean;
     } else if (curSec === "strengths") {
       const clean = line.replace(/^[•\-\*\d\.\)]\s*/, "").trim();
-      if (clean) strengths.push(clean);
+      if (clean && !clean.toLowerCase().startsWith("tone:")) strengths.push(clean);
     } else if (curSec === "recommendations") {
       const clean = line.replace(/^[•\-\*\d\.\)]\s*/, "").trim();
-      if (clean) recommendations.push(clean);
+      if (clean) {
+        if (clean.toLowerCase().startsWith("tone:")) {
+          tone = clean.replace(/^\*\*?tone:\*\*?\s*/i, "").trim();
+        } else {
+          recommendations.push(clean);
+        }
+      }
     } else {
-      oLines.push(line);
+      if (lClean.startsWith("tone:") || lClean.startsWith("**tone:**")) {
+        curSec = "tone";
+        const clean = line.replace(/^[•\-\*\d\.\)]\s*/, "").replace(/^\*\*?tone:\*\*?\s*/i, "").trim();
+        if (clean) tone = clean;
+      } else {
+        oLines.push(line);
+      }
     }
   }
 
@@ -73,6 +95,7 @@ const parseAiSummaryText = (text) => {
     overview,
     strengths,
     recommendations,
+    tone,
   };
 };
 
@@ -138,6 +161,7 @@ const tierColors = {
 };
 
 export default function AdminReport() {
+  const [searchParams] = useSearchParams();
   const { userProfile } = useAuth();
   // D9: scoped admins are locked to their assigned program(s).
   // Backend (export-report + anon view RLS) enforces the same.
@@ -310,25 +334,41 @@ export default function AdminReport() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeLoading, isSuper, myDeptNames]);
 
-  // Deep link from super Reports cards (?department=): preset the
-  // program filter once departments load. Super stays unlocked.
-  // Active super scope pick presets the same way.
+  // Deep link from super Reports cards or notifications (?department=&ay=&sem=):
+  // preset the program filter and academic period. Super stays unlocked.
   useEffect(() => {
     if (scopeLoading || !isSuper || departmentsList.length === 0) return;
-    const want = new URLSearchParams(window.location.search).get("department") || scopeDeptName;
-    if (!want) return;
-    const hit = departmentsList.find((d) => sameDept(d.name, want));
-    if (hit && !sameDept(filterDept, hit.name)) {
-      setFilterDept(hit.name);
-      setFilterFaculty("");
-      const active = pickActivePeriod(academicYearsList, hit.name);
-      if (active) {
-        setFilterAY(active.year);
-        setFilterSem(active.semester);
+    const wantDept = searchParams.get("department") || scopeDeptName;
+    const wantAY = searchParams.get("ay");
+    const wantSem = searchParams.get("sem");
+
+    if (wantDept) {
+      const hit = departmentsList.find((d) => sameDept(d.name, wantDept));
+      if (hit) {
+        setFilterDept(hit.name);
+        setFilterFaculty("");
+
+        if (wantAY) {
+          setFilterAY(wantAY);
+        }
+        if (wantSem) {
+          setFilterSem(wantSem);
+        }
+
+        if (!wantAY) {
+          const active = pickActivePeriod(academicYearsList, hit.name);
+          if (active) {
+            setFilterAY(active.year);
+            setFilterSem(active.semester);
+          }
+        }
       }
+    } else {
+      if (wantAY) setFilterAY(wantAY);
+      if (wantSem) setFilterSem(wantSem);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeLoading, isSuper, departmentsList, scopeDeptId, scopeDeptName, academicYearsList]);
+  }, [scopeLoading, isSuper, departmentsList, scopeDeptId, scopeDeptName, academicYearsList, searchParams]);
 
   // Registered period keys from academic_years (filters out deleted/orphaned periods)
   const registeredAYs = useMemo(() => new Set(academicYearsList.map(y => y.year)), [academicYearsList]);
@@ -2139,17 +2179,6 @@ export default function AdminReport() {
                 <strong>Executive Synthesis:</strong> ${escapeHtml(overviewText)}
               </div>
 
-              <div class="strength-box">
-                <div style="font-size: 10.5px; font-weight: 800; color: #15803d; text-transform: uppercase; margin-bottom: 6px;">
-                  ✓ Demonstrated Strengths:
-                </div>
-                ${strengthsList.length > 0 ? `
-                  <ul style="padding-left: 16px; font-size: 10.5px; color: #166534; line-height: 1.5;">
-                    ${strengthsList.map(s => `<li>${escapeHtml(s)}</li>`).join("")}
-                  </ul>
-                ` : `<div style="font-size: 10.5px; color: #166534; font-style: italic;">No specific strengths highlighted.</div>`}
-              </div>
-
               <div class="rec-box">
                 <div style="font-size: 10.5px; font-weight: 800; color: #b45309; text-transform: uppercase; margin-bottom: 6px;">
                   ➔ Actionable Recommendations:
@@ -2160,6 +2189,13 @@ export default function AdminReport() {
                   </ul>
                 ` : `<div style="font-size: 10.5px; color: #92400e; font-style: italic;">No specific recommendations highlighted.</div>`}
               </div>
+
+              ${aiParsed.tone ? `
+                <div style="display: flex; align-items: center; gap: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; margin-top: 10px; font-size: 10.5px; color: #334155;">
+                  <span>💬</span>
+                  <span style="font-weight: 600;">${escapeHtml(aiParsed.tone.replace(/^tone:\s*/i, "").replace(/^overall\s+tone:\s*/i, ""))}</span>
+                </div>
+              ` : ""}
             </div>
           ` : distinctQuotes.length >= 2 ? `
             <div style="border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px 14px; background: #f8fafc; margin-bottom: 14px; color: #475569; font-size: 11px;">

@@ -271,6 +271,41 @@ export async function markAllNotificationsAsRead(userId) {
 }
 
 /**
+ * Notify all active Super Administrators only.
+ * Used for executive institutional events: Results Release and Evaluation Period Activation.
+ */
+export async function notifySuperAdmins({ title, message, type = "info", link = null }) {
+  if (!title || !message) return 0;
+  try {
+    const { data: superAdmins, error: superErr } = await supabase
+      .from("users")
+      .select("id")
+      .eq("role", "super_admin")
+      .neq("status", "deleted");
+
+    if (superErr || !superAdmins || superAdmins.length === 0) return 0;
+
+    const inserts = superAdmins.map((u) => ({
+      user_id: u.id,
+      title,
+      message,
+      type,
+      link,
+    }));
+
+    const { error: insErr } = await supabase.from("notifications").insert(inserts);
+    if (insErr) {
+      console.warn("[notifications] notifySuperAdmins insert error:", insErr.message);
+      return 0;
+    }
+    return inserts.length;
+  } catch (err) {
+    console.warn("[notifications] notifySuperAdmins error:", err);
+    return 0;
+  }
+}
+
+/**
  * Delete a notification permanently from database.
  */
 export async function deleteNotification(notificationId) {
